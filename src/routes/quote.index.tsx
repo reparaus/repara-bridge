@@ -53,6 +53,7 @@ import {
   type VehicleConfig,
 } from "@/lib/vehicle-config";
 import { decodeVin, isCompleteVin, isVinScanSupported, maskVin, normalizeVin, validateVin } from "@/lib/vin";
+import { VinScanner } from "@/components/quote/VinScanner";
 
 export const Route = createFileRoute("/quote/")({
   /**
