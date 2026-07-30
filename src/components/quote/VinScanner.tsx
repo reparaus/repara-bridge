@@ -34,6 +34,8 @@ export function VinScanner({
   }, []);
 
   useEffect(() => {
+    // Re-arm after StrictMode's dev double-invoke cleanup.
+    stoppedRef.current = false;
     let raf = 0;
     let zxingReader: { decodeFromCanvas: (c: HTMLCanvasElement) => { getText(): string } } | null =
       null;
