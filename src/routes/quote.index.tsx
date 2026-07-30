@@ -473,7 +473,10 @@ function VehicleStep({
   const [decoding, setDecoding] = useState(false);
   const [vinMessage, setVinMessage] = useState<string | null>(null);
   const attempted = useRef<string | null>(null);
-  const scanSupported = isVinScanSupported();
+  // Capability is resolved after hydration — the server can't know.
+  const [scanSupported, setScanSupported] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  useEffect(() => setScanSupported(isVinScanSupported()), []);
 
   async function runDecode(vin: string) {
     const check = validateVin(vin);
