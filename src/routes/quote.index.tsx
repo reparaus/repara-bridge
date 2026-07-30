@@ -27,7 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { track } from "@/lib/analytics";
 import { quoteRequestSchema } from "@/lib/quote-schema";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/quote-storage";
-import { submitQuoteRequest } from "@/lib/quote.functions";
+import { discardQuotePhotos, submitQuoteRequest } from "@/lib/quote.functions";
 import {
   CONTACT_METHODS,
   INSPECTION_BODY,
@@ -107,7 +107,8 @@ type FormState = {
   mileage: string;
   zipCode: string;
   notes: string;
-  photoPaths: string[];
+  /** Files stay in browser memory until final submission. */
+  photos: File[];
   firstName: string;
   lastName: string;
   phone: string;
@@ -129,7 +130,7 @@ const EMPTY: FormState = {
   mileage: "",
   zipCode: "",
   notes: "",
-  photoPaths: [],
+  photos: [],
   firstName: "",
   lastName: "",
   phone: "",
@@ -137,6 +138,23 @@ const EMPTY: FormState = {
 
   contactMethod: "text",
 };
+
+/** Uploads locally held photos at submission time and returns storage paths. */
+async function uploadQuotePhotos(photos: File[]): Promise<string[]> {
+  if (photos.length === 0) return [];
+  const folder = crypto.randomUUID();
+  const paths: string[] = [];
+  for (const file of photos) {
+    const path = `${folder}/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]/g, "_")}`;
+    const { error } = await supabase.storage.from("request-photos").upload(path, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+    // A photo failure must never void an otherwise valid request.
+    if (!error) paths.push(path);
+  }
+  return paths;
+}
 
 function vehicleTitle(form: FormState) {
   if (form.vehicleMode === "vin" && form.decoded) {
@@ -153,6 +171,7 @@ function formatMiles(value: string) {
 
 function QuoteFlow() {
   const submit = useServerFn(submitQuoteRequest);
+  const discardPhotos = useServerFn(discardQuotePhotos);
   const { service: preselectedService } = Route.useSearch();
 
   const [step, setStep] = useState(0);
@@ -182,7 +201,9 @@ function QuoteFlow() {
 
   useEffect(() => {
     if (!hydrated || confirmation) return;
-    saveDraft({ step, data: form as unknown as Record<string, unknown> });
+    // Photos are File objects — never serialized, never uploaded before submit.
+    const { photos: _photos, ...serializable } = form;
+    saveDraft({ step, data: serializable as unknown as Record<string, unknown> });
   }, [form, step, hydrated, confirmation]);
 
   function patch(next: Partial<FormState>) {
@@ -218,7 +239,7 @@ function QuoteFlow() {
         mileage: form.mileage,
         zipCode: form.zipCode,
         notes: form.notes,
-        photoPaths: form.photoPaths,
+        photoPaths: [] as string[],
       },
       contact: {
         firstName: form.firstName,
@@ -232,7 +253,24 @@ function QuoteFlow() {
   );
 
   const mutation = useMutation({
-    mutationFn: async () => submit({ data: quoteRequestSchema.parse(payload) }),
+    mutationFn: async () => {
+      // Nothing has touched the database up to this point. Photos are uploaded
+      // now, as part of submission, and removed again if submission fails.
+      const uploadedPaths = await uploadQuotePhotos(form.photos);
+      try {
+        return await submit({
+          data: quoteRequestSchema.parse({
+            ...payload,
+            details: { ...payload.details, photoPaths: uploadedPaths },
+          }),
+        });
+      } catch (error) {
+        if (uploadedPaths.length) {
+          void discardPhotos({ data: { paths: uploadedPaths } }).catch(() => {});
+        }
+        throw error;
+      }
+    },
     onSuccess: (result) => {
       track("quote_submitted", {
         request_number: result.requestNumber,
@@ -302,9 +340,16 @@ function QuoteFlow() {
 
   function next() {
     if (!validateStep()) return;
-    if (step === 0) track("vehicle_added", { method: form.vehicleMode });
+    if (step === 0) {
+      track("vehicle_added", { method: form.vehicleMode });
+      track("vehicle_completed", { method: form.vehicleMode });
+    }
     if (step === 1) track("service_selected", { services: form.services.join(",") });
-    if (step === 2) track("quote_form_completed");
+    if (step === 2) {
+      track("quote_form_completed");
+      track("details_completed");
+      track("contact_started");
+    }
     setStep((s) => Math.min(s + 1, 3));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -876,27 +921,21 @@ function DetailsStep({
   patch: (n: Partial<FormState>) => void;
   errors: Record<string, string>;
 }) {
-  const [uploading, setUploading] = useState(false);
-  const sessionFolder = useMemo(
-    () => (typeof crypto !== "undefined" ? crypto.randomUUID() : String(Date.now())),
-    [],
-  );
-
   const photoPrompt =
     form.services.map((k) => PHOTO_PROMPTS[k as ServiceKey]).find(Boolean) ??
     "Warning lights, leaks, tires, damaged parts — anything you'd like us to see.";
 
-  async function handleFiles(files: FileList | null) {
+  function handleFiles(files: FileList | null) {
     if (!files?.length) return;
-    const remaining = MAX_PHOTOS - form.photoPaths.length;
+    const remaining = MAX_PHOTOS - form.photos.length;
     const selected = Array.from(files).slice(0, remaining);
     if (selected.length === 0) {
       toast.error(`You can attach up to ${MAX_PHOTOS} photos.`);
       return;
     }
 
-    setUploading(true);
-    const uploaded: string[] = [];
+    // Files are held in browser memory and only uploaded on final submission.
+    const accepted: File[] = [];
     for (const file of selected) {
       if (!file.type.startsWith("image/")) {
         toast.error("Photos only for now — please upload an image.");
@@ -906,20 +945,11 @@ function DetailsStep({
         toast.error(`${file.name} is too large. Keep photos under 8 MB.`);
         continue;
       }
-      const path = `${sessionFolder}/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]/g, "_")}`;
-      const { error } = await supabase.storage.from("request-photos").upload(path, file, {
-        contentType: file.type,
-        upsert: false,
-      });
-      if (error) {
-        toast.error("That upload didn't go through. Please try again.");
-        continue;
-      }
-      uploaded.push(path);
+      accepted.push(file);
     }
-    setUploading(false);
-    if (uploaded.length) patch({ photoPaths: [...form.photoPaths, ...uploaded] });
+    if (accepted.length) patch({ photos: [...form.photos, ...accepted] });
   }
+
 
   return (
     <div className="space-y-7">
@@ -987,36 +1017,30 @@ function DetailsStep({
               capture="environment"
               className="sr-only"
               onChange={(e) => {
-                void handleFiles(e.target.files);
+                handleFiles(e.target.files);
                 e.target.value = "";
               }}
             />
-            {uploading ? (
-              <Loader2 className="size-5 animate-spin text-chrome" />
-            ) : (
-              <Camera className="size-5 text-chrome" />
-            )}
-            <span className="text-sm text-muted-foreground">
-              {uploading ? "Uploading…" : "Take or choose photos"}
-            </span>
+            <Camera className="size-5 text-chrome" />
+            <span className="text-sm text-muted-foreground">Take or choose photos</span>
           </label>
 
-          {form.photoPaths.length > 0 && (
+          {form.photos.length > 0 && (
             <ul className="space-y-2">
-              {form.photoPaths.map((p) => (
+              {form.photos.map((file, index) => (
                 <li
-                  key={p}
+                  key={`${file.name}-${index}`}
                   className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3"
                 >
                   <span className="flex min-w-0 items-center gap-2 text-sm">
                     <Upload className="size-4 shrink-0 text-chrome" />
-                    <span className="truncate">{p.split("/").pop()}</span>
+                    <span className="truncate">{file.name}</span>
                   </span>
                   <button
                     type="button"
                     aria-label="Remove photo"
                     className="-m-2 p-2 text-muted-foreground hover:text-foreground"
-                    onClick={() => patch({ photoPaths: form.photoPaths.filter((x) => x !== p) })}
+                    onClick={() => patch({ photos: form.photos.filter((_, i) => i !== index) })}
                   >
                     <X className="size-4" />
                   </button>
@@ -1024,6 +1048,7 @@ function DetailsStep({
               ))}
             </ul>
           )}
+
         </div>
       </Field>
 

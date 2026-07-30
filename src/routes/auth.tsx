@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { z } from "zod";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: z.object({ denied: z.boolean().optional() }),
   head: () => ({
     meta: [
       { title: "Admin Sign In — Repara" },
@@ -24,15 +26,23 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { denied } = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (denied) {
+      // Signed in, but without the admin role — end the session and say so.
+      void supabase.auth.signOut().then(() => {
+        toast.error("This account doesn't have Repara admin access.");
+      });
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate({ to: "/admin", replace: true });
     });
-  }, [navigate]);
+  }, [navigate, denied]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,6 +63,12 @@ function AuthPage() {
           <Logo />
           <p className="mt-3 text-xs tracking-[0.2em] text-muted-foreground uppercase">Admin access</p>
         </div>
+
+        {denied ? (
+          <p className="rounded-xl border border-border bg-surface px-4 py-3 text-center text-sm text-muted-foreground">
+            That account doesn't have admin access. Sign in with a Repara admin account.
+          </p>
+        ) : null}
 
         <Field label="Email" htmlFor="email">
           <Input
