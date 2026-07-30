@@ -99,10 +99,11 @@ export async function decodeVin(vin: string): Promise<VinDecodeResult> {
 }
 
 /**
- * Camera-based VIN barcode scanning is not shipped yet. Returns false today;
- * when a scanner is implemented this becomes a real capability check
- * (secure context + `navigator.mediaDevices` + BarcodeDetector).
+ * Camera VIN barcode scanning capability check: secure context + camera API.
+ * Decoding uses the native BarcodeDetector when present, ZXing otherwise.
  */
 export function isVinScanSupported(): boolean {
-  return false;
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  if (!window.isSecureContext) return false;
+  return Boolean(navigator.mediaDevices?.getUserMedia);
 }
