@@ -10,109 +10,33 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as QuoteIndexRouteImport } from './routes/quote.index'
-import { Route as QuoteTokenRouteImport } from './routes/quote.$token'
-import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
-import { Route as AuthenticatedAdminRequestsIdRouteImport } from './routes/_authenticated/admin.requests.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const QuoteIndexRoute = QuoteIndexRouteImport.update({
-  id: '/quote/',
-  path: '/quote/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const QuoteTokenRoute = QuoteTokenRouteImport.update({
-  id: '/quote/$token',
-  path: '/quote/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
-  id: '/admin/',
-  path: '/admin/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedAdminRequestsIdRoute =
-  AuthenticatedAdminRequestsIdRouteImport.update({
-    id: '/admin/requests/$id',
-    path: '/admin/requests/$id',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
-  '/quote/$token': typeof QuoteTokenRoute
-  '/quote/': typeof QuoteIndexRoute
-  '/admin/': typeof AuthenticatedAdminIndexRoute
-  '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
-  '/quote/$token': typeof QuoteTokenRoute
-  '/quote': typeof QuoteIndexRoute
-  '/admin': typeof AuthenticatedAdminIndexRoute
-  '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/auth': typeof AuthRoute
-  '/quote/$token': typeof QuoteTokenRoute
-  '/quote/': typeof QuoteIndexRoute
-  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
-  '/_authenticated/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/auth'
-    | '/quote/$token'
-    | '/quote/'
-    | '/admin/'
-    | '/admin/requests/$id'
+  fullPaths: '/'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/auth'
-    | '/quote/$token'
-    | '/quote'
-    | '/admin'
-    | '/admin/requests/$id'
-  id:
-    | '__root__'
-    | '/'
-    | '/_authenticated'
-    | '/auth'
-    | '/quote/$token'
-    | '/quote/'
-    | '/_authenticated/admin/'
-    | '/_authenticated/admin/requests/$id'
+  to: '/'
+  id: '__root__' | '/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  AuthRoute: typeof AuthRoute
-  QuoteTokenRoute: typeof QuoteTokenRoute
-  QuoteIndexRoute: typeof QuoteIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -124,71 +48,22 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/quote/': {
-      id: '/quote/'
-      path: '/quote'
-      fullPath: '/quote/'
-      preLoaderRoute: typeof QuoteIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/quote/$token': {
-      id: '/quote/$token'
-      path: '/quote/$token'
-      fullPath: '/quote/$token'
-      preLoaderRoute: typeof QuoteTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/admin/': {
-      id: '/_authenticated/admin/'
-      path: '/admin'
-      fullPath: '/admin/'
-      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/admin/requests/$id': {
-      id: '/_authenticated/admin/requests/$id'
-      path: '/admin/requests/$id'
-      fullPath: '/admin/requests/$id'
-      preLoaderRoute: typeof AuthenticatedAdminRequestsIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
   }
 }
 
-interface AuthenticatedRouteRouteChildren {
-  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
-  AuthenticatedAdminRequestsIdRoute: typeof AuthenticatedAdminRequestsIdRoute
-}
-
-const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
-  AuthenticatedAdminRequestsIdRoute: AuthenticatedAdminRequestsIdRoute,
-}
-
-const AuthenticatedRouteRouteWithChildren =
-  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  AuthRoute: AuthRoute,
-  QuoteTokenRoute: QuoteTokenRoute,
-  QuoteIndexRoute: QuoteIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
