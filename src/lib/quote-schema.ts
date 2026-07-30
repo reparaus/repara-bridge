@@ -27,7 +27,15 @@ export const quoteRequestSchema = z.object({
       .regex(/^[A-HJ-NPR-Z0-9]{17}$/, "Invalid VIN")
       .optional()
       .or(z.literal("")),
-    year: z.coerce.number().int().min(1900).max(new Date().getFullYear() + 2),
+    // The upper bound is evaluated at parse time, not module load: in the
+    // production Worker the clock reads 1970 during module init, which would
+    // otherwise reject every real model year.
+    year: z.coerce
+      .number()
+      .int()
+      .min(1900)
+      .max(9999)
+      .refine((y) => y <= new Date().getFullYear() + 2, "Invalid year"),
     make: z.string().trim().min(1).max(60),
     model: z.string().trim().min(1).max(60),
     trim: z.string().trim().max(80).optional().or(z.literal("")),
