@@ -579,24 +579,41 @@ function VehicleStep({
                 {decoding ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
                 {decoding ? "DECODING" : "DECODE VIN"}
               </Button>
-              {/*
-                Camera VIN scanning is not implemented yet. The interface stays
-                in place; `isVinScanSupported()` becomes a real capability check
-                once a barcode scanner ships, and this handler will open it.
-              */}
+              {/* Camera scan: decoding happens on-device, nothing is uploaded. */}
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 rounded-xl border-border bg-transparent text-muted-foreground"
-                onClick={() =>
-                  scanSupported
-                    ? undefined
-                    : toast("VIN scanning is coming soon. Type or paste your VIN for now.")
-                }
+                className="h-12 rounded-xl border-border bg-transparent"
+                onClick={() => {
+                  if (!scanSupported) {
+                    toast("Camera scanning isn't available. Enter your VIN manually instead.");
+                    return;
+                  }
+                  setVinMessage(null);
+                  setScannerOpen(true);
+                }}
               >
                 <ScanLine className="mr-2 size-4" /> SCAN VIN
               </Button>
             </div>
+
+            {scannerOpen && (
+              <VinScanner
+                onDetected={(vin) => {
+                  setScannerOpen(false);
+                  const clean = normalizeVin(vin);
+                  patch({ vin: clean, decoded: null });
+                  // The auto-decode effect picks a valid VIN up immediately.
+                  const check = validateVin(clean);
+                  if (!check.valid) setVinMessage(check.message!);
+                }}
+                onClose={(reason) => {
+                  setScannerOpen(false);
+                  if (reason === "unavailable")
+                    toast("Camera scanning isn't available. Enter your VIN manually instead.");
+                }}
+              />
+            )}
 
             {form.decoded && (
               <div className="rounded-xl border border-chrome/40 bg-accent p-4">
