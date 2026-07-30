@@ -43,7 +43,6 @@ export function VinScanner({
 
     async function start() {
       try {
-        console.log("[vinscan] requesting camera");
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
@@ -62,7 +61,6 @@ export function VinScanner({
         const track = stream.getVideoTracks()[0];
         const caps = (track?.getCapabilities?.() ?? {}) as { torch?: boolean };
         setTorchAvailable(Boolean(caps.torch));
-        console.log("[vinscan] stream ready");
         setPhase("scanning");
 
         const DetectorCtor = getBarcodeDetectorCtor();
