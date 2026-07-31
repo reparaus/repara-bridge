@@ -282,7 +282,11 @@ function QuoteFlow() {
         services: form.services.join(","),
       });
       clearDraft();
-      setConfirmation({ requestNumber: result.requestNumber, snapshot: form });
+      setConfirmation({
+        requestNumber: result.requestNumber,
+        snapshot: form,
+        outsideArea: result.serviceAreaStatus === "outside_area",
+      });
       window.scrollTo({ top: 0 });
     },
     onError: () => {
