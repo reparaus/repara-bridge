@@ -299,22 +299,26 @@ function RequestDetail() {
             />
           </Panel>
 
-          <div className="flex flex-wrap gap-3">
-            <Button
-              variant="outline"
-              className="border-border bg-transparent"
-              onClick={() => statusMutation.mutate("reviewing")}
+          <div className="surface-panel space-y-3 p-4">
+            <p className="text-[11px] tracking-[0.16em] text-muted-foreground uppercase">Status</p>
+            <select
+              value={request.status}
+              disabled={statusMutation.isPending}
+              onChange={(e) => statusMutation.mutate(e.target.value as "new")}
+              className="h-11 w-full rounded-md border border-input bg-surface px-3 text-sm text-foreground"
+              aria-label="Request status"
             >
-              MARK REVIEWING
-            </Button>
-            <Button
-              variant="outline"
-              className="border-border bg-transparent text-destructive"
-              onClick={() => statusMutation.mutate("declined")}
-            >
-              MARK DECLINED
-            </Button>
+              {WORKFLOW_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {statusLabel(s)}
+                </option>
+              ))}
+              {!WORKFLOW_STATUSES.includes(request.status) && (
+                <option value={request.status}>{statusLabel(request.status)}</option>
+              )}
+            </select>
           </div>
+
         </div>
 
         {/* QUOTE BUILDER */}
