@@ -262,7 +262,55 @@ export async function persistQuoteRequest(data: QuoteInput) {
     );
   }
 
-  return { requestNumber: request.request_number };
+  return {
+    requestNumber: request.request_number,
+    serviceAreaStatus: area.status,
+    serviceAreaCity: area.city,
+  };
+}
+
+/**
+ * Resolves a ZIP code against the approved service areas. The typed city is
+ * never trusted — only an active `service_areas` row makes a request eligible.
+ * A lookup failure degrades to "unknown" instead of blocking a submission.
+ */
+export async function lookupServiceArea(
+  zipCode: string,
+): Promise<{ status: "eligible" | "outside_area" | "unknown"; city: string | null }> {
+  const zip5 = (zipCode ?? "").trim().slice(0, 5);
+  if (!/^\d{5}$/.test(zip5)) return { status: "outside_area", city: null };
+
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const client = supabaseAdmin as unknown as {
+    from: (t: string) => {
+      select: (cols: string) => {
+        eq: (
+          c: string,
+          v: unknown,
+        ) => {
+          eq: (
+            c: string,
+            v: unknown,
+          ) => {
+            maybeSingle: () => Promise<{
+              data: { city: string } | null;
+              error: { message: string } | null;
+            }>;
+          };
+        };
+      };
+    };
+  };
+
+  const { data, error } = await client
+    .from("service_areas")
+    .select("city")
+    .eq("zip_code", zip5)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (error) return { status: "unknown", city: null };
+  return data ? { status: "eligible", city: data.city } : { status: "outside_area", city: null };
 }
 
 /**
