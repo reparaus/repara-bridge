@@ -1170,10 +1170,12 @@ function ContactStep({
 function Confirmation({
   requestNumber,
   snapshot,
+  outsideArea = false,
   onAnother,
 }: {
   requestNumber: string;
   snapshot: FormState;
+  outsideArea?: boolean;
   onAnother: () => void;
 }) {
   const contactLabel =
@@ -1185,11 +1187,24 @@ function Confirmation({
         <span className="mx-auto flex size-14 items-center justify-center rounded-full border border-chrome/40 bg-accent">
           <Check className="size-6 text-chrome" />
         </span>
-        <h1 className="mt-6 font-display text-3xl font-extrabold">Quote request received.</h1>
+        <h1 className="mt-6 font-display text-3xl font-extrabold">
+          {outsideArea ? "Request received." : "Quote request received."}
+        </h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          We'll review your vehicle and requested services and send your personalized quote shortly.
-          No work is authorized until you accept your quote.
+          {outsideArea ? (
+            <>
+              We don't currently service ZIP {snapshot.zipCode.trim().slice(0, 5)} — our mobile
+              service area is Corona and Riverside, California right now. Your request was received
+              and saved, and we'll reach out if we expand to your area.
+            </>
+          ) : (
+            <>
+              We'll review your vehicle and requested services and send your personalized quote
+              shortly. No work is authorized until you accept your quote.
+            </>
+          )}
         </p>
+
 
         <div className="surface-panel mt-8 space-y-4 p-5 text-left">
           <Row label="Request" value={`#${requestNumber}`} />
