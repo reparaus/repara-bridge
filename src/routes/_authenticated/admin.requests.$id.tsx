@@ -204,7 +204,19 @@ function RequestDetail() {
             <Row label="Phone" value={customer.phone ?? "—"} />
             <Row label="Email" value={customer.email ?? "—"} />
             <Row label="Preferred contact" value={customer.preferred_contact_method ?? "—"} />
+            <Row label="City" value={request.city || "—"} />
             <Row label="ZIP" value={request.zip_code ?? "—"} />
+            <Row
+              label="Service area"
+              value={
+                request.service_area_status === "eligible"
+                  ? "In service area"
+                  : request.service_area_status === "outside_area"
+                    ? "Outside service area"
+                    : "Unknown"
+              }
+            />
+            <Row label="Submitted" value={new Date(request.created_at).toLocaleString()} />
           </Panel>
 
           <Panel title="Vehicle">
