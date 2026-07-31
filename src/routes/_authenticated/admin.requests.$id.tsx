@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getRequestDetail, saveQuote, updateRequestStatus } from "@/lib/admin.functions";
-import { answerLabel, serviceLabel } from "@/lib/services";
+import { answerLabel, serviceLabel, statusLabel, WORKFLOW_STATUSES } from "@/lib/services";
 import { DRIVETRAIN_LABELS, type Drivetrain } from "@/lib/vehicle-config";
 import { track } from "@/lib/analytics";
 
@@ -126,7 +126,8 @@ function RequestDetail() {
   });
 
   const statusMutation = useMutation({
-    mutationFn: (status: "declined" | "reviewing") => setStatus({ data: { id, status } }),
+    mutationFn: (status: (typeof WORKFLOW_STATUSES)[number] | string) =>
+      setStatus({ data: { id, status: status as "new" } }),
     onSuccess: () => {
       toast.success("Status updated.");
       void query.refetch();
@@ -203,7 +204,19 @@ function RequestDetail() {
             <Row label="Phone" value={customer.phone ?? "—"} />
             <Row label="Email" value={customer.email ?? "—"} />
             <Row label="Preferred contact" value={customer.preferred_contact_method ?? "—"} />
+            <Row label="City" value={request.city || "—"} />
             <Row label="ZIP" value={request.zip_code ?? "—"} />
+            <Row
+              label="Service area"
+              value={
+                request.service_area_status === "eligible"
+                  ? "In service area"
+                  : request.service_area_status === "outside_area"
+                    ? "Outside service area"
+                    : "Unknown"
+              }
+            />
+            <Row label="Submitted" value={new Date(request.created_at).toLocaleString()} />
           </Panel>
 
           <Panel title="Vehicle">
@@ -299,22 +312,26 @@ function RequestDetail() {
             />
           </Panel>
 
-          <div className="flex flex-wrap gap-3">
-            <Button
-              variant="outline"
-              className="border-border bg-transparent"
-              onClick={() => statusMutation.mutate("reviewing")}
+          <div className="surface-panel space-y-3 p-4">
+            <p className="text-[11px] tracking-[0.16em] text-muted-foreground uppercase">Status</p>
+            <select
+              value={request.status}
+              disabled={statusMutation.isPending}
+              onChange={(e) => statusMutation.mutate(e.target.value as "new")}
+              className="h-11 w-full rounded-md border border-input bg-surface px-3 text-sm text-foreground"
+              aria-label="Request status"
             >
-              MARK REVIEWING
-            </Button>
-            <Button
-              variant="outline"
-              className="border-border bg-transparent text-destructive"
-              onClick={() => statusMutation.mutate("declined")}
-            >
-              MARK DECLINED
-            </Button>
+              {WORKFLOW_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {statusLabel(s)}
+                </option>
+              ))}
+              {!WORKFLOW_STATUSES.includes(request.status) && (
+                <option value={request.status}>{statusLabel(request.status)}</option>
+              )}
+            </select>
           </div>
+
         </div>
 
         {/* QUOTE BUILDER */}

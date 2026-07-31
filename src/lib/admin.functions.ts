@@ -36,56 +36,108 @@ export const listRequests = createServerFn({ method: "POST" })
         category: z.string().optional(),
         search: z.string().trim().max(80).optional(),
         since: z.string().optional(),
+        serviceArea: z.enum(["all", "eligible", "outside_area", "unknown"]).optional(),
+        zip: z.string().trim().max(10).optional(),
+        vehicle: z.string().trim().max(60).optional(),
       })
       .parse(data ?? {}),
   )
   .handler(async ({ data, context }) => {
-    let query = context.supabase
-      .from("service_requests")
-      .select(
-        "id, request_number, service_category, service_subcategory, status, created_at, customers(first_name, last_name, phone), vehicles(year, make, model, vin)",
-      )
-      .order("created_at", { ascending: false })
-      .limit(200);
+    const LEGACY_COLUMNS =
+      "id, request_number, service_category, service_subcategory, services, status, created_at, zip_code, customers(first_name, last_name, phone, email), vehicles(year, make, model, vin)";
+    const COLUMNS = LEGACY_COLUMNS.replace("zip_code,", "zip_code, city, service_area_status,");
 
-    if (data.status && data.status !== "all")
-      query = query.eq("status", data.status as "new");
-    if (data.category && data.category !== "all") query = query.eq("service_category", data.category);
-    if (data.since) query = query.gte("created_at", data.since);
+    const run = async (columns: string, withArea: boolean) => {
+      let query = context.supabase
+        .from("service_requests")
+        .select(columns)
+        .order("created_at", { ascending: false })
+        .limit(300);
 
-    const { data: rows, error } = await query;
+      if (data.status && data.status !== "all")
+        query = query.eq("status", data.status as "new");
+      if (data.category && data.category !== "all")
+        query = query.eq("service_category", data.category);
+      if (data.since) query = query.gte("created_at", data.since);
+      if (withArea && data.serviceArea && data.serviceArea !== "all")
+        query = (query as unknown as { eq: (c: string, v: string) => typeof query }).eq(
+          "service_area_status",
+          data.serviceArea,
+        );
+      if (data.zip?.trim()) query = query.ilike("zip_code", `${data.zip.trim()}%`);
+      return query;
+    };
+
+    let { data: rows, error } = await run(COLUMNS, true);
+    // Tolerate a database that has not run migration 0002 yet.
+    if (error && /column|schema cache/i.test(error.message ?? "")) {
+      ({ data: rows, error } = await run(LEGACY_COLUMNS, false));
+    }
     if (error) throw new Error("Could not load requests.");
 
+
     const term = data.search?.toLowerCase().trim();
-    const mapped = (rows ?? []).map((r) => ({
+    const vehicleTerm = data.vehicle?.toLowerCase().trim();
+
+    const mapped = ((rows ?? []) as unknown as AdminRequestRow[]).map((r) => ({
       id: r.id,
       requestNumber: r.request_number,
       category: r.service_category,
       subcategory: r.service_subcategory,
+      serviceLabels: Array.isArray(r.services)
+        ? r.services.map((s) => s?.label).filter((s): s is string => Boolean(s))
+        : [],
       status: r.status,
       createdAt: r.created_at,
+      zipCode: r.zip_code ?? "",
+      city: r.city ?? "",
+      serviceAreaStatus: r.service_area_status ?? "unknown",
       customerName: `${r.customers?.first_name ?? ""} ${r.customers?.last_name ?? ""}`.trim(),
       phone: r.customers?.phone ?? "",
+      email: r.customers?.email ?? "",
       vin: r.vehicles?.vin ?? "",
       vehicle: r.vehicles
         ? `${r.vehicles.year ?? ""} ${r.vehicles.make ?? ""} ${r.vehicles.model ?? ""}`.trim()
         : "",
     }));
 
-    const filtered = term
+    let filtered = term
       ? mapped.filter((r) =>
-          [r.customerName, r.phone, r.vin, r.vehicle, r.requestNumber]
+          [r.customerName, r.phone, r.email, r.vin, r.vehicle, r.requestNumber, r.zipCode, r.city]
             .join(" ")
             .toLowerCase()
             .includes(term),
         )
       : mapped;
 
+    if (vehicleTerm)
+      filtered = filtered.filter((r) => r.vehicle.toLowerCase().includes(vehicleTerm));
+
     const counts: Record<string, number> = {};
     for (const r of mapped) counts[r.status] = (counts[r.status] ?? 0) + 1;
 
-    return { requests: filtered, counts };
+    const areaCounts: Record<string, number> = {};
+    for (const r of mapped) areaCounts[r.serviceAreaStatus] = (areaCounts[r.serviceAreaStatus] ?? 0) + 1;
+
+    return { requests: filtered, counts, areaCounts };
   });
+
+/** Shape of the admin list row; `city`/`service_area_status` come from migration 0002. */
+type AdminRequestRow = {
+  id: string;
+  request_number: string;
+  service_category: string;
+  service_subcategory: string | null;
+  services: { label?: string }[] | null;
+  status: string;
+  created_at: string;
+  zip_code: string | null;
+  city: string | null;
+  service_area_status: string | null;
+  customers: { first_name?: string; last_name?: string; phone?: string; email?: string } | null;
+  vehicles: { year?: number; make?: string; model?: string; vin?: string } | null;
+};
+
 
 export const getRequestDetail = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -128,6 +180,7 @@ export const updateRequestStatus = createServerFn({ method: "POST" })
       .extend({
         status: z.enum([
           "new",
+          "contacted",
           "reviewing",
           "quoted",
           "accepted",
@@ -143,7 +196,8 @@ export const updateRequestStatus = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase
       .from("service_requests")
-      .update({ status: data.status })
+      // "contacted" is added by migration 0002 and not in the generated types.
+      .update({ status: data.status as "new" })
       .eq("id", data.id);
     if (error) throw new Error("Could not update the status.");
     return { ok: true };

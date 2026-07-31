@@ -3,6 +3,7 @@ import { statusLabel } from "@/lib/services";
 
 const TONE: Record<string, string> = {
   new: "bg-info/15 text-info border-info/30",
+  contacted: "bg-chrome/15 text-chrome border-chrome/30",
   reviewing: "bg-chrome/15 text-chrome border-chrome/30",
   quoted: "bg-warning/15 text-warning border-warning/30",
   sent: "bg-warning/15 text-warning border-warning/30",
