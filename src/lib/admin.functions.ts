@@ -185,7 +185,8 @@ export const updateRequestStatus = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase
       .from("service_requests")
-      .update({ status: data.status })
+      // "contacted" is added by migration 0002 and not in the generated types.
+      .update({ status: data.status as "new" })
       .eq("id", data.id);
     if (error) throw new Error("Could not update the status.");
     return { ok: true };
