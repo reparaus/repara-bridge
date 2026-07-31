@@ -152,27 +152,60 @@ export async function persistQuoteRequest(data: QuoteInput) {
     Object.values(s.answers).flatMap((v) => (Array.isArray(v) ? v : [])),
   );
 
-  const { data: request, error: requestError } = await supabaseAdmin
-    .from("service_requests")
-    .insert({
-      customer_id: customerId,
-      vehicle_id: vehicleId,
-      service_category: primary.key,
-      service_subcategory: data.services.length > 1 ? "multiple" : null,
-      services: data.services,
-      symptoms,
-      details: {
-        vehicleEntryMethod: data.vehicle.entryMethod,
-        vehicleTrim: data.vehicle.trim || "",
-        services: Object.fromEntries(data.services.map((s) => [s.key, s.answers])),
-      },
-      notes: data.details.notes || null,
-      mileage: data.details.mileage,
-      zip_code: data.details.zipCode,
-      service_location_type: "mobile",
-    })
-    .select("id, request_number")
-    .single();
+  // ZIP — never the typed city — decides service-area eligibility. Requests
+  // from outside the area are still saved so demand stays visible.
+  const area = await lookupServiceArea(data.details.zipCode);
+
+  const baseRequest = {
+    customer_id: customerId,
+    vehicle_id: vehicleId,
+    service_category: primary.key,
+    service_subcategory: data.services.length > 1 ? "multiple" : null,
+    services: data.services,
+    symptoms,
+    details: {
+      vehicleEntryMethod: data.vehicle.entryMethod,
+      vehicleTrim: data.vehicle.trim || "",
+      services: Object.fromEntries(data.services.map((s) => [s.key, s.answers])),
+    },
+    notes: data.details.notes || null,
+    mileage: data.details.mileage,
+    zip_code: data.details.zipCode,
+    service_location_type: "mobile",
+    status: "new" as const,
+  };
+
+  const insertRequest = (payload: Record<string, unknown>) =>
+    (
+      supabaseAdmin as unknown as {
+        from: (t: string) => {
+          insert: (row: unknown) => {
+            select: (cols: string) => {
+              single: () => Promise<{
+                data: { id: string; request_number: string } | null;
+                error: { message: string } | null;
+              }>;
+            };
+          };
+        };
+      }
+    )
+      .from("service_requests")
+      .insert(payload)
+      .select("id, request_number")
+      .single();
+
+  let { data: request, error: requestError } = await insertRequest({
+    ...baseRequest,
+    service_area_status: area.status,
+    city: area.city,
+  });
+
+  // Tolerate a database that has not run migration 0002 yet: fall back to the
+  // original column set rather than failing a real customer submission.
+  if (requestError && /column|schema cache/i.test(requestError.message ?? "")) {
+    ({ data: request, error: requestError } = await insertRequest(baseRequest));
+  }
 
   if (requestError || !request) {
     await rollbackVehicle();
