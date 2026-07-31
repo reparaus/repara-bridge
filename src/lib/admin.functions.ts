@@ -43,27 +43,38 @@ export const listRequests = createServerFn({ method: "POST" })
       .parse(data ?? {}),
   )
   .handler(async ({ data, context }) => {
-    let query = context.supabase
-      .from("service_requests")
-      .select(
-        "id, request_number, service_category, service_subcategory, services, status, created_at, zip_code, city, service_area_status, customers(first_name, last_name, phone, email), vehicles(year, make, model, vin)",
-      )
-      .order("created_at", { ascending: false })
-      .limit(300);
+    const LEGACY_COLUMNS =
+      "id, request_number, service_category, service_subcategory, services, status, created_at, zip_code, customers(first_name, last_name, phone, email), vehicles(year, make, model, vin)";
+    const COLUMNS = LEGACY_COLUMNS.replace("zip_code,", "zip_code, city, service_area_status,");
 
-    if (data.status && data.status !== "all")
-      query = query.eq("status", data.status as "new");
-    if (data.category && data.category !== "all") query = query.eq("service_category", data.category);
-    if (data.since) query = query.gte("created_at", data.since);
-    if (data.serviceArea && data.serviceArea !== "all")
-      query = (query as unknown as { eq: (c: string, v: string) => typeof query }).eq(
-        "service_area_status",
-        data.serviceArea,
-      );
-    if (data.zip?.trim()) query = query.ilike("zip_code", `${data.zip.trim()}%`);
+    const run = async (columns: string, withArea: boolean) => {
+      let query = context.supabase
+        .from("service_requests")
+        .select(columns)
+        .order("created_at", { ascending: false })
+        .limit(300);
 
-    const { data: rows, error } = await query;
+      if (data.status && data.status !== "all")
+        query = query.eq("status", data.status as "new");
+      if (data.category && data.category !== "all")
+        query = query.eq("service_category", data.category);
+      if (data.since) query = query.gte("created_at", data.since);
+      if (withArea && data.serviceArea && data.serviceArea !== "all")
+        query = (query as unknown as { eq: (c: string, v: string) => typeof query }).eq(
+          "service_area_status",
+          data.serviceArea,
+        );
+      if (data.zip?.trim()) query = query.ilike("zip_code", `${data.zip.trim()}%`);
+      return query;
+    };
+
+    let { data: rows, error } = await run(COLUMNS, true);
+    // Tolerate a database that has not run migration 0002 yet.
+    if (error && /column|schema cache/i.test(error.message ?? "")) {
+      ({ data: rows, error } = await run(LEGACY_COLUMNS, false));
+    }
     if (error) throw new Error("Could not load requests.");
+
 
     const term = data.search?.toLowerCase().trim();
     const vehicleTerm = data.vehicle?.toLowerCase().trim();
