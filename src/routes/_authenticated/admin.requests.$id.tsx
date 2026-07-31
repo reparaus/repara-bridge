@@ -126,7 +126,8 @@ function RequestDetail() {
   });
 
   const statusMutation = useMutation({
-    mutationFn: (status: "declined" | "reviewing") => setStatus({ data: { id, status } }),
+    mutationFn: (status: (typeof WORKFLOW_STATUSES)[number] | string) =>
+      setStatus({ data: { id, status: status as "new" } }),
     onSuccess: () => {
       toast.success("Status updated.");
       void query.refetch();
