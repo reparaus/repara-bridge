@@ -179,7 +179,11 @@ function QuoteFlow() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [hydrated, setHydrated] = useState(false);
-  const [confirmation, setConfirmation] = useState<{ requestNumber: string; snapshot: FormState } | null>(
+  const [confirmation, setConfirmation] = useState<{
+    requestNumber: string;
+    snapshot: FormState;
+    outsideArea: boolean;
+  } | null>(
     null,
   );
 
