@@ -169,6 +169,7 @@ export const updateRequestStatus = createServerFn({ method: "POST" })
       .extend({
         status: z.enum([
           "new",
+          "contacted",
           "reviewing",
           "quoted",
           "accepted",
