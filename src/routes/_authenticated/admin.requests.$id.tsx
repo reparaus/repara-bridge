@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getRequestDetail, saveQuote, updateRequestStatus } from "@/lib/admin.functions";
-import { answerLabel, serviceLabel } from "@/lib/services";
+import { answerLabel, serviceLabel, statusLabel, WORKFLOW_STATUSES } from "@/lib/services";
 import { DRIVETRAIN_LABELS, type Drivetrain } from "@/lib/vehicle-config";
 import { track } from "@/lib/analytics";
 
