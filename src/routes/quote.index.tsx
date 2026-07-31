@@ -373,6 +373,7 @@ function QuoteFlow() {
     return (
       <Confirmation
         requestNumber={confirmation.requestNumber}
+        outsideArea={confirmation.outsideArea}
         snapshot={confirmation.snapshot}
         onAnother={() => {
           setForm(EMPTY);
