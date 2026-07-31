@@ -219,6 +219,7 @@ export const CONTACT_METHODS: Choice[] = [
 
 export const REQUEST_STATUSES = [
   "new",
+  "contacted",
   "reviewing",
   "quoted",
   "accepted",
@@ -228,6 +229,17 @@ export const REQUEST_STATUSES = [
   "completed",
   "cancelled",
 ] as const;
+
+/** Statuses Repara moves a request through in the admin dashboard. */
+export const WORKFLOW_STATUSES = [
+  "new",
+  "contacted",
+  "scheduled",
+  "in_progress",
+  "completed",
+  "declined",
+] as const;
+
 
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
