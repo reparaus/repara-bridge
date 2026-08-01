@@ -2,9 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Copy, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Loader2, Mail, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { CopyValue } from "@/components/admin/CopyValue";
 import { Field } from "@/components/common/Field";
 import { LoadingState } from "@/components/common/LoadingState";
 import { formatCurrency, PriceSummary } from "@/components/common/PriceSummary";
@@ -12,10 +13,17 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { getRequestDetail, saveQuote, updateRequestStatus } from "@/lib/admin.functions";
+import {
+  getRequestDetail,
+  markRequestViewed,
+  resendRequestEmails,
+  saveQuote,
+  updateRequestStatus,
+} from "@/lib/admin.functions";
 import { answerLabel, serviceLabel, statusLabel, WORKFLOW_STATUSES } from "@/lib/services";
 import { DRIVETRAIN_LABELS, type Drivetrain } from "@/lib/vehicle-config";
 import { track } from "@/lib/analytics";
+
 
 export const Route = createFileRoute("/_authenticated/admin/requests/$id")({
   head: () => ({
