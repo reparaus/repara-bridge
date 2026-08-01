@@ -604,7 +604,7 @@ function RequestDetail() {
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="surface-panel space-y-3 p-5">
+    <section className="surface-panel min-w-0 space-y-3 overflow-hidden p-5">
       <h2 className="text-xs tracking-[0.2em] text-muted-foreground uppercase">{title}</h2>
       {children}
     </section>
@@ -613,9 +613,10 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-right text-sm font-medium">{value}</span>
+      <span className="min-w-0 break-words text-right text-sm font-medium">{value}</span>
     </div>
   );
 }
+
