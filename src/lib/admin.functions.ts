@@ -102,6 +102,8 @@ export const listRequests = createServerFn({ method: "POST" })
       vehicle: r.vehicles
         ? `${r.vehicles.year ?? ""} ${r.vehicles.make ?? ""} ${r.vehicles.model ?? ""}`.trim()
         : "",
+      viewed: Boolean(r.admin_viewed_at),
+      emailStatus: r.email_status ?? null,
     }));
 
     let filtered = term
@@ -122,7 +124,10 @@ export const listRequests = createServerFn({ method: "POST" })
     const areaCounts: Record<string, number> = {};
     for (const r of mapped) areaCounts[r.serviceAreaStatus] = (areaCounts[r.serviceAreaStatus] ?? 0) + 1;
 
-    return { requests: filtered, counts, areaCounts };
+    // Badge: requests an admin has never opened (migration 0005).
+    const unviewedCount = mapped.filter((r) => !r.viewed).length;
+
+    return { requests: filtered, counts, areaCounts, unviewedCount };
   });
 
 /** Shape of the admin list row; `city`/`service_area_status` come from migration 0002. */
@@ -137,6 +142,8 @@ type AdminRequestRow = {
   zip_code: string | null;
   city: string | null;
   service_area_status: string | null;
+  admin_viewed_at: string | null;
+  email_status: string | null;
   customers: { first_name?: string; last_name?: string; phone?: string; email?: string } | null;
   vehicles: { year?: number; make?: string; model?: string; vin?: string } | null;
 };
