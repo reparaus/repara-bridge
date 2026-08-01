@@ -280,7 +280,10 @@ function RequestDetail() {
             />
             <Row label="Fuel" value={vehicle.fuel_type ?? "—"} />
             <Row label="Body" value={vehicle.body_type ?? "—"} />
-            <Row label="VIN" value={vehicle.vin ?? "—"} />
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-xs text-muted-foreground">VIN</span>
+              <CopyValue value={vehicle.vin ?? ""} label="VIN" mono />
+            </div>
             <Row
               label="Mileage at request"
               value={
