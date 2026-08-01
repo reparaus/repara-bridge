@@ -386,7 +386,8 @@ function QuoteFlow() {
         outsideArea={confirmation.outsideArea}
         snapshot={confirmation.snapshot}
         onAnother={() => {
-          setForm(EMPTY);
+          // Fresh idempotency key: a new request is always allowed.
+          setForm({ ...EMPTY, submissionId: crypto.randomUUID() });
           setStep(0);
           setErrors({});
           setConfirmation(null);
