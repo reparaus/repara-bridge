@@ -358,7 +358,7 @@ function RequestDetail() {
               value={request.status}
               disabled={statusMutation.isPending}
               onChange={(e) => statusMutation.mutate(e.target.value as "new")}
-              className="h-11 w-full rounded-md border border-input bg-surface px-3 text-sm text-foreground"
+              className="h-12 w-full rounded-md border border-input bg-surface px-3 text-sm text-foreground"
               aria-label="Request status"
             >
               {WORKFLOW_STATUSES.map((s) => (
@@ -370,9 +370,89 @@ function RequestDetail() {
                 <option value={request.status}>{statusLabel(request.status)}</option>
               )}
             </select>
+            <p className="text-xs text-muted-foreground">
+              {statusMutation.isPending ? "Saving…" : "Changes save automatically."}
+            </p>
           </div>
 
+          <Panel title="Status history">
+            <ol className="space-y-2">
+              <li className="flex items-baseline justify-between gap-3">
+                <span className="text-sm">Submitted</span>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(request.created_at).toLocaleString()}
+                </span>
+              </li>
+              {(detail.statusEvents ?? []).map((e) => (
+                <li key={e.id} className="flex items-baseline justify-between gap-3">
+                  <span className="text-sm">
+                    {e.fromStatus ? `${statusLabel(e.fromStatus)} → ` : ""}
+                    {statusLabel(e.toStatus)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(e.createdAt).toLocaleString()}
+                  </span>
+                </li>
+              ))}
+              {(detail.statusEvents ?? []).length === 0 && (
+                <li className="text-xs text-muted-foreground">
+                  No status changes yet — updates appear here.
+                </li>
+              )}
+            </ol>
+          </Panel>
+
+          <Panel title="Confirmation emails">
+            <Row
+              label="Customer"
+              value={
+                request.customer_email_sent_at
+                  ? `Sent ${new Date(request.customer_email_sent_at).toLocaleString()}`
+                  : "Not sent"
+              }
+            />
+            <Row
+              label="Repara admin"
+              value={
+                request.admin_email_sent_at
+                  ? `Sent ${new Date(request.admin_email_sent_at).toLocaleString()}`
+                  : "Not sent"
+              }
+            />
+            {request.email_last_error && (
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                Last email failure: {request.email_last_error}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-border bg-transparent"
+                disabled={emailMutation.isPending}
+                onClick={() => emailMutation.mutate("both")}
+              >
+                {emailMutation.isPending ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 size-4" />
+                )}
+                {request.email_last_error ? "RETRY EMAILS" : "RESEND CONFIRMATION EMAIL"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                disabled={emailMutation.isPending}
+                onClick={() => emailMutation.mutate("customer")}
+              >
+                Customer only
+              </Button>
+            </div>
+          </Panel>
+
         </div>
+
 
         {/* QUOTE BUILDER */}
         <div className="space-y-5">
