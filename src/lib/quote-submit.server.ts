@@ -248,13 +248,51 @@ export async function persistQuoteRequest(data: QuoteInput) {
     ...baseRequest,
     service_area_status: area.status,
     city: area.city,
+    ...(submissionId ? { submission_id: submissionId } : {}),
   });
 
-  // Tolerate a database that has not run migration 0002 yet: fall back to the
-  // original column set rather than failing a real customer submission.
+  // A unique-violation on submission_id means a concurrent copy of the SAME
+  // submission (double click / retry) won the race: return that row.
+  if (requestError && submissionId && /duplicate key|unique/i.test(requestError.message ?? "")) {
+    await rollbackVehicle();
+    const { data: won } = await (
+      supabaseAdmin as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (
+              c: string,
+              v: unknown,
+            ) => {
+              maybeSingle: () => Promise<{
+                data: { request_number: string } | null;
+                error: unknown;
+              }>;
+            };
+          };
+        };
+      }
+    )
+      .from("service_requests")
+      .select("request_number")
+      .eq("submission_id", submissionId)
+      .maybeSingle();
+    if (won?.request_number) {
+      return {
+        requestNumber: won.request_number,
+        serviceAreaStatus: area.status,
+        serviceAreaCity: area.city,
+        duplicate: true as const,
+      };
+    }
+    throw new Error("Could not submit your request.");
+  }
+
+  // Tolerate a database that has not run migrations 0002/0004 yet: fall back to
+  // the original column set rather than failing a real customer submission.
   if (requestError && /column|schema cache/i.test(requestError.message ?? "")) {
     ({ data: request, error: requestError } = await insertRequest(baseRequest));
   }
+
 
   if (requestError || !request) {
     await rollbackVehicle();
