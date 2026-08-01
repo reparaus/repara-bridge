@@ -45,7 +45,10 @@ export const listRequests = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const LEGACY_COLUMNS =
       "id, request_number, service_category, service_subcategory, services, status, created_at, zip_code, customers(first_name, last_name, phone, email), vehicles(year, make, model, vin)";
-    const COLUMNS = LEGACY_COLUMNS.replace("zip_code,", "zip_code, city, service_area_status,");
+    const COLUMNS = LEGACY_COLUMNS.replace(
+      "zip_code,",
+      "zip_code, city, service_area_status, admin_viewed_at, email_status,",
+    );
 
     const run = async (columns: string, withArea: boolean) => {
       let query = context.supabase
