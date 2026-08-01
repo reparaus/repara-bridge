@@ -2,11 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Flashlight, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { extractVin, getBarcodeDetectorCtor, VIN_BARCODE_FORMATS } from "@/lib/vin-scan";
+import { createFrameDecoder, extractVin } from "@/lib/vin-scan";
 
 type Phase = "starting" | "scanning" | "error";
 
 const UNAVAILABLE = "Camera scanning isn't available. Enter your VIN manually instead.";
+const NOT_A_VIN = "Barcode detected, but it does not appear to be a valid 17-character VIN.";
+const TIPS =
+  "Move closer, keep the whole barcode inside the frame, hold steady and add light. The driver-door jamb label usually scans best.";
+
+/** Fraction of the frame we crop and decode — matches the on-screen guide box. */
+const ROI = { w: 0.92, h: 0.32 };
 
 /**
  * Full-screen VIN barcode scanner. All decoding happens on-device; no frame
@@ -22,8 +28,10 @@ export function VinScanner({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const stoppedRef = useRef(false);
+  const doneRef = useRef(false);
   const [phase, setPhase] = useState<Phase>("starting");
   const [message, setMessage] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
 
@@ -31,20 +39,28 @@ export function VinScanner({
     stoppedRef.current = true;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    const video = videoRef.current;
+    if (video) video.srcObject = null;
   }, []);
 
   useEffect(() => {
     // Re-arm after StrictMode's dev double-invoke cleanup.
     stoppedRef.current = false;
-    let raf = 0;
-    let zxingReader: { decodeFromCanvas: (c: HTMLCanvasElement) => { getText(): string } } | null =
-      null;
+    doneRef.current = false;
+    let timer: number | undefined;
+    let hintTimer: number | undefined;
     const canvas = document.createElement("canvas");
 
     async function start() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          // High resolution matters: a VIN barcode is thin and wide.
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
+          },
           audio: false,
         });
         if (stoppedRef.current) {
@@ -52,65 +68,77 @@ export function VinScanner({
           return;
         }
         streamRef.current = stream;
+
+        const track = stream.getVideoTracks()[0];
+        const caps = (track?.getCapabilities?.() ?? {}) as {
+          torch?: boolean;
+          focusMode?: string[];
+        };
+        setTorchAvailable(Boolean(caps.torch));
+        // Continuous autofocus where the browser allows it (best-effort).
+        if (caps.focusMode?.includes("continuous")) {
+          await track
+            ?.applyConstraints({ advanced: [{ focusMode: "continuous" }] } as unknown as MediaTrackConstraints)
+            .catch(() => undefined);
+        }
+
         const video = videoRef.current;
         if (video) {
           video.srcObject = stream;
           video.setAttribute("playsinline", "true");
           await video.play().catch(() => undefined);
         }
-        const track = stream.getVideoTracks()[0];
-        const caps = (track?.getCapabilities?.() ?? {}) as { torch?: boolean };
-        setTorchAvailable(Boolean(caps.torch));
         setPhase("scanning");
+        hintTimer = window.setTimeout(() => setHint(TIPS), 8000);
 
-        const DetectorCtor = getBarcodeDetectorCtor();
-        const detector = DetectorCtor
-          ? new DetectorCtor({ formats: [...VIN_BARCODE_FORMATS] })
-          : null;
-        if (!detector) {
-          const { BrowserMultiFormatReader } = await import("@zxing/browser");
-          zxingReader = new BrowserMultiFormatReader() as unknown as typeof zxingReader;
-        }
+        const decode = await createFrameDecoder();
 
-        let last = 0;
-        const tick = async (now: number) => {
-          if (stoppedRef.current) return;
-          if (now - last > 220) {
-            last = now;
-            const v = videoRef.current;
-            if (v && v.videoWidth > 0) {
-              canvas.width = v.videoWidth;
-              canvas.height = v.videoHeight;
-              const ctx = canvas.getContext("2d");
-              ctx?.drawImage(v, 0, 0, canvas.width, canvas.height);
-              let text: string | null = null;
-              try {
-                if (detector) {
-                  const found = await detector.detect(v);
-                  text = found[0]?.rawValue ?? null;
-                } else if (zxingReader) {
-                  text = zxingReader.decodeFromCanvas(canvas).getText();
-                }
-              } catch {
-                text = null;
-              }
-              const vin = text ? extractVin(text) : null;
+        const tick = async () => {
+          if (stoppedRef.current || doneRef.current) return;
+          const v = videoRef.current;
+          if (v && v.videoWidth > 0) {
+            const cw = Math.round(v.videoWidth * ROI.w);
+            const ch = Math.round(v.videoHeight * ROI.h);
+            canvas.width = cw;
+            canvas.height = ch;
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            ctx?.drawImage(
+              v,
+              Math.round((v.videoWidth - cw) / 2),
+              Math.round((v.videoHeight - ch) / 2),
+              cw,
+              ch,
+              0,
+              0,
+              cw,
+              ch,
+            );
+            let text: string | null = null;
+            try {
+              text = await decode(canvas);
+            } catch {
+              text = null;
+            }
+            if (text) {
+              const vin = extractVin(text);
               if (vin) {
+                doneRef.current = true; // callback fires exactly once
                 stopCamera();
                 onDetected(vin);
                 return;
               }
+              setHint(NOT_A_VIN); // keep scanning
             }
           }
-          raf = requestAnimationFrame((t) => void tick(t));
+          timer = window.setTimeout(() => void tick(), 130);
         };
-        raf = requestAnimationFrame((t) => void tick(t));
+        void tick();
       } catch (err) {
         const name = (err as { name?: string })?.name;
         setPhase("error");
         setMessage(
           name === "NotAllowedError" || name === "SecurityError"
-            ? UNAVAILABLE
+            ? "Camera access was blocked. Allow camera access in your browser settings, or enter your VIN manually."
             : UNAVAILABLE,
         );
       }
@@ -118,7 +146,8 @@ export function VinScanner({
 
     void start();
     return () => {
-      cancelAnimationFrame(raf);
+      if (timer) clearTimeout(timer);
+      if (hintTimer) clearTimeout(hintTimer);
       stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -185,7 +214,7 @@ export function VinScanner({
             </div>
           ) : (
             <div className="w-full max-w-sm">
-              <div className="relative aspect-[3/1.4] w-full rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
+              <div className="relative aspect-[3/1.1] w-full rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
                 <span className="absolute inset-x-6 top-1/2 h-px bg-white/70" />
               </div>
             </div>
@@ -204,8 +233,15 @@ export function VinScanner({
               )}
             </p>
             <p className="mt-1 text-xs text-white/70">
-              Usually on the driver's door jamb or the dashboard label.
+              {hint ?? "Usually on the driver's door jamb or the dashboard label."}
             </p>
+            <button
+              type="button"
+              onClick={() => close("cancel")}
+              className="mt-4 text-xs font-medium text-white underline underline-offset-4"
+            >
+              Enter VIN manually instead
+            </button>
           </div>
         )}
       </div>
