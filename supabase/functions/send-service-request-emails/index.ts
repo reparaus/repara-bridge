@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
   const { data: request, error } = await supabase
     .from("service_requests")
     .select(
-      "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, customers(first_name, last_name, phone, email, address_line1, address_line2, city, state), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)",
+      "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, customers(first_name, last_name, phone, email), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)",
     )
     .eq("id", requestId)
     .maybeSingle();
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
     : request.service_area_status === "eligible"
       ? "In service area"
       : "Being reviewed";
-  const location = [request.city ?? customer.city, request.zip_code].filter(Boolean).join(", ") || "—";
+  const location = [request.city, request.zip_code].filter(Boolean).join(", ") || "—";
   const engine = [
     vehicle.engine_displacement ? `${vehicle.engine_displacement}L` : null,
     vehicle.cylinder_count ? `${vehicle.cylinder_count}-cyl` : null,
@@ -158,12 +158,6 @@ Deno.serve(async (req) => {
       ["Customer", [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "—"],
       ["Phone", customer.phone || "—"],
       ["Email", customerEmail || "—"],
-      [
-        "Address",
-        [customer.address_line1, customer.address_line2, customer.city, customer.state]
-          .filter(Boolean)
-          .join(", ") || "—",
-      ],
       ["City / ZIP", location],
       ["Vehicle", [vehicleText, vehicle.trim].filter(Boolean).join(" ")],
       ["VIN", vehicle.vin || "—"],
