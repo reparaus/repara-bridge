@@ -174,9 +174,10 @@ function RequestsDashboard() {
                           </p>
                           {!r.viewed && (
                             <span className="rounded-full bg-info/15 px-2 py-0.5 text-[10px] font-bold tracking-wide text-info uppercase">
-                              New
+                              Unviewed
                             </span>
                           )}
+
                         </div>
                         <p className="mt-1 truncate text-base font-semibold">
                           {r.customerName || "—"}
