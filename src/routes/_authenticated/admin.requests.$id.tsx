@@ -214,22 +214,33 @@ function RequestDetail() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-5 py-8 lg:grid-cols-[1fr_1.15fr]">
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-5 sm:py-8 lg:grid-cols-[1fr_1.15fr]">
         <div className="space-y-6">
           <div>
             <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">
               Request #{request.request_number}
             </p>
-            <h1 className="mt-1 font-display text-2xl font-extrabold">
+            <h1 className="mt-1 font-display text-xl font-extrabold sm:text-2xl">
               {serviceLabel(request.service_category)}
             </h1>
           </div>
 
           <Panel title="Customer">
             <Row label="Name" value={`${customer.first_name ?? ""} ${customer.last_name ?? ""}`} />
-            <Row label="Phone" value={customer.phone ?? "—"} />
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-xs text-muted-foreground">Phone</span>
+              <div className="flex items-center gap-2">
+                {customer.phone && (
+                  <a href={`tel:${customer.phone}`} className="text-sm font-medium underline-offset-4 hover:underline">
+                    {customer.phone}
+                  </a>
+                )}
+                <CopyValue value={customer.phone ?? ""} label="phone number" />
+              </div>
+            </div>
             <Row label="Email" value={customer.email ?? "—"} />
             <Row label="Preferred contact" value={customer.preferred_contact_method ?? "—"} />
+
             <Row label="City" value={request.city || "—"} />
             <Row label="ZIP" value={request.zip_code ?? "—"} />
             <Row
