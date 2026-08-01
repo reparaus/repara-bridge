@@ -227,9 +227,9 @@ function RequestDetail() {
 
           <Panel title="Customer">
             <Row label="Name" value={`${customer.first_name ?? ""} ${customer.last_name ?? ""}`} />
-            <div className="flex items-baseline justify-between gap-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <span className="text-xs text-muted-foreground">Phone</span>
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                 {customer.phone && (
                   <a href={`tel:${customer.phone}`} className="text-sm font-medium underline-offset-4 hover:underline">
                     {customer.phone}
@@ -238,6 +238,7 @@ function RequestDetail() {
                 <CopyValue value={customer.phone ?? ""} label="phone number" />
               </div>
             </div>
+
             <Row label="Email" value={customer.email ?? "—"} />
             <Row label="Preferred contact" value={customer.preferred_contact_method ?? "—"} />
 
