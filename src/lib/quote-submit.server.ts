@@ -362,6 +362,8 @@ export async function persistQuoteRequest(data: QuoteInput) {
     requestNumber: request.request_number,
     serviceAreaStatus: area.status,
     serviceAreaCity: area.city,
+    duplicate: false as const,
+
   };
 }
 
