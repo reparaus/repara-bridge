@@ -47,11 +47,19 @@ function RequestDetail() {
   const fetchDetail = useServerFn(getRequestDetail);
   const persistQuote = useServerFn(saveQuote);
   const setStatus = useServerFn(updateRequestStatus);
+  const markViewed = useServerFn(markRequestViewed);
+  const resendEmails = useServerFn(resendRequestEmails);
 
   const query = useQuery({
     queryKey: ["admin-request", id],
     queryFn: () => fetchDetail({ data: { id } }),
   });
+
+  // Opening a request clears it from the "new requests" badge.
+  useEffect(() => {
+    void markViewed({ data: { id } }).catch(() => undefined);
+  }, [id, markViewed]);
+
 
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([{ ...EMPTY_LINE }]);
