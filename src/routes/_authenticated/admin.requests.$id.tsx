@@ -458,7 +458,7 @@ function RequestDetail() {
 
 
         {/* QUOTE BUILDER */}
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <h2 className="font-display text-lg font-bold">Quote builder</h2>
 
           <div className="surface-panel space-y-3 p-4">
