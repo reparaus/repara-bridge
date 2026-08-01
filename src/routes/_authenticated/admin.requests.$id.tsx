@@ -2,9 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Copy, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Loader2, Mail, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { CopyValue } from "@/components/admin/CopyValue";
 import { Field } from "@/components/common/Field";
 import { LoadingState } from "@/components/common/LoadingState";
 import { formatCurrency, PriceSummary } from "@/components/common/PriceSummary";
@@ -12,10 +13,17 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { getRequestDetail, saveQuote, updateRequestStatus } from "@/lib/admin.functions";
+import {
+  getRequestDetail,
+  markRequestViewed,
+  resendRequestEmails,
+  saveQuote,
+  updateRequestStatus,
+} from "@/lib/admin.functions";
 import { answerLabel, serviceLabel, statusLabel, WORKFLOW_STATUSES } from "@/lib/services";
 import { DRIVETRAIN_LABELS, type Drivetrain } from "@/lib/vehicle-config";
 import { track } from "@/lib/analytics";
+
 
 export const Route = createFileRoute("/_authenticated/admin/requests/$id")({
   head: () => ({
@@ -39,11 +47,19 @@ function RequestDetail() {
   const fetchDetail = useServerFn(getRequestDetail);
   const persistQuote = useServerFn(saveQuote);
   const setStatus = useServerFn(updateRequestStatus);
+  const markViewed = useServerFn(markRequestViewed);
+  const resendEmails = useServerFn(resendRequestEmails);
 
   const query = useQuery({
     queryKey: ["admin-request", id],
     queryFn: () => fetchDetail({ data: { id } }),
   });
+
+  // Opening a request clears it from the "new requests" badge.
+  useEffect(() => {
+    void markViewed({ data: { id } }).catch(() => undefined);
+  }, [id, markViewed]);
+
 
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([{ ...EMPTY_LINE }]);
@@ -135,6 +151,16 @@ function RequestDetail() {
     onError: () => toast.error("Could not update the status."),
   });
 
+  const emailMutation = useMutation({
+    mutationFn: (target: "both" | "customer" | "admin") => resendEmails({ data: { id, target } }),
+    onSuccess: (res) => {
+      if (res.ok) toast.success("Confirmation email re-sent.");
+      else toast.error(res.lastError || res.error || "The email could not be sent.");
+      void query.refetch();
+    },
+    onError: () => toast.error("The email could not be sent."),
+  });
+
   if (query.isPending) return <LoadingState label="Loading request" />;
   if (query.isError || !detail)
     return (
@@ -176,8 +202,8 @@ function RequestDetail() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
+      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-5">
           <Link
             to="/admin"
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
@@ -188,22 +214,33 @@ function RequestDetail() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-5 py-8 lg:grid-cols-[1fr_1.15fr]">
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-5 sm:py-8 lg:grid-cols-[1fr_1.15fr]">
         <div className="space-y-6">
           <div>
             <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">
               Request #{request.request_number}
             </p>
-            <h1 className="mt-1 font-display text-2xl font-extrabold">
+            <h1 className="mt-1 font-display text-xl font-extrabold sm:text-2xl">
               {serviceLabel(request.service_category)}
             </h1>
           </div>
 
           <Panel title="Customer">
             <Row label="Name" value={`${customer.first_name ?? ""} ${customer.last_name ?? ""}`} />
-            <Row label="Phone" value={customer.phone ?? "—"} />
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-xs text-muted-foreground">Phone</span>
+              <div className="flex items-center gap-2">
+                {customer.phone && (
+                  <a href={`tel:${customer.phone}`} className="text-sm font-medium underline-offset-4 hover:underline">
+                    {customer.phone}
+                  </a>
+                )}
+                <CopyValue value={customer.phone ?? ""} label="phone number" />
+              </div>
+            </div>
             <Row label="Email" value={customer.email ?? "—"} />
             <Row label="Preferred contact" value={customer.preferred_contact_method ?? "—"} />
+
             <Row label="City" value={request.city || "—"} />
             <Row label="ZIP" value={request.zip_code ?? "—"} />
             <Row
@@ -243,7 +280,10 @@ function RequestDetail() {
             />
             <Row label="Fuel" value={vehicle.fuel_type ?? "—"} />
             <Row label="Body" value={vehicle.body_type ?? "—"} />
-            <Row label="VIN" value={vehicle.vin ?? "—"} />
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-xs text-muted-foreground">VIN</span>
+              <CopyValue value={vehicle.vin ?? ""} label="VIN" mono />
+            </div>
             <Row
               label="Mileage at request"
               value={
@@ -318,7 +358,7 @@ function RequestDetail() {
               value={request.status}
               disabled={statusMutation.isPending}
               onChange={(e) => statusMutation.mutate(e.target.value as "new")}
-              className="h-11 w-full rounded-md border border-input bg-surface px-3 text-sm text-foreground"
+              className="h-12 w-full rounded-md border border-input bg-surface px-3 text-sm text-foreground"
               aria-label="Request status"
             >
               {WORKFLOW_STATUSES.map((s) => (
@@ -330,9 +370,89 @@ function RequestDetail() {
                 <option value={request.status}>{statusLabel(request.status)}</option>
               )}
             </select>
+            <p className="text-xs text-muted-foreground">
+              {statusMutation.isPending ? "Saving…" : "Changes save automatically."}
+            </p>
           </div>
 
+          <Panel title="Status history">
+            <ol className="space-y-2">
+              <li className="flex items-baseline justify-between gap-3">
+                <span className="text-sm">Submitted</span>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(request.created_at).toLocaleString()}
+                </span>
+              </li>
+              {(detail.statusEvents ?? []).map((e) => (
+                <li key={e.id} className="flex items-baseline justify-between gap-3">
+                  <span className="text-sm">
+                    {e.fromStatus ? `${statusLabel(e.fromStatus)} → ` : ""}
+                    {statusLabel(e.toStatus)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(e.createdAt).toLocaleString()}
+                  </span>
+                </li>
+              ))}
+              {(detail.statusEvents ?? []).length === 0 && (
+                <li className="text-xs text-muted-foreground">
+                  No status changes yet — updates appear here.
+                </li>
+              )}
+            </ol>
+          </Panel>
+
+          <Panel title="Confirmation emails">
+            <Row
+              label="Customer"
+              value={
+                request.customer_email_sent_at
+                  ? `Sent ${new Date(request.customer_email_sent_at).toLocaleString()}`
+                  : "Not sent"
+              }
+            />
+            <Row
+              label="Repara admin"
+              value={
+                request.admin_email_sent_at
+                  ? `Sent ${new Date(request.admin_email_sent_at).toLocaleString()}`
+                  : "Not sent"
+              }
+            />
+            {request.email_last_error && (
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                Last email failure: {request.email_last_error}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-border bg-transparent"
+                disabled={emailMutation.isPending}
+                onClick={() => emailMutation.mutate("both")}
+              >
+                {emailMutation.isPending ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 size-4" />
+                )}
+                {request.email_last_error ? "RETRY EMAILS" : "RESEND CONFIRMATION EMAIL"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                disabled={emailMutation.isPending}
+                onClick={() => emailMutation.mutate("customer")}
+              >
+                Customer only
+              </Button>
+            </div>
+          </Panel>
+
         </div>
+
 
         {/* QUOTE BUILDER */}
         <div className="space-y-5">
