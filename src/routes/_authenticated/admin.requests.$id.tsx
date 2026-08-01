@@ -215,7 +215,8 @@ function RequestDetail() {
       </header>
 
       <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-5 sm:py-8 lg:grid-cols-[1fr_1.15fr]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
+
           <div>
             <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">
               Request #{request.request_number}
