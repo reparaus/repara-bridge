@@ -151,6 +151,16 @@ function RequestDetail() {
     onError: () => toast.error("Could not update the status."),
   });
 
+  const emailMutation = useMutation({
+    mutationFn: (target: "both" | "customer" | "admin") => resendEmails({ data: { id, target } }),
+    onSuccess: (res) => {
+      if (res.ok) toast.success("Confirmation email re-sent.");
+      else toast.error(res.lastError || res.error || "The email could not be sent.");
+      void query.refetch();
+    },
+    onError: () => toast.error("The email could not be sent."),
+  });
+
   if (query.isPending) return <LoadingState label="Loading request" />;
   if (query.isError || !detail)
     return (
