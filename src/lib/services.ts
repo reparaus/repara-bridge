@@ -238,6 +238,7 @@ export const WORKFLOW_STATUSES = [
   "in_progress",
   "completed",
   "declined",
+  "cancelled",
 ] as const;
 
 
