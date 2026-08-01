@@ -22,12 +22,61 @@ export function normalizeEmail(email: string) {
 export async function persistQuoteRequest(data: QuoteInput) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+  // ------------------------------------------------------- idempotency
+  // Duplicate protection is per SUBMISSION, never per customer. If this exact
+  // submission was already saved (double click, refresh, network retry) we
+  // return the original request instead of creating a second one. A returning
+  // customer submitting a new quote carries a new submissionId, so they can
+  // always create another request.
+  const submissionId = data.submissionId ?? "";
+  if (submissionId) {
+    const { data: existing } = await (
+      supabaseAdmin as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (
+              c: string,
+              v: unknown,
+            ) => {
+              maybeSingle: () => Promise<{
+                data: {
+                  request_number: string;
+                  service_area_status: string | null;
+                  city: string | null;
+                } | null;
+                error: { message: string } | null;
+              }>;
+            };
+          };
+        };
+      }
+    )
+      .from("service_requests")
+      .select("request_number, service_area_status, city")
+      .eq("submission_id", submissionId)
+      .maybeSingle();
+
+    if (existing?.request_number) {
+      return {
+        requestNumber: existing.request_number,
+        serviceAreaStatus: (existing.service_area_status ?? "unknown") as
+          | "eligible"
+          | "outside_area"
+          | "unknown",
+        serviceAreaCity: existing.city ?? null,
+        duplicate: true as const,
+      };
+    }
+  }
+
   const phoneKey = normalizePhone(data.contact.phone ?? "");
   const emailKey = data.contact.email ? normalizeEmail(data.contact.email) : "";
 
   // ------------------------------------------------------------- customer
-  // Reuse a returning customer matched on phone or email — never on name.
+  // Reuse a returning customer's record so their history stays on one profile.
+  // This links records only — it never blocks or merges service requests.
   let customerId: string | null = null;
+
 
   if (phoneKey.length >= 10) {
     const { data: rows } = await supabaseAdmin
