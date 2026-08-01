@@ -18,6 +18,14 @@ export const drivetrainSchema = z.enum(["fwd", "rwd", "awd", "4wd", "unknown"]);
 export const configSourceSchema = z.enum(["vin", "customer"]);
 
 export const quoteRequestSchema = z.object({
+  /**
+   * Per-form-submission idempotency key. Generated once when a customer starts
+   * a quote and re-sent on every retry of THAT submission (double click, page
+   * refresh, network retry), so the same attempt can never create two rows.
+   * It is NOT tied to customer identity: a returning customer starting a new
+   * quote gets a brand-new key and therefore a brand-new request.
+   */
+  submissionId: z.string().trim().uuid().optional(),
   vehicle: z.object({
     /** How the customer identified the vehicle — kept for data quality. */
     entryMethod: z.enum(["vin", "manual"]).default("manual"),

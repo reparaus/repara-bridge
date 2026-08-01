@@ -22,12 +22,61 @@ export function normalizeEmail(email: string) {
 export async function persistQuoteRequest(data: QuoteInput) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+  // ------------------------------------------------------- idempotency
+  // Duplicate protection is per SUBMISSION, never per customer. If this exact
+  // submission was already saved (double click, refresh, network retry) we
+  // return the original request instead of creating a second one. A returning
+  // customer submitting a new quote carries a new submissionId, so they can
+  // always create another request.
+  const submissionId = data.submissionId ?? "";
+  if (submissionId) {
+    const { data: existing } = await (
+      supabaseAdmin as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (
+              c: string,
+              v: unknown,
+            ) => {
+              maybeSingle: () => Promise<{
+                data: {
+                  request_number: string;
+                  service_area_status: string | null;
+                  city: string | null;
+                } | null;
+                error: { message: string } | null;
+              }>;
+            };
+          };
+        };
+      }
+    )
+      .from("service_requests")
+      .select("request_number, service_area_status, city")
+      .eq("submission_id", submissionId)
+      .maybeSingle();
+
+    if (existing?.request_number) {
+      return {
+        requestNumber: existing.request_number,
+        serviceAreaStatus: (existing.service_area_status ?? "unknown") as
+          | "eligible"
+          | "outside_area"
+          | "unknown",
+        serviceAreaCity: existing.city ?? null,
+        duplicate: true as const,
+      };
+    }
+  }
+
   const phoneKey = normalizePhone(data.contact.phone ?? "");
   const emailKey = data.contact.email ? normalizeEmail(data.contact.email) : "";
 
   // ------------------------------------------------------------- customer
-  // Reuse a returning customer matched on phone or email — never on name.
+  // Reuse a returning customer's record so their history stays on one profile.
+  // This links records only — it never blocks or merges service requests.
   let customerId: string | null = null;
+
 
   if (phoneKey.length >= 10) {
     const { data: rows } = await supabaseAdmin
@@ -199,13 +248,51 @@ export async function persistQuoteRequest(data: QuoteInput) {
     ...baseRequest,
     service_area_status: area.status,
     city: area.city,
+    ...(submissionId ? { submission_id: submissionId } : {}),
   });
 
-  // Tolerate a database that has not run migration 0002 yet: fall back to the
-  // original column set rather than failing a real customer submission.
+  // A unique-violation on submission_id means a concurrent copy of the SAME
+  // submission (double click / retry) won the race: return that row.
+  if (requestError && submissionId && /duplicate key|unique/i.test(requestError.message ?? "")) {
+    await rollbackVehicle();
+    const { data: won } = await (
+      supabaseAdmin as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (
+              c: string,
+              v: unknown,
+            ) => {
+              maybeSingle: () => Promise<{
+                data: { request_number: string } | null;
+                error: unknown;
+              }>;
+            };
+          };
+        };
+      }
+    )
+      .from("service_requests")
+      .select("request_number")
+      .eq("submission_id", submissionId)
+      .maybeSingle();
+    if (won?.request_number) {
+      return {
+        requestNumber: won.request_number,
+        serviceAreaStatus: area.status,
+        serviceAreaCity: area.city,
+        duplicate: true as const,
+      };
+    }
+    throw new Error("Could not submit your request.");
+  }
+
+  // Tolerate a database that has not run migrations 0002/0004 yet: fall back to
+  // the original column set rather than failing a real customer submission.
   if (requestError && /column|schema cache/i.test(requestError.message ?? "")) {
     ({ data: request, error: requestError } = await insertRequest(baseRequest));
   }
+
 
   if (requestError || !request) {
     await rollbackVehicle();
@@ -275,6 +362,8 @@ export async function persistQuoteRequest(data: QuoteInput) {
     requestNumber: request.request_number,
     serviceAreaStatus: area.status,
     serviceAreaCity: area.city,
+    duplicate: false as const,
+
   };
 }
 

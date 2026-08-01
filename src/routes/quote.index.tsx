@@ -115,6 +115,12 @@ type FormState = {
   phone: string;
   email: string;
   contactMethod: string;
+  /**
+   * Idempotency key for THIS submission attempt. Persisted with the draft so a
+   * refresh or retry reuses it; a new quote gets a new key, so returning
+   * customers can always submit again.
+   */
+  submissionId: string;
 };
 
 const EMPTY: FormState = {
@@ -138,6 +144,7 @@ const EMPTY: FormState = {
   email: "",
 
   contactMethod: "text",
+  submissionId: "",
 };
 
 /** Uploads locally held photos at submission time and returns storage paths. */
@@ -200,6 +207,8 @@ function QuoteFlow() {
           : { ...f, services: [...f.services, preselectedService] },
       );
     }
+    // One idempotency key per quote attempt, reused across retries.
+    setForm((f) => (f.submissionId ? f : { ...f, submissionId: crypto.randomUUID() }));
     setHydrated(true);
     track("quote_started");
   }, [preselectedService]);
@@ -246,6 +255,7 @@ function QuoteFlow() {
         notes: form.notes,
         photoPaths: [] as string[],
       },
+      submissionId: form.submissionId || undefined,
       contact: {
         firstName: form.firstName,
         lastName: form.lastName,
@@ -376,7 +386,8 @@ function QuoteFlow() {
         outsideArea={confirmation.outsideArea}
         snapshot={confirmation.snapshot}
         onAnother={() => {
-          setForm(EMPTY);
+          // Fresh idempotency key: a new request is always allowed.
+          setForm({ ...EMPTY, submissionId: crypto.randomUUID() });
           setStep(0);
           setErrors({});
           setConfirmation(null);
