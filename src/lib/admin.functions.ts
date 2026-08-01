@@ -180,7 +180,60 @@ export const getRequestDetail = createServerFn({ method: "POST" })
       .eq("service_request_id", data.id)
       .order("version", { ascending: false });
 
-    return { found: true as const, request, photos, quotes: quotes ?? [] };
+    // Status history (migration 0005). Tolerated as empty if not applied yet.
+    let statusEvents: {
+      id: string;
+      fromStatus: string | null;
+      toStatus: string;
+      createdAt: string;
+    }[] = [];
+    try {
+      const { data: events } = await (
+        context.supabase as unknown as {
+          from: (t: string) => {
+            select: (c: string) => {
+              eq: (
+                c: string,
+                v: string,
+              ) => {
+                order: (
+                  c: string,
+                  o: { ascending: boolean },
+                ) => Promise<{ data: Record<string, string | null>[] | null }>;
+              };
+            };
+          };
+        }
+      )
+        .from("request_status_events")
+        .select("id, from_status, to_status, created_at")
+        .eq("service_request_id", data.id)
+        .order("created_at", { ascending: true });
+      statusEvents = (events ?? []).map((e) => ({
+        id: String(e['id']),
+        fromStatus: e['from_status'] ?? null,
+        toStatus: String(e['to_status'] ?? ""),
+        createdAt: String(e['created_at']),
+      }));
+    } catch {
+      statusEvents = [];
+    }
+
+    return { found: true as const, request, photos, quotes: quotes ?? [], statusEvents };
+  });
+
+/** Marks a request as seen by an admin, which clears it from the "new" badge. */
+export const markRequestViewed = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => idSchema.parse(data))
+  .handler(async ({ data, context }) => {
+    // Only stamps the first view so the badge is stable; ignored pre-0005.
+    await context.supabase
+      .from("service_requests")
+      .update({ admin_viewed_at: new Date().toISOString() } as unknown as { status: "new" })
+      .eq("id", data.id)
+      .is("admin_viewed_at", null);
+    return { ok: true };
   });
 
 export const updateRequestStatus = createServerFn({ method: "POST" })
@@ -204,14 +257,83 @@ export const updateRequestStatus = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
+    const { data: before } = await context.supabase
+      .from("service_requests")
+      .select("status")
+      .eq("id", data.id)
+      .maybeSingle();
+
     const { error } = await context.supabase
       .from("service_requests")
       // "contacted" is added by migration 0002 and not in the generated types.
       .update({ status: data.status as "new" })
       .eq("id", data.id);
     if (error) throw new Error("Could not update the status.");
+
+    // History is best-effort: a missing table must never fail the status change.
+    if (before?.status !== data.status) {
+      try {
+        await (
+          context.supabase as unknown as {
+            from: (t: string) => { insert: (v: Record<string, unknown>) => Promise<unknown> };
+          }
+        )
+          .from("request_status_events")
+          .insert({
+            service_request_id: data.id,
+            from_status: before?.status ?? null,
+            to_status: data.status,
+            changed_by: context.userId,
+          });
+      } catch {
+        /* migration 0005 not applied */
+      }
+    }
+
     return { ok: true };
   });
+
+/**
+ * Re-sends the confirmation emails for one request. Clears the per-recipient
+ * "sent" stamps first so the idempotent edge function actually sends again.
+ */
+export const resendRequestEmails = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema.extend({ target: z.enum(["both", "customer", "admin"]).default("both") }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const reset: Record<string, null> = { email_last_error: null };
+    if (data.target === "both" || data.target === "customer") reset['customer_email_sent_at'] = null;
+    if (data.target === "both" || data.target === "admin") reset['admin_email_sent_at'] = null;
+
+    const { error: resetError } = await context.supabase
+      .from("service_requests")
+      .update(reset as unknown as { status: "new" })
+      .eq("id", data.id);
+    if (resetError) throw new Error("Could not prepare the email re-send.");
+
+    const { triggerRequestEmailsWithResult } = await import("@/lib/request-emails.server");
+    const result = await triggerRequestEmailsWithResult(data.id);
+
+    const { data: row } = await context.supabase
+      .from("service_requests")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
+    const record = (row ?? {}) as Record<string, string | null>;
+
+    return {
+      ok: result.ok,
+      error: result.error,
+      results: result.results,
+      customerSentAt: record['customer_email_sent_at'] ?? null,
+      adminSentAt: record['admin_email_sent_at'] ?? null,
+      emailStatus: record['email_status'] ?? null,
+      lastError: record['email_last_error'] ?? null,
+    };
+  });
+
 
 export const saveQuote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
