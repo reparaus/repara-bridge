@@ -262,6 +262,15 @@ export async function persistQuoteRequest(data: QuoteInput) {
     );
   }
 
+  // Emails are best-effort and strictly after the commit: a provider failure
+  // never rolls back, duplicates or retries the saved request.
+  try {
+    const { triggerRequestEmails } = await import("./request-emails.server");
+    await triggerRequestEmails(request.id);
+  } catch (error) {
+    console.error("[emails] trigger failed for request", request.id, error);
+  }
+
   return {
     requestNumber: request.request_number,
     serviceAreaStatus: area.status,
