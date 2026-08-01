@@ -215,7 +215,8 @@ function RequestDetail() {
       </header>
 
       <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-5 sm:py-8 lg:grid-cols-[1fr_1.15fr]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
+
           <div>
             <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">
               Request #{request.request_number}
@@ -227,9 +228,9 @@ function RequestDetail() {
 
           <Panel title="Customer">
             <Row label="Name" value={`${customer.first_name ?? ""} ${customer.last_name ?? ""}`} />
-            <div className="flex items-baseline justify-between gap-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <span className="text-xs text-muted-foreground">Phone</span>
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                 {customer.phone && (
                   <a href={`tel:${customer.phone}`} className="text-sm font-medium underline-offset-4 hover:underline">
                     {customer.phone}
@@ -238,6 +239,7 @@ function RequestDetail() {
                 <CopyValue value={customer.phone ?? ""} label="phone number" />
               </div>
             </div>
+
             <Row label="Email" value={customer.email ?? "—"} />
             <Row label="Preferred contact" value={customer.preferred_contact_method ?? "—"} />
 
@@ -280,10 +282,11 @@ function RequestDetail() {
             />
             <Row label="Fuel" value={vehicle.fuel_type ?? "—"} />
             <Row label="Body" value={vehicle.body_type ?? "—"} />
-            <div className="flex items-baseline justify-between gap-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <span className="text-xs text-muted-foreground">VIN</span>
               <CopyValue value={vehicle.vin ?? ""} label="VIN" mono />
             </div>
+
             <Row
               label="Mileage at request"
               value={
@@ -455,7 +458,7 @@ function RequestDetail() {
 
 
         {/* QUOTE BUILDER */}
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <h2 className="font-display text-lg font-bold">Quote builder</h2>
 
           <div className="surface-panel space-y-3 p-4">
@@ -604,7 +607,7 @@ function RequestDetail() {
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="surface-panel space-y-3 p-5">
+    <section className="surface-panel min-w-0 space-y-3 overflow-hidden p-5">
       <h2 className="text-xs tracking-[0.2em] text-muted-foreground uppercase">{title}</h2>
       {children}
     </section>
@@ -613,9 +616,10 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-right text-sm font-medium">{value}</span>
+      <span className="min-w-0 break-words text-right text-sm font-medium">{value}</span>
     </div>
   );
 }
+
