@@ -118,12 +118,23 @@ export function VinScanner({
         const caps = (track?.getCapabilities?.() ?? {}) as {
           torch?: boolean;
           focusMode?: string[];
+          zoom?: { min?: number; max?: number };
         };
         setTorchAvailable(Boolean(caps.torch));
         // Continuous autofocus where the browser allows it (best-effort).
         if (caps.focusMode?.includes("continuous")) {
           await track
             ?.applyConstraints({ advanced: [{ focusMode: "continuous" }] } as unknown as MediaTrackConstraints)
+            .catch(() => undefined);
+        }
+        // A small optical zoom gives long VIN bars more usable pixels without
+        // forcing the customer to hold the phone uncomfortably close.
+        const maxZoom = caps.zoom?.max;
+        const minZoom = caps.zoom?.min ?? 1;
+        if (typeof maxZoom === "number" && maxZoom > minZoom) {
+          const zoom = Math.min(maxZoom, Math.max(minZoom, 1.5));
+          await track
+            ?.applyConstraints({ advanced: [{ zoom }] } as unknown as MediaTrackConstraints)
             .catch(() => undefined);
         }
 
@@ -342,13 +353,14 @@ export function VinScanner({
               </div>
             )}
 
-            <button
+            <Button
               type="button"
+              variant="link"
               onClick={() => close("cancel")}
-              className="mt-4 text-xs font-medium text-white underline underline-offset-4"
+              className="mt-4 h-11 text-xs font-medium text-white underline underline-offset-4"
             >
               Enter VIN manually instead
-            </button>
+            </Button>
           </div>
         )}
       </div>
