@@ -20,12 +20,39 @@ const lineItemSchema = z.object({
 export const getAdminContext = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data } = await context.supabase.rpc("has_role", {
-      _user_id: context.userId,
-      _role: "admin",
-    });
-    return { isAdmin: Boolean(data) };
+    // Approved admin (admin_users) + phone MFA completed (aal2 in the token).
+    const claims = context.claims as { aal?: string } | null;
+    const aal2 = claims?.aal === "aal2";
+
+    const { data: adminRow } = await (
+      context.supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (
+              c: string,
+              v: string,
+            ) => { maybeSingle: () => Promise<{ data: { role?: string } | null }> };
+          };
+        };
+      }
+    )
+      .from("admin_users")
+      .select("role")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+
+    let isApproved = adminRow?.role === "admin";
+    if (!isApproved) {
+      const { data } = await context.supabase.rpc("has_role", {
+        _user_id: context.userId,
+        _role: "admin",
+      });
+      isApproved = Boolean(data);
+    }
+
+    return { isApproved, aal2, isAdmin: isApproved && aal2 };
   });
+
 
 export const listRequests = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
