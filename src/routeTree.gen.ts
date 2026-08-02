@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CardRouteImport } from './routes/card'
+import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as QuoteIndexRouteImport } from './routes/quote.index'
 import { Route as QuoteTokenRouteImport } from './routes/quote.$token'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
@@ -36,6 +37,11 @@ const AuthRoute = AuthRouteImport.update({
 const CardRoute = CardRouteImport.update({
   id: '/card',
   path: '/card',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin/login',
+  path: '/admin/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const QuoteIndexRoute = QuoteIndexRouteImport.update({
@@ -70,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/admin/login': typeof AdminLoginRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/quote/': typeof QuoteIndexRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/admin/login': typeof AdminLoginRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/quote': typeof QuoteIndexRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/admin/login': typeof AdminLoginRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/quote/': typeof QuoteIndexRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/card'
+    | '/admin/login'
     | '/quote/$token'
     | '/quote/'
     | '/admin/'
@@ -114,6 +124,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/card'
+    | '/admin/login'
     | '/quote/$token'
     | '/quote'
     | '/admin'
@@ -125,6 +136,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/card'
+    | '/admin/login'
     | '/quote/$token'
     | '/quote/'
     | '/_authenticated/admin/'
@@ -137,6 +149,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   CardRoute: typeof CardRoute
+  AdminLoginRoute: typeof AdminLoginRoute
   QuoteTokenRoute: typeof QuoteTokenRoute
   QuoteIndexRoute: typeof QuoteIndexRoute
 }
@@ -169,6 +182,13 @@ declare module '@tanstack/react-router' {
       path: '/card'
       fullPath: '/card'
       preLoaderRoute: typeof CardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/admin/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/quote/': {
@@ -229,6 +249,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   CardRoute: CardRoute,
+  AdminLoginRoute: AdminLoginRoute,
   QuoteTokenRoute: QuoteTokenRoute,
   QuoteIndexRoute: QuoteIndexRoute,
 }
