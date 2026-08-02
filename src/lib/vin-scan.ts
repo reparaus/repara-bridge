@@ -1,10 +1,10 @@
 /**
  * VIN barcode scanning helpers (browser-only, no network, no uploads).
  *
- * Detection happens entirely on-device: the native `BarcodeDetector` when the
- * browser exposes it AND actually supports 1D VIN symbologies, otherwise a
- * lazily-imported ZXing decoder (iOS Safari). Nothing is captured, stored or
- * transmitted.
+ * Detection happens entirely on-device with ZXing. We intentionally do not use
+ * the browser's native `BarcodeDetector`: some Android browser/camera builds
+ * surface their own Google barcode action UI over the page. Keeping one decoder
+ * also makes detection behavior consistent across iOS and Android.
  */
 
 import { VIN_LENGTH } from "./vin";
@@ -23,9 +23,6 @@ export const VIN_BARCODE_FORMATS = [
   "pdf417",
   "qr_code",
 ] as const;
-
-/** 1D formats that must be present for the native detector to be worth using. */
-const REQUIRED_1D = ["code_39", "code_128"];
 
 const VIN_CHARS = /^[A-HJ-NPR-Z0-9]+$/; // no I, O or Q
 
@@ -57,52 +54,17 @@ function isVinShape(value: string) {
   return value.length === VIN_LENGTH && VIN_CHARS.test(value);
 }
 
-type BarcodeDetectorCtor = {
-  new (opts?: { formats?: string[] }): {
-    detect(source: CanvasImageSource): Promise<{ rawValue: string }[]>;
-  };
-  getSupportedFormats?: () => Promise<string[]>;
-};
-
-export function getBarcodeDetectorCtor(): BarcodeDetectorCtor | null {
-  if (typeof window === "undefined") return null;
-  return (window as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector ?? null;
-}
-
 /** Raw text decoder over a canvas frame. Returns null when nothing decodes. */
 export type FrameDecoder = (canvas: HTMLCanvasElement) => Promise<string | null>;
 
 /**
  * Builds the best available frame decoder.
  *
- * Native `BarcodeDetector` is used only with the formats the browser reports as
- * supported, and only when the 1D VIN formats are among them — constructing it
- * with unsupported formats throws, and a QR-only detector can never read a VIN
- * label. Everything else falls back to ZXing configured for 1D VIN symbologies
- * with `TRY_HARDER`, which is what actually makes door-jamb labels decode.
+ * ZXing is configured for the formats found on factory VIN labels and runs
+ * locally. Avoiding native detection prevents Android's external barcode action
+ * sheet while `TRY_HARDER` improves long, narrow door-jamb labels.
  */
 export async function createFrameDecoder(): Promise<FrameDecoder> {
-  const Ctor = getBarcodeDetectorCtor();
-  if (Ctor) {
-    try {
-      const supported = (await Ctor.getSupportedFormats?.()) ?? [];
-      const formats = VIN_BARCODE_FORMATS.filter((f) => supported.includes(f));
-      if (REQUIRED_1D.every((f) => formats.includes(f as (typeof VIN_BARCODE_FORMATS)[number]))) {
-        const detector = new Ctor({ formats: [...formats] });
-        return async (canvas) => {
-          try {
-            const found = await detector.detect(canvas);
-            return found[0]?.rawValue ?? null;
-          } catch {
-            return null;
-          }
-        };
-      }
-    } catch {
-      // Fall through to ZXing.
-    }
-  }
-
   const [{ HTMLCanvasElementLuminanceSource }, zxing] = await Promise.all([
     import("@zxing/browser"),
     import("@zxing/library"),
@@ -230,8 +192,8 @@ export async function findVinInSource(
       if (w > 4000 || h > 4000) continue;
       scratch.width = w;
       scratch.height = h;
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
+      // Smoothing softens the thin transitions that carry a 1D barcode.
+      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(source, rect.x, rect.y, rect.w, rect.h, 0, 0, w, h);
       let text: string | null = null;
       try {
