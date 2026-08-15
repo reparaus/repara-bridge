@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import { Logo } from "@/components/brand/Logo";
+import { LanguageToggle } from "@/components/common/LanguageToggle";
 import { Field } from "@/components/common/Field";
 import { OptionGroup } from "@/components/common/OptionGroup";
 import { ProgressStepper } from "@/components/common/ProgressStepper";
@@ -25,18 +26,23 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { track } from "@/lib/analytics";
+import type { IntakeFollowup, IntakeQuestion } from "@/lib/ai/intake-types";
+import { useI18n } from "@/lib/i18n";
+import {
+  localizedAnswerLabel,
+  localizedPhotoPrompt,
+  localizedQuestions,
+  localizedServiceBlurb,
+  localizedServiceLabel,
+  localizedVehicleOption,
+} from "@/lib/i18n/catalog";
+import { requestIntakeQuestions } from "@/lib/intake.functions";
 import { quoteRequestSchema } from "@/lib/quote-schema";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/quote-storage";
 import { discardQuotePhotos, submitQuoteRequest } from "@/lib/quote.functions";
 import {
-  CONTACT_METHODS,
-  INSPECTION_BODY,
-  INSPECTION_TITLE,
-  MOBILE_SCOPE_NOTE,
-  PHOTO_PROMPTS,
   SERVICES,
   SERVICE_QUESTIONS,
-  answerLabel,
   isServiceKey,
   serviceLabel,
   type ServiceKey,
@@ -52,7 +58,14 @@ import {
   type Drivetrain,
   type VehicleConfig,
 } from "@/lib/vehicle-config";
-import { decodeVin, isCompleteVin, isVinScanSupported, maskVin, normalizeVin, validateVin } from "@/lib/vin";
+import {
+  decodeVin,
+  isCompleteVin,
+  isVinScanSupported,
+  maskVin,
+  normalizeVin,
+  validateVin,
+} from "@/lib/vin";
 import { VinScanner } from "@/components/quote/VinScanner";
 
 export const Route = createFileRoute("/quote/")({
@@ -83,7 +96,12 @@ export const Route = createFileRoute("/quote/")({
   component: QuoteFlow,
 });
 
-const STEP_LABELS = ["Vehicle", "Service", "Details", "Contact"];
+/** Step indexes. The AI follow-up step (3) is skipped when there are no questions. */
+const STEP_VEHICLE = 0;
+const STEP_SERVICE = 1;
+const STEP_DETAILS = 2;
+const STEP_QUESTIONS = 3;
+const STEP_CONTACT = 4;
 const MAX_PHOTOS = 6;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
@@ -121,6 +139,9 @@ type FormState = {
    * customers can always submit again.
    */
   submissionId: string;
+  /** AI-assisted intake follow-ups: the questions asked and what was answered. */
+  intakeQuestions: IntakeQuestion[];
+  intakeAnswers: Record<string, string>;
 };
 
 const EMPTY: FormState = {
@@ -145,6 +166,8 @@ const EMPTY: FormState = {
 
   contactMethod: "text",
   submissionId: "",
+  intakeQuestions: [],
+  intakeAnswers: {},
 };
 
 /** Uploads locally held photos at submission time and returns storage paths. */
@@ -172,33 +195,54 @@ function vehicleTitle(form: FormState) {
   return `${form.year} ${form.make} ${form.model}`.trim();
 }
 
+/** Localized label for a stored answer value (choice id or free text). */
+function answerText(serviceKey: string, questionId: string, value: string) {
+  return localizedAnswerLabel(serviceKey, questionId, value, "en");
+}
+
+/** Turns the AI questions + the customer's answers into storable follow-ups. */
+function collectFollowups(form: FormState): IntakeFollowup[] {
+  return form.intakeQuestions.map((q) => {
+    const answer = (form.intakeAnswers[q.id] ?? "").trim();
+    return {
+      questionId: q.id,
+      question: q.question,
+      answer,
+      category: q.category,
+      skipped: answer.length === 0,
+    };
+  });
+}
+
 function formatMiles(value: string) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toLocaleString() : value;
 }
 
 function QuoteFlow() {
+  const { t, lang } = useI18n();
   const submit = useServerFn(submitQuoteRequest);
   const discardPhotos = useServerFn(discardQuotePhotos);
+  const askIntakeQuestions = useServerFn(requestIntakeQuestions);
   const { service: preselectedService } = Route.useSearch();
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [hydrated, setHydrated] = useState(false);
+  /** True only while the AI is preparing intake follow-ups. */
+  const [preparing, setPreparing] = useState(false);
   const [confirmation, setConfirmation] = useState<{
     requestNumber: string;
     snapshot: FormState;
     outsideArea: boolean;
-  } | null>(
-    null,
-  );
+  } | null>(null);
 
   useEffect(() => {
     const draft = loadDraft();
     if (draft?.data) {
       setForm((f) => ({ ...f, ...(draft.data as Partial<FormState>) }));
-      setStep(Math.min(draft.step ?? 0, 3));
+      setStep(Math.min(draft.step ?? 0, STEP_CONTACT));
     }
     if (preselectedService) {
       setForm((f) =>
@@ -256,6 +300,8 @@ function QuoteFlow() {
         photoPaths: [] as string[],
       },
       submissionId: form.submissionId || undefined,
+      preferredLanguage: lang,
+      intakeFollowups: collectFollowups(form),
       contact: {
         firstName: form.firstName,
         lastName: form.lastName,
@@ -264,7 +310,7 @@ function QuoteFlow() {
         preferredContactMethod: form.contactMethod,
       },
     }),
-    [form],
+    [form, lang],
   );
 
   const mutation = useMutation({
@@ -300,7 +346,7 @@ function QuoteFlow() {
       window.scrollTo({ top: 0 });
     },
     onError: () => {
-      toast.error("We couldn't submit your request. Please check your details and try again.");
+      toast.error(t("quote.submitFailed"));
     },
   });
 
@@ -311,24 +357,24 @@ function QuoteFlow() {
       if (form.vehicleMode === "vin") {
         if (!form.decoded) {
           e.vin = isCompleteVin(form.vin)
-            ? "Decode your VIN to continue, or enter your vehicle details instead."
-            : "Enter your 17-character VIN, or enter your vehicle details instead.";
+            ? t("quote.vehicle.errVinDecode")
+            : t("quote.vehicle.errVinShort");
         }
       } else {
-        if (!/^\d{4}$/.test(form.year)) e.year = "Enter a 4-digit year";
-        if (!form.make.trim()) e.make = "Make is required";
-        if (!form.model.trim()) e.model = "Model is required";
+        if (!/^\d{4}$/.test(form.year)) e.year = t("quote.vehicle.errYear");
+        if (!form.make.trim()) e.make = t("quote.vehicle.errMake");
+        if (!form.model.trim()) e.model = t("quote.vehicle.errModel");
       }
     }
 
     if (step === 1) {
-      if (form.services.length === 0) e.services = "Select at least one service to continue";
+      if (form.services.length === 0) e.services = t("quote.service.errSelect");
       for (const key of form.services) {
         for (const q of SERVICE_QUESTIONS[key as ServiceKey] ?? []) {
           if (!q.required) continue;
           const value = form.answers[key]?.[q.id];
           const empty = Array.isArray(value) ? value.length === 0 : !String(value ?? "").trim();
-          if (empty) e[`${key}.${q.id}`] = "This helps us quote accurately — please fill it in.";
+          if (empty) e[`${key}.${q.id}`] = t("quote.service.errAnswer");
         }
       }
     }
@@ -336,48 +382,127 @@ function QuoteFlow() {
     if (step === 2) {
       const miles = Number(form.mileage);
       if (!form.mileage.trim() || !Number.isFinite(miles) || miles < 0 || miles > 2_000_000)
-        e.mileage = "Enter your current mileage";
-      if (!/^\d{5}(-\d{4})?$/.test(form.zipCode.trim())) e.zipCode = "Enter a valid ZIP code";
+        e.mileage = t("quote.details.errMileage");
+      if (!/^\d{5}(-\d{4})?$/.test(form.zipCode.trim())) e.zipCode = t("quote.details.errZip");
     }
 
-    if (step === 3) {
-      if (!form.firstName.trim()) e.firstName = "First name is required";
+    if (step === STEP_CONTACT) {
+      if (!form.firstName.trim()) e.firstName = t("quote.contact.errFirst");
       const needsPhone = form.contactMethod === "text" || form.contactMethod === "call";
       const phoneOk = /^[0-9+()\-.\s]{7,20}$/.test(form.phone.trim());
-      if (needsPhone && !phoneOk) e.phone = "Add a mobile number so we can reach you.";
-      if (!needsPhone && form.phone.trim() && !phoneOk) e.phone = "Enter a valid mobile number";
+      if (needsPhone && !phoneOk) e.phone = t("quote.contact.errPhone");
+      if (!needsPhone && form.phone.trim() && !phoneOk)
+        e.phone = t("quote.contact.errPhoneInvalid");
       const emailOk = /^\S+@\S+\.\S+$/.test(form.email.trim());
-      if (form.contactMethod === "email" && !emailOk)
-        e.email = "Add an email address so we can send your quote.";
+      if (form.contactMethod === "email" && !emailOk) e.email = t("quote.contact.errEmail");
       if (form.contactMethod !== "email" && form.email.trim() && !emailOk)
-        e.email = "Enter a valid email";
+        e.email = t("quote.contact.errEmailInvalid");
     }
 
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
-  function next() {
+  function goTo(nextStep: number) {
+    setStep(nextStep);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /**
+   * Asks the AI for 1–3 clarifying questions about what the customer described.
+   * Any failure (or nothing worth asking) simply skips the step — AI is never
+   * allowed to block a submission.
+   */
+  async function loadIntakeQuestions() {
+    setPreparing(true);
+    try {
+      const result = await askIntakeQuestions({
+        data: {
+          language: lang,
+          vehicle: {
+            year: form.vehicleMode === "vin" ? form.decoded?.year : form.year,
+            make: form.vehicleMode === "vin" ? form.decoded?.make : form.make,
+            model: form.vehicleMode === "vin" ? form.decoded?.model : form.model,
+            trim: form.decoded?.trim ?? "",
+            engine: configSummary(form.config) || undefined,
+            drivetrain: form.config.drivetrain,
+            hasVin: form.vehicleMode === "vin",
+          },
+          mileage: form.mileage,
+          services: form.services.map((key) => ({
+            label: serviceLabel(key),
+            answers: Object.entries(form.answers[key] ?? {}).flatMap(([qid, v]) =>
+              (Array.isArray(v) ? v : [String(v)])
+                .filter(Boolean)
+                .map((x) => `${qid}: ${answerText(key, qid, x)}`),
+            ),
+          })),
+          notes: form.notes || undefined,
+        },
+      });
+      return result.questions;
+    } catch {
+      return [] as IntakeQuestion[];
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  async function next() {
     if (!validateStep()) return;
-    if (step === 0) {
+    if (step === STEP_VEHICLE) {
       track("vehicle_added", { method: form.vehicleMode });
       track("vehicle_completed", { method: form.vehicleMode });
     }
-    if (step === 1) track("service_selected", { services: form.services.join(",") });
-    if (step === 2) {
+    if (step === STEP_SERVICE) track("service_selected", { services: form.services.join(",") });
+    if (step === STEP_DETAILS) {
       track("quote_form_completed");
       track("details_completed");
+
+      const questions = form.intakeQuestions.length
+        ? form.intakeQuestions
+        : await loadIntakeQuestions();
+      if (questions.length) {
+        patch({ intakeQuestions: questions });
+        track("intake_questions_shown", { count: questions.length });
+        goTo(STEP_QUESTIONS);
+        return;
+      }
       track("contact_started");
+      goTo(STEP_CONTACT);
+      return;
     }
-    setStep((s) => Math.min(s + 1, 3));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (step === STEP_QUESTIONS) {
+      track("intake_questions_answered", {
+        answered: String(
+          form.intakeQuestions.filter((q) => (form.intakeAnswers[q.id] ?? "").trim()).length,
+        ),
+      });
+      track("contact_started");
+      goTo(STEP_CONTACT);
+      return;
+    }
+    goTo(Math.min(step + 1, STEP_CONTACT));
   }
 
   function back() {
     setErrors({});
-    setStep((s) => Math.max(s - 1, 0));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // Skip the AI step on the way back when there was nothing to ask.
+    const previous =
+      step === STEP_CONTACT && form.intakeQuestions.length === 0 ? STEP_DETAILS : step - 1;
+    goTo(Math.max(previous, STEP_VEHICLE));
   }
+
+  // The AI step only appears in the stepper once there is something to ask.
+  const showQuestionsStep = form.intakeQuestions.length > 0 || step === STEP_QUESTIONS;
+  const stepLabels = [
+    t("quote.steps.vehicle"),
+    t("quote.steps.service"),
+    t("quote.steps.details"),
+    ...(showQuestionsStep ? [t("quote.steps.questions")] : []),
+    t("quote.steps.contact"),
+  ];
+  const stepperIndex = showQuestionsStep ? step : Math.min(step, 3);
 
   if (confirmation) {
     return (
@@ -400,10 +525,10 @@ function QuoteFlow() {
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
-          {step === 0 ? (
+          {step === STEP_VEHICLE ? (
             <Link
               to="/"
-              aria-label="Back to Repara"
+              aria-label={t("nav.backToRepara")}
               className="-m-2 p-2 text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="size-5" />
@@ -412,52 +537,61 @@ function QuoteFlow() {
             <button
               type="button"
               onClick={back}
-              aria-label="Back"
+              aria-label={t("common.back")}
               className="-m-2 p-2 text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="size-5" />
             </button>
           )}
           <Logo compact />
-          <span className="w-5" />
+          <LanguageToggle />
         </div>
         <div className="mx-auto max-w-2xl px-5 pb-4">
-          <ProgressStepper steps={STEP_LABELS} current={step} />
+          <ProgressStepper steps={stepLabels} current={stepperIndex} />
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-8 pb-36">
-        {step === 0 && <VehicleStep form={form} patch={patch} errors={errors} />}
-        {step === 1 && <ServiceStep form={form} patch={patch} errors={errors} />}
-        {step === 2 && <DetailsStep form={form} patch={patch} errors={errors} />}
-        {step === 3 && <ContactStep form={form} patch={patch} errors={errors} />}
+        <div
+          key={`${step}-${lang}`}
+          className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+        >
+          {step === STEP_VEHICLE && <VehicleStep form={form} patch={patch} errors={errors} />}
+          {step === STEP_SERVICE && <ServiceStep form={form} patch={patch} errors={errors} />}
+          {step === STEP_DETAILS && <DetailsStep form={form} patch={patch} errors={errors} />}
+          {step === STEP_QUESTIONS && <FollowupsStep form={form} patch={patch} />}
+          {step === STEP_CONTACT && <ContactStep form={form} patch={patch} errors={errors} />}
+        </div>
       </main>
 
       <div className="fixed inset-x-0 bottom-0 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
         <div className="mx-auto max-w-2xl px-5 py-4">
-          {step === 3 && (
+          {step === STEP_CONTACT && (
             <p className="mb-3 text-center text-[11px] leading-relaxed text-muted-foreground">
-              By submitting, you agree that Repara may contact you regarding this quote request. No
-              work is authorized by requesting a quote.
+              {t("quote.consent")}
             </p>
           )}
           <Button
             size="lg"
             className="h-13 w-full rounded-full text-sm tracking-[0.12em]"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || preparing}
             onClick={() => {
-              if (step < 3) return next();
+              if (step < STEP_CONTACT) return void next();
               if (validateStep()) mutation.mutate();
             }}
           >
             {mutation.isPending ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" /> SUBMITTING
+                <Loader2 className="mr-2 size-4 animate-spin" /> {t("quote.submitting")}
               </>
-            ) : step < 3 ? (
-              "CONTINUE"
+            ) : preparing ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" /> {t("quote.preparing")}
+              </>
+            ) : step < STEP_CONTACT ? (
+              t("quote.continue")
             ) : (
-              "REQUEST MY QUOTE"
+              t("quote.submit")
             )}
           </Button>
         </div>
@@ -469,12 +603,16 @@ function QuoteFlow() {
 /* ------------------------------ shared pieces ------------------------------ */
 
 function InspectionNote() {
+  const { t } = useI18n();
+
   return (
     <div className="flex items-start gap-3 rounded-xl border border-chrome/30 bg-accent/60 p-4">
       <ShieldCheck className="mt-0.5 size-4 shrink-0 text-chrome" />
       <div>
-        <p className="text-sm font-medium">{INSPECTION_TITLE}</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{INSPECTION_BODY}</p>
+        <p className="text-sm font-medium">{t("quote.inspectionTitle")}</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {t("quote.inspectionBody")}
+        </p>
       </div>
     </div>
   );
@@ -491,6 +629,7 @@ function VehicleStep({
   patch: (n: Partial<FormState>) => void;
   errors: Record<string, string>;
 }) {
+  const { t, lang } = useI18n();
   const [decoding, setDecoding] = useState(false);
   const [vinMessage, setVinMessage] = useState<string | null>(null);
   const attempted = useRef<string | null>(null);
@@ -540,7 +679,6 @@ function VehicleStep({
       patch({ decoded: null, config: EMPTY_VEHICLE_CONFIG, engineChoice: "" });
       setVinMessage(result.message);
     }
-
   }
 
   // Auto-decode as soon as a complete VIN is present — no button press needed.
@@ -556,20 +694,18 @@ function VehicleStep({
   return (
     <div className="space-y-7">
       <div>
-        <h1 className="font-display text-3xl font-extrabold">What do you drive?</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Your VIN is the fastest way — we'll pull your year, make and model automatically.
-        </p>
+        <h1 className="font-display text-3xl font-extrabold">{t("quote.vehicle.title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("quote.vehicle.sub")}</p>
       </div>
 
       {form.vehicleMode === "vin" ? (
         <>
           <section className="surface-panel space-y-4 p-5">
             <Field
-              label="VIN"
+              label={t("quote.vehicle.vinLabel")}
               htmlFor="vin"
               error={errors.vin ?? vinMessage}
-              hint="17 characters — dashboard, door jamb, or your insurance card."
+              hint={t("quote.vehicle.vinHint")}
             >
               <Input
                 id="vin"
@@ -598,7 +734,7 @@ function VehicleStep({
                 disabled={decoding}
               >
                 {decoding ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-                {decoding ? "DECODING" : "DECODE VIN"}
+                {decoding ? t("quote.vehicle.decoding") : t("quote.vehicle.decode")}
               </Button>
               {/* Camera scan: decoding happens on-device, nothing is uploaded. */}
               <Button
@@ -607,14 +743,14 @@ function VehicleStep({
                 className="h-12 rounded-xl border-border bg-transparent"
                 onClick={() => {
                   if (!scanSupported) {
-                    toast("Camera scanning isn't available. Enter your VIN manually instead.");
+                    toast(t("vin.unavailable"));
                     return;
                   }
                   setVinMessage(null);
                   setScannerOpen(true);
                 }}
               >
-                <ScanLine className="mr-2 size-4" /> SCAN VIN
+                <ScanLine className="mr-2 size-4" /> {t("quote.vehicle.scan")}
               </Button>
             </div>
 
@@ -630,15 +766,16 @@ function VehicleStep({
                 }}
                 onClose={(reason) => {
                   setScannerOpen(false);
-                  if (reason === "unavailable")
-                    toast("Camera scanning isn't available. Enter your VIN manually instead.");
+                  if (reason === "unavailable") toast(t("vin.unavailable"));
                 }}
               />
             )}
 
             {form.decoded && (
               <div className="rounded-xl border border-chrome/40 bg-accent p-4">
-                <p className="text-[11px] tracking-[0.2em] text-chrome uppercase">Vehicle found</p>
+                <p className="text-[11px] tracking-[0.2em] text-chrome uppercase">
+                  {t("quote.vehicle.found")}
+                </p>
                 <p className="mt-1 font-display text-lg font-semibold">{vehicleTitle(form)}</p>
                 {configSummary(form.config) && (
                   <p className="mt-1 text-xs text-muted-foreground">{configSummary(form.config)}</p>
@@ -648,7 +785,6 @@ function VehicleStep({
                 </p>
               </div>
             )}
-
           </section>
 
           <button
@@ -663,13 +799,13 @@ function VehicleStep({
             }
             className="mx-auto flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
           >
-            <Pencil className="size-3.5" /> Enter vehicle details instead
+            <Pencil className="size-3.5" /> {t("quote.vehicle.manualLink")}
           </button>
         </>
       ) : (
         <>
           <section className="surface-panel space-y-4 p-5">
-            <Field label="Year" htmlFor="year" error={errors.year}>
+            <Field label={t("quote.vehicle.year")} htmlFor="year" error={errors.year}>
               <Input
                 id="year"
                 value={form.year}
@@ -681,7 +817,7 @@ function VehicleStep({
                 className="h-12"
               />
             </Field>
-            <Field label="Make" htmlFor="make" error={errors.make}>
+            <Field label={t("quote.vehicle.make")} htmlFor="make" error={errors.make}>
               <Input
                 id="make"
                 value={form.make}
@@ -692,7 +828,7 @@ function VehicleStep({
                 className="h-12"
               />
             </Field>
-            <Field label="Model" htmlFor="model" error={errors.model}>
+            <Field label={t("quote.vehicle.model")} htmlFor="model" error={errors.model}>
               <Input
                 id="model"
                 value={form.model}
@@ -710,7 +846,7 @@ function VehicleStep({
             onClick={() => patch({ vehicleMode: "vin" })}
             className="mx-auto flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
           >
-            <ScanLine className="size-3.5" /> Use my VIN instead
+            <ScanLine className="size-3.5" /> {t("quote.vehicle.useVinLink")}
           </button>
         </>
       )}
@@ -731,6 +867,7 @@ function VehicleConfigFallback({
   form: FormState;
   patch: (n: Partial<FormState>) => void;
 }) {
+  const { t, lang } = useI18n();
   const identified =
     form.vehicleMode === "vin"
       ? Boolean(form.decoded)
@@ -778,21 +915,26 @@ function VehicleConfigFallback({
   return (
     <section className="surface-panel space-y-6 p-5">
       <p className="text-xs leading-relaxed text-muted-foreground">
-        A couple of quick details so your parts, fluids and labor are quoted accurately.
+        {t("quote.vehicle.configIntro")}
       </p>
 
       {needsEngine && (
         <div className="space-y-3">
           <h2 className="text-sm font-medium">
             {engines.specific && make && model
-              ? `Which engine is in your ${year ? `${year} ` : ""}${make} ${model}?`
-              : "Which engine does your vehicle have?"}
+              ? t("quote.vehicle.engineQNamed", {
+                  vehicle: `${year ? `${year} ` : ""}${make} ${model}`,
+                })
+              : t("quote.vehicle.engineQ")}
           </h2>
           <OptionGroup
             columns={1}
             value={form.engineChoice ? [form.engineChoice] : []}
             onChange={(next) => chooseEngine(next[0] ?? "")}
-            options={engines.options.map((o) => ({ value: o.id, label: o.label }))}
+            options={engines.options.map((o) => ({
+              value: o.id,
+              label: localizedVehicleOption(o.id, o.label, lang),
+            }))}
           />
         </div>
       )}
@@ -804,14 +946,16 @@ function VehicleConfigFallback({
             columns={1}
             value={form.config.drivetrainSource === "customer" ? [form.config.drivetrain] : []}
             onChange={(next) => chooseDrivetrain(next[0] ?? "unknown")}
-            options={drivetrain.options.map((o) => ({ value: o.value, label: o.label }))}
+            options={drivetrain.options.map((o) => ({
+              value: o.value,
+              label: localizedVehicleOption(o.value, o.label, lang),
+            }))}
           />
         </div>
       )}
     </section>
   );
 }
-
 
 /* ---------------------------------- STEP 2 --------------------------------- */
 
@@ -824,6 +968,8 @@ function ServiceStep({
   patch: (n: Partial<FormState>) => void;
   errors: Record<string, string>;
 }) {
+  const { t, lang } = useI18n();
+
   function toggleService(key: string) {
     const selected = form.services.includes(key);
     const services = selected ? form.services.filter((k) => k !== key) : [...form.services, key];
@@ -844,8 +990,8 @@ function ServiceStep({
   return (
     <div className="space-y-7">
       <div>
-        <h1 className="font-display text-3xl font-extrabold">What does your vehicle need?</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Select all that apply.</p>
+        <h1 className="font-display text-3xl font-extrabold">{t("quote.service.title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("quote.service.sub")}</p>
         {errors.services && <p className="mt-2 text-sm text-destructive">{errors.services}</p>}
       </div>
 
@@ -853,23 +999,23 @@ function ServiceStep({
         {SERVICES.map((s) => (
           <ServiceCard
             key={s.key}
-            label={s.label}
-            blurb={s.blurb}
+            label={localizedServiceLabel(s.key, lang)}
+            blurb={localizedServiceBlurb(s.key, lang)}
             selected={form.services.includes(s.key)}
             onSelect={() => toggleService(s.key)}
           />
         ))}
       </div>
 
-      <p className="text-xs leading-relaxed text-muted-foreground">{MOBILE_SCOPE_NOTE}</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">{t("quote.scopeNote")}</p>
 
       {form.services.map((key) => {
-        const questions = SERVICE_QUESTIONS[key as ServiceKey] ?? [];
+        const questions = localizedQuestions(key as ServiceKey, lang);
         if (questions.length === 0) return null;
         return (
           <section key={key} className="surface-panel space-y-5 p-5">
             <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">
-              {serviceLabel(key)}
+              {localizedServiceLabel(key, lang)}
             </p>
             {questions.map((q) => (
               <QuestionField
@@ -908,11 +1054,7 @@ function QuestionField({
 
   if (question.kind === "single" || question.kind === "multi") {
     return (
-      <Field
-        label={question.label}
-        hint={question.hint}
-        error={error}
-      >
+      <Field label={question.label} hint={question.hint} error={error}>
         <OptionGroup
           multiple={question.kind === "multi"}
           options={question.options ?? []}
@@ -962,16 +1104,17 @@ function DetailsStep({
   patch: (n: Partial<FormState>) => void;
   errors: Record<string, string>;
 }) {
+  const { t, lang } = useI18n();
   const photoPrompt =
-    form.services.map((k) => PHOTO_PROMPTS[k as ServiceKey]).find(Boolean) ??
-    "Warning lights, leaks, tires, damaged parts — anything you'd like us to see.";
+    form.services.map((k) => localizedPhotoPrompt(k as ServiceKey, lang)).find(Boolean) ??
+    t("quote.details.photosDefaultHint");
 
   function handleFiles(files: FileList | null) {
     if (!files?.length) return;
     const remaining = MAX_PHOTOS - form.photos.length;
     const selected = Array.from(files).slice(0, remaining);
     if (selected.length === 0) {
-      toast.error(`You can attach up to ${MAX_PHOTOS} photos.`);
+      toast.error(t("quote.details.photoMax", { max: MAX_PHOTOS }));
       return;
     }
 
@@ -979,11 +1122,11 @@ function DetailsStep({
     const accepted: File[] = [];
     for (const file of selected) {
       if (!file.type.startsWith("image/")) {
-        toast.error("Photos only for now — please upload an image.");
+        toast.error(t("quote.details.photoImagesOnly"));
         continue;
       }
       if (file.size > MAX_PHOTO_BYTES) {
-        toast.error(`${file.name} is too large. Keep photos under 8 MB.`);
+        toast.error(t("quote.details.photoTooLarge", { name: file.name }));
         continue;
       }
       accepted.push(file);
@@ -991,21 +1134,18 @@ function DetailsStep({
     if (accepted.length) patch({ photos: [...form.photos, ...accepted] });
   }
 
-
   return (
     <div className="space-y-7">
       <div>
-        <h1 className="font-display text-3xl font-extrabold">A few more details</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This helps us quote accurately the first time.
-        </p>
+        <h1 className="font-display text-3xl font-extrabold">{t("quote.details.title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("quote.details.sub")}</p>
       </div>
 
       <Field
-        label="Current mileage"
+        label={t("quote.details.mileage")}
         htmlFor="mileage"
         error={errors.mileage}
-        hint="We record mileage at each visit to keep your vehicle's service history accurate."
+        hint={t("quote.details.mileageHint")}
       >
         <Input
           id="mileage"
@@ -1020,10 +1160,10 @@ function DetailsStep({
       </Field>
 
       <Field
-        label="ZIP code"
+        label={t("quote.details.zip")}
         htmlFor="zip"
         error={errors.zipCode}
-        hint="We come to you — ZIP code lets us confirm you're in our service area. You'll provide the exact service address when scheduling."
+        hint={t("quote.details.zipHint")}
       >
         <Input
           id="zip"
@@ -1038,17 +1178,17 @@ function DetailsStep({
         />
       </Field>
 
-      <Field label="Anything else we should know?" optional htmlFor="notes">
+      <Field label={t("quote.details.notes")} optional htmlFor="notes">
         <Textarea
           id="notes"
           rows={4}
           value={form.notes}
-          placeholder="Timing, previous work, symptoms, anything else that may help…"
+          placeholder={t("quote.details.notesPlaceholder")}
           onChange={(e) => patch({ notes: e.target.value })}
         />
       </Field>
 
-      <Field label="Photos" optional hint={photoPrompt}>
+      <Field label={t("quote.details.photos")} optional hint={photoPrompt}>
         <div className="space-y-3">
           <label className="flex min-h-[110px] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface px-4 py-6 text-center transition-colors hover:border-chrome/50">
             <input
@@ -1063,7 +1203,7 @@ function DetailsStep({
               }}
             />
             <Camera className="size-5 text-chrome" />
-            <span className="text-sm text-muted-foreground">Take or choose photos</span>
+            <span className="text-sm text-muted-foreground">{t("quote.details.photoAdd")}</span>
           </label>
 
           {form.photos.length > 0 && (
@@ -1079,7 +1219,7 @@ function DetailsStep({
                   </span>
                   <button
                     type="button"
-                    aria-label="Remove photo"
+                    aria-label={t("quote.details.photoRemove")}
                     className="-m-2 p-2 text-muted-foreground hover:text-foreground"
                     onClick={() => patch({ photos: form.photos.filter((_, i) => i !== index) })}
                   >
@@ -1089,11 +1229,82 @@ function DetailsStep({
               ))}
             </ul>
           )}
-
         </div>
       </Field>
 
       <InspectionNote />
+    </div>
+  );
+}
+
+/* ------------------------- AI-ASSISTED FOLLOW-UPS ------------------------- */
+
+/**
+ * Optional AI step. The questions come from the model, the answers are the
+ * customer's own words, and every question can be skipped — the AI never
+ * diagnoses, prices, or blocks the request.
+ */
+function FollowupsStep({
+  form,
+  patch,
+}: {
+  form: FormState;
+  patch: (n: Partial<FormState>) => void;
+}) {
+  const { t } = useI18n();
+
+  function setAnswer(id: string, value: string) {
+    patch({ intakeAnswers: { ...form.intakeAnswers, [id]: value } });
+  }
+
+  return (
+    <div className="space-y-7">
+      <div>
+        <h1 className="font-display text-3xl font-extrabold">{t("quote.followups.title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("quote.followups.sub")}</p>
+      </div>
+
+      {form.intakeQuestions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t("quote.followups.unavailable")}</p>
+      ) : (
+        form.intakeQuestions.map((question) => {
+          const value = form.intakeAnswers[question.id] ?? "";
+          const id = `intake-${question.id}`;
+          return (
+            <section key={question.id} className="surface-panel space-y-3 p-5">
+              <h2 className="text-sm font-medium">{question.question}</h2>
+
+              {question.answerType === "text" || question.options.length === 0 ? (
+                <Textarea
+                  id={id}
+                  rows={3}
+                  value={value}
+                  placeholder={t("quote.followups.answerPlaceholder")}
+                  aria-label={t("quote.followups.answerLabel")}
+                  onChange={(e) => setAnswer(question.id, e.target.value)}
+                />
+              ) : (
+                <OptionGroup
+                  columns={1}
+                  options={question.options.map((o) => ({ value: o, label: o }))}
+                  value={value ? [value] : []}
+                  onChange={(next) => setAnswer(question.id, next[0] ?? "")}
+                />
+              )}
+
+              {value && (
+                <button
+                  type="button"
+                  onClick={() => setAnswer(question.id, "")}
+                  className="text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
+                >
+                  {t("quote.followups.skipQuestion")}
+                </button>
+              )}
+            </section>
+          );
+        })
+      )}
     </div>
   );
 }
@@ -1109,25 +1320,26 @@ function ContactStep({
   patch: (n: Partial<FormState>) => void;
   errors: Record<string, string>;
 }) {
+  const { t } = useI18n();
   const emailRequired = form.contactMethod === "email";
   const phoneRequired = form.contactMethod === "text" || form.contactMethod === "call";
 
   return (
     <div className="space-y-7">
       <div>
-        <h1 className="font-display text-3xl font-extrabold">Where should we send your quote?</h1>
-        <p className="mt-2 text-sm text-muted-foreground">No account needed.</p>
+        <h1 className="font-display text-3xl font-extrabold">{t("quote.contact.title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("quote.contact.sub")}</p>
       </div>
 
-      <Field label="Preferred contact method">
+      <Field label={t("quote.contact.method")}>
         <OptionGroup
-          options={CONTACT_METHODS}
+          options={contactMethodChoices(t)}
           value={[form.contactMethod]}
           onChange={(v) => patch({ contactMethod: v[0] ?? "text" })}
         />
       </Field>
 
-      <Field label="First name" htmlFor="first" error={errors.firstName}>
+      <Field label={t("quote.contact.first")} htmlFor="first" error={errors.firstName}>
         <Input
           id="first"
           value={form.firstName}
@@ -1137,7 +1349,7 @@ function ContactStep({
         />
       </Field>
 
-      <Field label="Last name" htmlFor="last" optional>
+      <Field label={t("quote.contact.last")} htmlFor="last" optional>
         <Input
           id="last"
           value={form.lastName}
@@ -1147,7 +1359,12 @@ function ContactStep({
         />
       </Field>
 
-      <Field label="Mobile phone" htmlFor="phone" optional={!phoneRequired} error={errors.phone}>
+      <Field
+        label={t("quote.contact.phone")}
+        htmlFor="phone"
+        optional={!phoneRequired}
+        error={errors.phone}
+      >
         <Input
           id="phone"
           type="tel"
@@ -1160,7 +1377,12 @@ function ContactStep({
         />
       </Field>
 
-      <Field label="Email" htmlFor="email" optional={!emailRequired} error={errors.email}>
+      <Field
+        label={t("quote.contact.email")}
+        htmlFor="email"
+        optional={!emailRequired}
+        error={errors.email}
+      >
         <Input
           id="email"
           type="email"
@@ -1189,8 +1411,10 @@ function Confirmation({
   outsideArea?: boolean;
   onAnother: () => void;
 }) {
+  const { t, lang } = useI18n();
   const contactLabel =
-    CONTACT_METHODS.find((c) => c.value === snapshot.contactMethod)?.label ?? "Text";
+    contactMethodChoices(t).find((c) => c.value === snapshot.contactMethod)?.label ??
+    t("quote.contact.methodText");
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 py-16">
@@ -1199,35 +1423,28 @@ function Confirmation({
           <Check className="size-6 text-chrome" />
         </span>
         <h1 className="mt-6 font-display text-3xl font-extrabold">
-          {outsideArea ? "Request received." : "Quote request received."}
+          {outsideArea ? t("quote.confirm.titleOutside") : t("quote.confirm.title")}
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          {outsideArea ? (
-            <>
-              We don't currently service ZIP {snapshot.zipCode.trim().slice(0, 5)} — our mobile
-              service area is Corona and Riverside, California right now. Your request was received
-              and saved, and we'll reach out if we expand to your area.
-            </>
-          ) : (
-            <>
-              We'll review your vehicle and requested services and send your personalized quote
-              shortly. No work is authorized until you accept your quote.
-            </>
-          )}
+          {outsideArea
+            ? t("quote.confirm.bodyOutside", { zip: snapshot.zipCode.trim().slice(0, 5) })
+            : t("quote.confirm.body")}
         </p>
 
-
         <div className="surface-panel mt-8 space-y-4 p-5 text-left">
-          <Row label="Request" value={`#${requestNumber}`} />
-          <Row label="Vehicle" value={vehicleTitle(snapshot) || "—"} />
+          <Row label={t("quote.confirm.request")} value={`#${requestNumber}`} />
+          <Row label={t("quote.confirm.vehicle")} value={vehicleTitle(snapshot) || "—"} />
           {configSummary(snapshot.config) && (
-            <Row label="Configuration" value={configSummary(snapshot.config)} />
+            <Row label={t("quote.confirm.configuration")} value={configSummary(snapshot.config)} />
           )}
-          <Row label="Mileage" value={`${formatMiles(snapshot.mileage)} miles`} />
+          <Row
+            label={t("quote.confirm.mileage")}
+            value={`${formatMiles(snapshot.mileage)} ${t("quote.confirm.miles")}`}
+          />
 
           <div className="border-t border-border pt-4">
             <p className="text-xs tracking-[0.16em] text-muted-foreground uppercase">
-              Requested services
+              {t("quote.confirm.requested")}
             </p>
             <ul className="mt-2 space-y-2">
               {snapshot.services.map((key) => {
@@ -1235,15 +1452,15 @@ function Confirmation({
                 const detail = Object.entries(answers)
                   .flatMap(([qid, v]) =>
                     Array.isArray(v)
-                      ? v.map((x) => answerLabel(key, qid, x))
+                      ? v.map((x) => localizedAnswerLabel(key, qid, x, lang))
                       : String(v).trim()
-                        ? [answerLabel(key, qid, String(v).trim())]
+                        ? [localizedAnswerLabel(key, qid, String(v).trim(), lang)]
                         : [],
                   )
                   .join(" · ");
                 return (
                   <li key={key} className="text-sm">
-                    <span className="font-medium">{serviceLabel(key)}</span>
+                    <span className="font-medium">{localizedServiceLabel(key, lang)}</span>
                     {detail && (
                       <span className="mt-0.5 block text-xs text-muted-foreground">{detail}</span>
                     )}
@@ -1254,13 +1471,13 @@ function Confirmation({
           </div>
 
           <div className="border-t border-border pt-4">
-            <Row label="Preferred contact" value={contactLabel} />
+            <Row label={t("quote.confirm.preferredContact")} value={contactLabel} />
           </div>
         </div>
 
         <div className="mt-8 space-y-3">
           <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
-            <Link to="/">BACK TO REPARA</Link>
+            <Link to="/">{t("quote.confirm.backHome")}</Link>
           </Button>
           <Button
             variant="outline"
@@ -1268,12 +1485,21 @@ function Confirmation({
             onClick={onAnother}
             className="h-13 w-full rounded-full border-border bg-transparent text-sm tracking-[0.12em]"
           >
-            REQUEST ANOTHER QUOTE
+            {t("quote.confirm.another")}
           </Button>
         </div>
       </div>
     </div>
   );
+}
+
+/** Contact-method choices with localized labels; stored values stay stable. */
+function contactMethodChoices(t: (path: string) => string) {
+  return [
+    { value: "text", label: t("quote.contact.methodText") },
+    { value: "call", label: t("quote.contact.methodCall") },
+    { value: "email", label: t("quote.contact.methodEmail") },
+  ];
 }
 
 function Row({ label, value }: { label: string; value: string }) {

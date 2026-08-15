@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, Flashlight, Image as ImageIcon, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
 import {
   clampRect,
   coverCropRect,
@@ -15,12 +16,6 @@ import {
 
 type Phase = "starting" | "scanning" | "error";
 
-const UNAVAILABLE = "Camera scanning isn't available. Enter your VIN manually instead.";
-const NO_VIN_IN_PHOTO =
-  "We couldn't read a VIN in that photo. Get closer so the barcode fills the width, then try again.";
-const TIPS =
-  "Move closer, keep the whole barcode inside the frame, hold steady and add light. The driver-door jamb label usually scans best.";
-
 /**
  * Full-screen VIN barcode scanner. All decoding happens on-device; no frame
  * ever leaves the browser and nothing is stored.
@@ -32,6 +27,7 @@ export function VinScanner({
   onDetected: (vin: string) => void;
   onClose: (reason?: "cancel" | "unavailable") => void;
 }) {
+  const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const guideRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -124,7 +120,9 @@ export function VinScanner({
         // Continuous autofocus where the browser allows it (best-effort).
         if (caps.focusMode?.includes("continuous")) {
           await track
-            ?.applyConstraints({ advanced: [{ focusMode: "continuous" }] } as unknown as MediaTrackConstraints)
+            ?.applyConstraints({
+              advanced: [{ focusMode: "continuous" }],
+            } as unknown as MediaTrackConstraints)
             .catch(() => undefined);
         }
         // A small optical zoom gives long VIN bars more usable pixels without
@@ -145,7 +143,7 @@ export function VinScanner({
           await video.play().catch(() => undefined);
         }
         setPhase("scanning");
-        hintTimer = window.setTimeout(() => setHint(TIPS), 8000);
+        hintTimer = window.setTimeout(() => setHint(t("vin.tips")), 8000);
 
         const decode = await createFrameDecoder();
         decoderRef.current = decode;
@@ -170,8 +168,8 @@ export function VinScanner({
         setPhase("error");
         setMessage(
           name === "NotAllowedError" || name === "SecurityError"
-            ? "Camera access was blocked. Allow camera access in your browser settings, or enter your VIN manually."
-            : UNAVAILABLE,
+            ? t("vin.blocked")
+            : t("vin.unavailable"),
         );
       }
     }
@@ -207,7 +205,7 @@ export function VinScanner({
     const decode = decoderRef.current;
     if (!video || !decode || busy || doneRef.current) return;
     setBusy(true);
-    setHint("Reading photo…");
+    setHint(t("vin.reading"));
     try {
       const fw = video.videoWidth;
       const fh = video.videoHeight;
@@ -219,7 +217,7 @@ export function VinScanner({
         finish(vin);
         return;
       }
-      setHint(NO_VIN_IN_PHOTO);
+      setHint(t("vin.noVinPhoto"));
     } finally {
       setBusy(false);
     }
@@ -228,16 +226,16 @@ export function VinScanner({
   async function onPickPhoto(file: File | undefined) {
     if (!file || busy) return;
     setBusy(true);
-    setHint("Reading photo…");
+    setHint(t("vin.reading"));
     try {
       const vin = await scanVinFromFile(file);
       if (vin) {
         finish(vin);
         return;
       }
-      setHint(NO_VIN_IN_PHOTO);
+      setHint(t("vin.noVinPhoto"));
     } catch {
-      setHint(NO_VIN_IN_PHOTO);
+      setHint(t("vin.noVinPhoto"));
     } finally {
       setBusy(false);
     }
@@ -266,7 +264,7 @@ export function VinScanner({
             className="h-11 rounded-xl"
             onClick={() => close("cancel")}
           >
-            <X className="mr-2 size-4" /> Cancel
+            <X className="mr-2 size-4" /> {t("vin.cancel")}
           </Button>
           {torchAvailable && (
             <Button
@@ -276,7 +274,7 @@ export function VinScanner({
               onClick={() => void toggleTorch()}
             >
               <Flashlight className="size-4" />
-              <span className="sr-only">Toggle flashlight</span>
+              <span className="sr-only">{t("vin.flashlight")}</span>
             </Button>
           )}
         </div>
@@ -284,7 +282,7 @@ export function VinScanner({
         <div className="flex flex-1 items-center justify-center px-6">
           {phase === "error" ? (
             <div className="surface-panel max-w-sm space-y-4 p-5 text-center">
-              <p className="text-sm">{message ?? UNAVAILABLE}</p>
+              <p className="text-sm">{message ?? t("vin.unavailable")}</p>
               <label className="block">
                 <input
                   type="file"
@@ -293,11 +291,15 @@ export function VinScanner({
                   onChange={(e) => void onPickPhoto(e.target.files?.[0])}
                 />
                 <span className="inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-border text-sm font-medium">
-                  <ImageIcon className="size-4" /> Use a photo instead
+                  <ImageIcon className="size-4" /> {t("vin.usePhoto")}
                 </span>
               </label>
-              <Button type="button" className="h-11 w-full rounded-xl" onClick={() => close("unavailable")}>
-                Enter VIN manually
+              <Button
+                type="button"
+                className="h-11 w-full rounded-xl"
+                onClick={() => close("unavailable")}
+              >
+                {t("vin.manual")}
               </Button>
             </div>
           ) : (
@@ -317,15 +319,13 @@ export function VinScanner({
             <p className="text-sm font-medium text-white">
               {phase === "starting" ? (
                 <span className="inline-flex items-center gap-2">
-                  <Loader2 className="size-4 animate-spin" /> Starting camera…
+                  <Loader2 className="size-4 animate-spin" /> {t("vin.starting")}
                 </span>
               ) : (
-                "Point your camera at the VIN barcode"
+                t("vin.point")
               )}
             </p>
-            <p className="mt-1 text-xs text-white/70">
-              {hint ?? "Usually on the driver's door jamb or the dashboard label."}
-            </p>
+            <p className="mt-1 text-xs text-white/70">{hint ?? t("vin.hint")}</p>
 
             {phase === "scanning" && (
               <div className="mt-4 flex items-center justify-center gap-2">
@@ -336,8 +336,12 @@ export function VinScanner({
                   disabled={busy}
                   onClick={() => void captureStill()}
                 >
-                  {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Camera className="mr-2 size-4" />}
-                  Capture
+                  {busy ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <Camera className="mr-2 size-4" />
+                  )}
+                  {t("vin.capture")}
                 </Button>
                 <label>
                   <input
@@ -347,7 +351,7 @@ export function VinScanner({
                     onChange={(e) => void onPickPhoto(e.target.files?.[0])}
                   />
                   <span className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-white/15 px-4 text-sm font-medium text-white backdrop-blur">
-                    <ImageIcon className="size-4" /> Photo
+                    <ImageIcon className="size-4" /> {t("vin.photo")}
                   </span>
                 </label>
               </div>
@@ -359,7 +363,7 @@ export function VinScanner({
               onClick={() => close("cancel")}
               className="mt-4 h-11 text-xs font-medium text-white underline underline-offset-4"
             >
-              Enter VIN manually instead
+              {t("vin.manualInstead")}
             </Button>
           </div>
         )}

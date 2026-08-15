@@ -17,6 +17,8 @@ export type AnalyticsEvent =
   | "details_completed"
   | "contact_started"
   | "quote_form_completed"
+  | "intake_questions_shown"
+  | "intake_questions_answered"
   | "quote_submitted"
   | "public_quote_viewed"
   | "quote_accepted"

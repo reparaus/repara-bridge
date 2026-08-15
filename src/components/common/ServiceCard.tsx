@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ServiceKey } from "@/lib/services";
 
@@ -26,13 +27,15 @@ export function ServiceCard({
    */
   quoteServiceKey?: ServiceKey;
 }) {
+  const { t } = useI18n();
+
   const body = (
     <>
       <span className="font-display text-base font-semibold">{label}</span>
       {blurb && <span className="mt-1 text-sm text-muted-foreground">{blurb}</span>}
       {typeof startingAt === "number" && (
         <span className="mt-2 text-xs tracking-wide text-chrome uppercase">
-          Starting at ${startingAt}
+          {t("common.startingAt")} ${startingAt}
         </span>
       )}
       {selected && (
