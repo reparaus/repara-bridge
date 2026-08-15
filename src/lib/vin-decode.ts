@@ -38,7 +38,7 @@ async function loadEngine() {
       mod.prepareZXingModule({
         overrides: {
           locateFile: (path: string, prefix: string) =>
-            path.endsWith(".wasm") ? wasmUrl : `${prefix}${path}`,
+            path.endsWith(".wasm") ? WASM_URL : `${prefix}${path}`,
         },
       });
       return mod;
