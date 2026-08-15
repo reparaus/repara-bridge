@@ -48,9 +48,37 @@ export function VinScanner({
     stoppedRef.current = true;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    decoderRef.current?.dispose?.();
+    decoderRef.current = null;
     const video = videoRef.current;
     if (video) video.srcObject = null;
   }, []);
+
+  /**
+   * Tap-to-focus. iOS Safari drops focus constraints after the first frames, so
+   * a manual re-trigger is the reliable way to get a sharp barcode.
+   */
+  const refocus = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const caps = (track.getCapabilities?.() ?? {}) as { focusMode?: string[] };
+    const modes = caps.focusMode ?? [];
+    try {
+      if (modes.includes("single-shot")) {
+        await track.applyConstraints({
+          advanced: [{ focusMode: "single-shot" }],
+        } as unknown as MediaTrackConstraints);
+      }
+      if (modes.includes("continuous")) {
+        await track.applyConstraints({
+          advanced: [{ focusMode: "continuous" }],
+        } as unknown as MediaTrackConstraints);
+      }
+    } catch {
+      // Focus control is best-effort; iOS often exposes none of it.
+    }
+  }, []);
+
 
   const finish = useCallback(
     (vin: string) => {
