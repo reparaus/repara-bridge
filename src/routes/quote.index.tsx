@@ -836,6 +836,105 @@ function VehicleStep({
 }
 
 /**
+ * Year → Make → Model → Trim as searchable comboboxes.
+ *
+ * Each field is a plain text input with suggestions attached: earlier answers
+ * narrow later suggestion lists, but never restrict what can be typed, and a
+ * downstream value the customer already entered is left alone when an upstream
+ * field changes (we only clear values that came from a suggestion list).
+ */
+function VehicleFields({
+  form,
+  patch,
+  errors,
+}: {
+  form: FormState;
+  patch: (n: Partial<FormState>) => void;
+  errors: Record<string, string>;
+}) {
+  const { t } = useI18n();
+  const years = useMemo(() => yearOptions(), []);
+  const { options: modelOptions, loading: modelsLoading } = useModelSuggestions(
+    form.make,
+    form.year,
+  );
+  const trims = useMemo(() => trimSuggestions(form.make, form.model), [form.make, form.model]);
+
+  /** A value is "suggested" when it came from a list, so it's safe to refresh. */
+  const isSuggested = (value: string, options: string[]) =>
+    options.some((o) => o.toLowerCase() === value.trim().toLowerCase());
+
+  return (
+    <>
+      <Field
+        label={t("quote.vehicle.year")}
+        htmlFor="year"
+        error={errors.year}
+        hint={t("quote.vehicle.searchHint")}
+      >
+        <ComboboxInput
+          id="year"
+          value={form.year}
+          options={years}
+          inputMode="numeric"
+          maxLength={4}
+          placeholder="2021"
+          onChange={(next) => patch({ year: next.replace(/[^\d]/g, "").slice(0, 4) })}
+        />
+      </Field>
+
+      <Field label={t("quote.vehicle.make")} htmlFor="make" error={errors.make}>
+        <ComboboxInput
+          id="make"
+          value={form.make}
+          options={MAKES}
+          autoCapitalize="words"
+          placeholder="Lexus"
+          onChange={(next) => {
+            // Changing the make invalidates suggestion-derived model/trim only.
+            const keepModel = form.model && !isSuggested(form.model, modelOptions);
+            const keepTrim = form.trim && !isSuggested(form.trim, trims);
+            patch({
+              make: next,
+              model: keepModel ? form.model : "",
+              trim: keepTrim ? form.trim : "",
+            });
+          }}
+        />
+      </Field>
+
+      <Field label={t("quote.vehicle.model")} htmlFor="model" error={errors.model}>
+        <ComboboxInput
+          id="model"
+          value={form.model}
+          options={modelOptions}
+          loading={modelsLoading}
+          autoCapitalize="words"
+          placeholder="RX 350"
+          onChange={(next) => {
+            const keepTrim = form.trim && !isSuggested(form.trim, trims);
+            patch({ model: next, trim: keepTrim ? form.trim : "" });
+          }}
+        />
+      </Field>
+
+      <Field label={t("quote.vehicle.trim")} htmlFor="trim">
+        <ComboboxInput
+          id="trim"
+          value={form.trim}
+          options={trims}
+          autoCapitalize="words"
+          placeholder="Premium"
+          onChange={(next) => patch({ trim: next })}
+        />
+      </Field>
+    </>
+  );
+}
+
+
+
+/**
  * Only asks what the VIN didn't answer. Every question offers "Not sure", and
  * the answer is stored as structured data with `source = "customer"`.
  */
