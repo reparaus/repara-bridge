@@ -812,41 +812,9 @@ function VehicleStep({
       ) : (
         <>
           <section className="surface-panel space-y-4 p-5">
-            <Field label={t("quote.vehicle.year")} htmlFor="year" error={errors.year}>
-              <Input
-                id="year"
-                value={form.year}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="2021"
-                maxLength={4}
-                onChange={(e) => patch({ year: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                className="h-12"
-              />
-            </Field>
-            <Field label={t("quote.vehicle.make")} htmlFor="make" error={errors.make}>
-              <Input
-                id="make"
-                value={form.make}
-                placeholder="Lexus"
-                autoComplete="off"
-                autoCapitalize="words"
-                onChange={(e) => patch({ make: e.target.value })}
-                className="h-12"
-              />
-            </Field>
-            <Field label={t("quote.vehicle.model")} htmlFor="model" error={errors.model}>
-              <Input
-                id="model"
-                value={form.model}
-                placeholder="RX 350"
-                autoComplete="off"
-                autoCapitalize="words"
-                onChange={(e) => patch({ model: e.target.value })}
-                className="h-12"
-              />
-            </Field>
+            <VehicleFields form={form} patch={patch} errors={errors} />
           </section>
+
 
           <button
             type="button"
