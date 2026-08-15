@@ -11,7 +11,10 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/admin/login")({
-  validateSearch: z.object({ denied: z.boolean().optional() }),
+  validateSearch: z.object({
+    denied: z.boolean().optional(),
+    reset: z.boolean().optional(),
+  }),
   head: () => ({
     meta: [
       { title: "Admin Sign In — Repara" },
