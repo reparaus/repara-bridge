@@ -56,79 +56,71 @@ function isVinShape(value: string) {
   return value.length === VIN_LENGTH && VIN_CHARS.test(value);
 }
 
-/** Raw text decoder over a canvas frame. Returns null when nothing decodes. */
-export type FrameDecoder = (canvas: HTMLCanvasElement) => Promise<string | null>;
+/** Raw text decoder over a frame's pixels. Returns null when nothing decodes. */
+export type FrameDecoder = ((image: ImageData) => Promise<string | null>) & {
+  dispose?: () => void;
+};
 
 /**
- * Builds the best available frame decoder.
+ * Builds a frame decoder backed by the ZXing WASM engine.
  *
- * ZXing is configured for the formats found on factory VIN labels and runs
- * locally. Avoiding native detection prevents Android's external barcode action
- * sheet while `TRY_HARDER` improves long, narrow door-jamb labels.
+ * Decoding happens in a Web Worker so grabbing and decoding frames never blocks
+ * the camera preview (the previous main-thread decoder made live frames go
+ * stale, which is why nothing ever locked on). If workers are unavailable the
+ * same engine runs inline.
  */
 export async function createFrameDecoder(): Promise<FrameDecoder> {
-  const [{ HTMLCanvasElementLuminanceSource }, zxing] = await Promise.all([
-    import("@zxing/browser"),
-    import("@zxing/library"),
-  ]);
-  const {
-    MultiFormatReader,
-    DecodeHintType,
-    BarcodeFormat,
-    BinaryBitmap,
-    HybridBinarizer,
-    GlobalHistogramBinarizer,
-  } = zxing;
-
-  const hints = new Map<number, unknown>();
-  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-    BarcodeFormat.CODE_39,
-    BarcodeFormat.CODE_128,
-    BarcodeFormat.CODE_93,
-    BarcodeFormat.ITF,
-    BarcodeFormat.DATA_MATRIX,
-    BarcodeFormat.PDF_417,
-    BarcodeFormat.QR_CODE,
-  ]);
-  hints.set(DecodeHintType.TRY_HARDER, true);
-  hints.set(DecodeHintType.ASSUME_GS1, false);
-
-  const reader = new MultiFormatReader();
-  reader.setHints(hints as never);
-
-  return async (canvas) => {
-    const source = new HTMLCanvasElementLuminanceSource(canvas);
-    // Straight, inverted (white-on-black labels) and rotated (vertical labels).
-    const variants = [
-      () => source,
-      () => source.invert(),
-      () => source.rotateCounterClockwise(),
-      () => source.rotateCounterClockwise().invert(),
-    ];
-    // Hybrid handles uneven lighting; the global histogram binarizer is often
-    // the one that locks onto high-contrast printed VIN labels.
-    const binarizers = [
-      (s: unknown) => new HybridBinarizer(s as never),
-      (s: unknown) => new GlobalHistogramBinarizer(s as never),
-    ];
-    for (const make of variants) {
-      const luminance = make();
-      for (const binarize of binarizers) {
-        try {
-          const bitmap = new BinaryBitmap(binarize(luminance));
-          const result = reader.decode(bitmap);
-          const text = result?.getText?.();
-          if (text) return text;
-        } catch {
-          // NotFoundException per variant is normal.
-        } finally {
-          reader.reset();
-        }
+  const worker = createWorker();
+  if (worker) {
+    let seq = 0;
+    const pending = new Map<number, (text: string | null) => void>();
+    worker.onmessage = (event: MessageEvent<{ id: number; text: string | null }>) => {
+      const resolve = pending.get(event.data.id);
+      if (resolve) {
+        pending.delete(event.data.id);
+        resolve(event.data.text ?? null);
       }
-    }
-    return null;
-  };
+    };
+    worker.onerror = () => {
+      // Fail the in-flight jobs rather than hanging the scan loop.
+      pending.forEach((resolve) => resolve(null));
+      pending.clear();
+    };
+    const decode: FrameDecoder = (image) =>
+      new Promise<string | null>((resolve) => {
+        const id = ++seq;
+        pending.set(id, resolve);
+        try {
+          worker.postMessage({ id, image });
+        } catch {
+          pending.delete(id);
+          resolve(null);
+        }
+      });
+    decode.dispose = () => {
+      pending.forEach((resolve) => resolve(null));
+      pending.clear();
+      worker.terminate();
+    };
+    return decode;
+  }
+
+  const { decodeImageData, warmDecoder } = await import("./vin-decode");
+  await warmDecoder();
+  return (image) => decodeImageData(image);
 }
+
+function createWorker(): Worker | null {
+  if (typeof Worker === "undefined") return null;
+  try {
+    return new Worker(new URL("./vin-scan.worker.ts", import.meta.url), {
+      type: "module",
+    });
+  } catch {
+    return null;
+  }
+}
+
 
 /** A crop rectangle in source-image pixels. */
 export type Rect = { x: number; y: number; w: number; h: number };
