@@ -470,6 +470,17 @@ function QuoteFlow() {
     goTo(Math.max(previous, STEP_VEHICLE));
   }
 
+  // The AI step only appears in the stepper once there is something to ask.
+  const showQuestionsStep = form.intakeQuestions.length > 0 || step === STEP_QUESTIONS;
+  const stepLabels = [
+    t("quote.steps.vehicle"),
+    t("quote.steps.service"),
+    t("quote.steps.details"),
+    ...(showQuestionsStep ? [t("quote.steps.questions")] : []),
+    t("quote.steps.contact"),
+  ];
+  const stepperIndex = showQuestionsStep ? step : Math.min(step, 3);
+
   if (confirmation) {
     return (
       <Confirmation
@@ -491,10 +502,10 @@ function QuoteFlow() {
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
-          {step === 0 ? (
+          {step === STEP_VEHICLE ? (
             <Link
               to="/"
-              aria-label="Back to Repara"
+              aria-label={t("nav.backToRepara")}
               className="-m-2 p-2 text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="size-5" />
@@ -503,52 +514,58 @@ function QuoteFlow() {
             <button
               type="button"
               onClick={back}
-              aria-label="Back"
+              aria-label={t("common.back")}
               className="-m-2 p-2 text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="size-5" />
             </button>
           )}
           <Logo compact />
-          <span className="w-5" />
+          <LanguageToggle />
         </div>
         <div className="mx-auto max-w-2xl px-5 pb-4">
-          <ProgressStepper steps={STEP_LABELS} current={step} />
+          <ProgressStepper steps={stepLabels} current={stepperIndex} />
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-8 pb-36">
-        {step === 0 && <VehicleStep form={form} patch={patch} errors={errors} />}
-        {step === 1 && <ServiceStep form={form} patch={patch} errors={errors} />}
-        {step === 2 && <DetailsStep form={form} patch={patch} errors={errors} />}
-        {step === 3 && <ContactStep form={form} patch={patch} errors={errors} />}
+        <div key={`${step}-${lang}`} className="animate-in fade-in slide-in-from-bottom-1 duration-300">
+          {step === STEP_VEHICLE && <VehicleStep form={form} patch={patch} errors={errors} />}
+          {step === STEP_SERVICE && <ServiceStep form={form} patch={patch} errors={errors} />}
+          {step === STEP_DETAILS && <DetailsStep form={form} patch={patch} errors={errors} />}
+          {step === STEP_QUESTIONS && <FollowupsStep form={form} patch={patch} />}
+          {step === STEP_CONTACT && <ContactStep form={form} patch={patch} errors={errors} />}
+        </div>
       </main>
 
       <div className="fixed inset-x-0 bottom-0 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
         <div className="mx-auto max-w-2xl px-5 py-4">
-          {step === 3 && (
+          {step === STEP_CONTACT && (
             <p className="mb-3 text-center text-[11px] leading-relaxed text-muted-foreground">
-              By submitting, you agree that Repara may contact you regarding this quote request. No
-              work is authorized by requesting a quote.
+              {t("quote.consent")}
             </p>
           )}
           <Button
             size="lg"
             className="h-13 w-full rounded-full text-sm tracking-[0.12em]"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || preparing}
             onClick={() => {
-              if (step < 3) return next();
+              if (step < STEP_CONTACT) return void next();
               if (validateStep()) mutation.mutate();
             }}
           >
             {mutation.isPending ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" /> SUBMITTING
+                <Loader2 className="mr-2 size-4 animate-spin" /> {t("quote.submitting")}
               </>
-            ) : step < 3 ? (
-              "CONTINUE"
+            ) : preparing ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" /> {t("quote.preparing")}
+              </>
+            ) : step < STEP_CONTACT ? (
+              t("quote.continue")
             ) : (
-              "REQUEST MY QUOTE"
+              t("quote.submit")
             )}
           </Button>
         </div>
