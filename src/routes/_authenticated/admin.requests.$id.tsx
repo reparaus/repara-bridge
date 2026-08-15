@@ -6,6 +6,8 @@ import { ArrowLeft, Copy, Loader2, Mail, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { CopyValue } from "@/components/admin/CopyValue";
+import { ReparaAiCard } from "@/components/admin/ReparaAiCard";
+
 import { Field } from "@/components/common/Field";
 import { LoadingState } from "@/components/common/LoadingState";
 import { formatCurrency, PriceSummary } from "@/components/common/PriceSummary";
@@ -225,6 +227,10 @@ function RequestDetail() {
               {serviceLabel(request.service_category)}
             </h1>
           </div>
+
+          <ReparaAiCard requestId={id} request={request as never} />
+
+
 
           <Panel title="Customer">
             <Row label="Name" value={`${customer.first_name ?? ""} ${customer.last_name ?? ""}`} />

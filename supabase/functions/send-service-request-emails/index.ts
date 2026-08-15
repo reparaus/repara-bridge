@@ -44,13 +44,56 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   let requestId = "";
+  let body: Record<string, unknown> = {};
   try {
-    const body = await req.json();
-    requestId = String(body?.requestId ?? "");
+    body = (await req.json()) ?? {};
+    requestId = String(body['requestId'] ?? "");
   } catch {
     return json({ error: "invalid_body" }, 400);
   }
+
+  // Repara AI clarification question. Caller must hold the service role key, so
+  // only Repara's own server code can reach it.
+  if (body['mode'] === "clarification") {
+    if (!RESEND_API_KEY) return json({ error: "email_not_configured" }, 500);
+    const bearer = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (bearer !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return json({ error: "forbidden" }, 403);
+
+    const to = String(body['to'] ?? "").trim();
+    const question = String(body['question'] ?? "").trim();
+    const replyUrl = String(body['replyUrl'] ?? "").trim();
+    if (!to || !question || !replyUrl.startsWith("http")) return json({ error: "invalid_body" }, 400);
+
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${RESEND_API_KEY}` },
+        body: JSON.stringify({
+          from: FROM_EMAIL,
+          to: [to],
+          subject: `Quick question about your Repara request ${String(body['requestNumber'] ?? "")}`.trim(),
+          html: clarificationHtml({
+            firstName: esc(body['firstName'] || "there"),
+            requestNumber: esc(body['requestNumber']),
+            vehicle: esc(body['vehicle']),
+            question: esc(question),
+            replyUrl: esc(replyUrl),
+          }),
+        }),
+      });
+      if (!res.ok) {
+        const detail = (await res.text()).slice(0, 300);
+        console.error("[emails] clarification failed", res.status, detail);
+        return json({ ok: false, error: `resend ${res.status}: ${detail}` }, 200);
+      }
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message.slice(0, 200) }, 200);
+    }
+    return json({ ok: true });
+  }
+
   if (!UUID.test(requestId)) return json({ error: "invalid_request_id" }, 400);
+
   if (!RESEND_API_KEY) {
     console.error("[emails] RESEND_API_KEY is not configured");
     return json({ error: "email_not_configured" }, 500);
@@ -251,4 +294,31 @@ ${banner}
 <table style="width:100%;border-collapse:collapse;">${d.rows.map(([k, v]) => row(k, v)).join("")}</table>
 <p style="margin:24px 0 0;">
 <a href="${d.link}" style="display:inline-block;background:#111111;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;">Open request</a></p>`);
+}
+
+/** Repara AI clarification question. Plain, no pricing, no diagnosis claims. */
+function clarificationHtml(d: {
+  firstName: string;
+  requestNumber: string;
+  vehicle: string;
+  question: string;
+  replyUrl: string;
+}) {
+  return shell(`
+    <h1 style="margin:0 0 16px;font-size:20px;">Hi ${d.firstName},</h1>
+    <p style="margin:0 0 16px;line-height:1.6;">
+      Thanks for your Repara request${d.requestNumber ? ` <strong>${d.requestNumber}</strong>` : ""}${
+        d.vehicle ? ` for your ${d.vehicle}` : ""
+      }. Before we can finish reviewing it, we have a quick question:
+    </p>
+    <p style="margin:0 0 24px;padding:14px 16px;background:#f4f4f5;border-radius:10px;line-height:1.6;">
+      ${d.question}
+    </p>
+    <p style="margin:0 0 24px;">
+      <a href="${d.replyUrl}" style="display:inline-block;padding:12px 20px;background:#111827;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;">Answer the question</a>
+    </p>
+    <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6;">
+      No account needed — the link opens a short form. You can also reply to this email.
+    </p>
+  `);
 }
