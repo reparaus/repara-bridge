@@ -194,14 +194,18 @@ function formatMiles(value: string) {
 }
 
 function QuoteFlow() {
+  const { t, lang } = useI18n();
   const submit = useServerFn(submitQuoteRequest);
   const discardPhotos = useServerFn(discardQuotePhotos);
+  const askIntakeQuestions = useServerFn(requestIntakeQuestions);
   const { service: preselectedService } = Route.useSearch();
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [hydrated, setHydrated] = useState(false);
+  /** True only while the AI is preparing intake follow-ups. */
+  const [preparing, setPreparing] = useState(false);
   const [confirmation, setConfirmation] = useState<{
     requestNumber: string;
     snapshot: FormState;
@@ -214,7 +218,7 @@ function QuoteFlow() {
     const draft = loadDraft();
     if (draft?.data) {
       setForm((f) => ({ ...f, ...(draft.data as Partial<FormState>) }));
-      setStep(Math.min(draft.step ?? 0, 3));
+      setStep(Math.min(draft.step ?? 0, STEP_CONTACT));
     }
     if (preselectedService) {
       setForm((f) =>
@@ -272,6 +276,8 @@ function QuoteFlow() {
         photoPaths: [] as string[],
       },
       submissionId: form.submissionId || undefined,
+      preferredLanguage: lang,
+      intakeFollowups: collectFollowups(form),
       contact: {
         firstName: form.firstName,
         lastName: form.lastName,
@@ -280,7 +286,7 @@ function QuoteFlow() {
         preferredContactMethod: form.contactMethod,
       },
     }),
-    [form],
+    [form, lang],
   );
 
   const mutation = useMutation({
@@ -316,7 +322,7 @@ function QuoteFlow() {
       window.scrollTo({ top: 0 });
     },
     onError: () => {
-      toast.error("We couldn't submit your request. Please check your details and try again.");
+      toast.error(t("quote.submitFailed"));
     },
   });
 
@@ -327,24 +333,24 @@ function QuoteFlow() {
       if (form.vehicleMode === "vin") {
         if (!form.decoded) {
           e.vin = isCompleteVin(form.vin)
-            ? "Decode your VIN to continue, or enter your vehicle details instead."
-            : "Enter your 17-character VIN, or enter your vehicle details instead.";
+            ? t("quote.vehicle.errVinDecode")
+            : t("quote.vehicle.errVinShort");
         }
       } else {
-        if (!/^\d{4}$/.test(form.year)) e.year = "Enter a 4-digit year";
-        if (!form.make.trim()) e.make = "Make is required";
-        if (!form.model.trim()) e.model = "Model is required";
+        if (!/^\d{4}$/.test(form.year)) e.year = t("quote.vehicle.errYear");
+        if (!form.make.trim()) e.make = t("quote.vehicle.errMake");
+        if (!form.model.trim()) e.model = t("quote.vehicle.errModel");
       }
     }
 
     if (step === 1) {
-      if (form.services.length === 0) e.services = "Select at least one service to continue";
+      if (form.services.length === 0) e.services = t("quote.service.errSelect");
       for (const key of form.services) {
         for (const q of SERVICE_QUESTIONS[key as ServiceKey] ?? []) {
           if (!q.required) continue;
           const value = form.answers[key]?.[q.id];
           const empty = Array.isArray(value) ? value.length === 0 : !String(value ?? "").trim();
-          if (empty) e[`${key}.${q.id}`] = "This helps us quote accurately — please fill it in.";
+          if (empty) e[`${key}.${q.id}`] = t("quote.service.errAnswer");
         }
       }
     }
@@ -352,47 +358,116 @@ function QuoteFlow() {
     if (step === 2) {
       const miles = Number(form.mileage);
       if (!form.mileage.trim() || !Number.isFinite(miles) || miles < 0 || miles > 2_000_000)
-        e.mileage = "Enter your current mileage";
-      if (!/^\d{5}(-\d{4})?$/.test(form.zipCode.trim())) e.zipCode = "Enter a valid ZIP code";
+        e.mileage = t("quote.details.errMileage");
+      if (!/^\d{5}(-\d{4})?$/.test(form.zipCode.trim())) e.zipCode = t("quote.details.errZip");
     }
 
-    if (step === 3) {
-      if (!form.firstName.trim()) e.firstName = "First name is required";
+    if (step === STEP_CONTACT) {
+      if (!form.firstName.trim()) e.firstName = t("quote.contact.errFirst");
       const needsPhone = form.contactMethod === "text" || form.contactMethod === "call";
       const phoneOk = /^[0-9+()\-.\s]{7,20}$/.test(form.phone.trim());
-      if (needsPhone && !phoneOk) e.phone = "Add a mobile number so we can reach you.";
-      if (!needsPhone && form.phone.trim() && !phoneOk) e.phone = "Enter a valid mobile number";
+      if (needsPhone && !phoneOk) e.phone = t("quote.contact.errPhone");
+      if (!needsPhone && form.phone.trim() && !phoneOk)
+        e.phone = t("quote.contact.errPhoneInvalid");
       const emailOk = /^\S+@\S+\.\S+$/.test(form.email.trim());
       if (form.contactMethod === "email" && !emailOk)
-        e.email = "Add an email address so we can send your quote.";
+        e.email = t("quote.contact.errEmail");
       if (form.contactMethod !== "email" && form.email.trim() && !emailOk)
-        e.email = "Enter a valid email";
+        e.email = t("quote.contact.errEmailInvalid");
     }
 
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
-  function next() {
+  function goTo(nextStep: number) {
+    setStep(nextStep);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /**
+   * Asks the AI for 1–3 clarifying questions about what the customer described.
+   * Any failure (or nothing worth asking) simply skips the step — AI is never
+   * allowed to block a submission.
+   */
+  async function loadIntakeQuestions() {
+    setPreparing(true);
+    try {
+      const result = await askIntakeQuestions({
+        data: {
+          language: lang,
+          vehicle: {
+            year: form.vehicleMode === "vin" ? form.decoded?.year : form.year,
+            make: form.vehicleMode === "vin" ? form.decoded?.make : form.make,
+            model: form.vehicleMode === "vin" ? form.decoded?.model : form.model,
+            trim: form.decoded?.trim ?? "",
+            engine: configSummary(form.config) || undefined,
+            drivetrain: form.config.drivetrain,
+            hasVin: form.vehicleMode === "vin",
+          },
+          mileage: form.mileage,
+          services: form.services.map((key) => ({
+            label: serviceLabel(key),
+            answers: Object.entries(form.answers[key] ?? {}).flatMap(([qid, v]) =>
+              (Array.isArray(v) ? v : [String(v)])
+                .filter(Boolean)
+                .map((x) => `${qid}: ${answerText(key, qid, x)}`),
+            ),
+          })),
+          notes: form.notes || undefined,
+        },
+      });
+      return result.questions;
+    } catch {
+      return [] as IntakeQuestion[];
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  async function next() {
     if (!validateStep()) return;
-    if (step === 0) {
+    if (step === STEP_VEHICLE) {
       track("vehicle_added", { method: form.vehicleMode });
       track("vehicle_completed", { method: form.vehicleMode });
     }
-    if (step === 1) track("service_selected", { services: form.services.join(",") });
-    if (step === 2) {
+    if (step === STEP_SERVICE) track("service_selected", { services: form.services.join(",") });
+    if (step === STEP_DETAILS) {
       track("quote_form_completed");
       track("details_completed");
+
+      const questions = form.intakeQuestions.length
+        ? form.intakeQuestions
+        : await loadIntakeQuestions();
+      if (questions.length) {
+        patch({ intakeQuestions: questions });
+        track("intake_questions_shown", { count: questions.length });
+        goTo(STEP_QUESTIONS);
+        return;
+      }
       track("contact_started");
+      goTo(STEP_CONTACT);
+      return;
     }
-    setStep((s) => Math.min(s + 1, 3));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (step === STEP_QUESTIONS) {
+      track("intake_questions_answered", {
+        answered: String(
+          form.intakeQuestions.filter((q) => (form.intakeAnswers[q.id] ?? "").trim()).length,
+        ),
+      });
+      track("contact_started");
+      goTo(STEP_CONTACT);
+      return;
+    }
+    goTo(Math.min(step + 1, STEP_CONTACT));
   }
 
   function back() {
     setErrors({});
-    setStep((s) => Math.max(s - 1, 0));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // Skip the AI step on the way back when there was nothing to ask.
+    const previous =
+      step === STEP_CONTACT && form.intakeQuestions.length === 0 ? STEP_DETAILS : step - 1;
+    goTo(Math.max(previous, STEP_VEHICLE));
   }
 
   if (confirmation) {
