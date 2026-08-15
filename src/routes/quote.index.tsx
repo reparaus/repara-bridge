@@ -1239,6 +1239,78 @@ function DetailsStep({
   );
 }
 
+/* ------------------------- AI-ASSISTED FOLLOW-UPS ------------------------- */
+
+/**
+ * Optional AI step. The questions come from the model, the answers are the
+ * customer's own words, and every question can be skipped — the AI never
+ * diagnoses, prices, or blocks the request.
+ */
+function FollowupsStep({
+  form,
+  patch,
+}: {
+  form: FormState;
+  patch: (n: Partial<FormState>) => void;
+}) {
+  const { t } = useI18n();
+
+  function setAnswer(id: string, value: string) {
+    patch({ intakeAnswers: { ...form.intakeAnswers, [id]: value } });
+  }
+
+  return (
+    <div className="space-y-7">
+      <div>
+        <h1 className="font-display text-3xl font-extrabold">{t("quote.followups.title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("quote.followups.sub")}</p>
+      </div>
+
+      {form.intakeQuestions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t("quote.followups.unavailable")}</p>
+      ) : (
+        form.intakeQuestions.map((question) => {
+          const value = form.intakeAnswers[question.id] ?? "";
+          const id = `intake-${question.id}`;
+          return (
+            <section key={question.id} className="surface-panel space-y-3 p-5">
+              <h2 className="text-sm font-medium">{question.question}</h2>
+
+              {question.answerType === "text" || question.options.length === 0 ? (
+                <Textarea
+                  id={id}
+                  rows={3}
+                  value={value}
+                  placeholder={t("quote.followups.answerPlaceholder")}
+                  aria-label={t("quote.followups.answerLabel")}
+                  onChange={(e) => setAnswer(question.id, e.target.value)}
+                />
+              ) : (
+                <OptionGroup
+                  columns={1}
+                  options={question.options.map((o) => ({ value: o, label: o }))}
+                  value={value ? [value] : []}
+                  onChange={(next) => setAnswer(question.id, next[0] ?? "")}
+                />
+              )}
+
+              {value && (
+                <button
+                  type="button"
+                  onClick={() => setAnswer(question.id, "")}
+                  className="text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
+                >
+                  {t("quote.followups.skipQuestion")}
+                </button>
+              )}
+            </section>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 /* ---------------------------------- STEP 4 --------------------------------- */
 
 function ContactStep({
@@ -1341,8 +1413,10 @@ function Confirmation({
   outsideArea?: boolean;
   onAnother: () => void;
 }) {
+  const { t, lang } = useI18n();
   const contactLabel =
-    CONTACT_METHODS.find((c) => c.value === snapshot.contactMethod)?.label ?? "Text";
+    contactMethodChoices(t).find((c) => c.value === snapshot.contactMethod)?.label ??
+    t("quote.contact.methodText");
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 py-16">
@@ -1351,35 +1425,29 @@ function Confirmation({
           <Check className="size-6 text-chrome" />
         </span>
         <h1 className="mt-6 font-display text-3xl font-extrabold">
-          {outsideArea ? "Request received." : "Quote request received."}
+          {outsideArea ? t("quote.confirm.titleOutside") : t("quote.confirm.title")}
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          {outsideArea ? (
-            <>
-              We don't currently service ZIP {snapshot.zipCode.trim().slice(0, 5)} — our mobile
-              service area is Corona and Riverside, California right now. Your request was received
-              and saved, and we'll reach out if we expand to your area.
-            </>
-          ) : (
-            <>
-              We'll review your vehicle and requested services and send your personalized quote
-              shortly. No work is authorized until you accept your quote.
-            </>
-          )}
+          {outsideArea
+            ? t("quote.confirm.bodyOutside", { zip: snapshot.zipCode.trim().slice(0, 5) })
+            : t("quote.confirm.body")}
         </p>
 
 
         <div className="surface-panel mt-8 space-y-4 p-5 text-left">
-          <Row label="Request" value={`#${requestNumber}`} />
-          <Row label="Vehicle" value={vehicleTitle(snapshot) || "—"} />
+          <Row label={t("quote.confirm.request")} value={`#${requestNumber}`} />
+          <Row label={t("quote.confirm.vehicle")} value={vehicleTitle(snapshot) || "—"} />
           {configSummary(snapshot.config) && (
-            <Row label="Configuration" value={configSummary(snapshot.config)} />
+            <Row label={t("quote.confirm.configuration")} value={configSummary(snapshot.config)} />
           )}
-          <Row label="Mileage" value={`${formatMiles(snapshot.mileage)} miles`} />
+          <Row
+            label={t("quote.confirm.mileage")}
+            value={`${formatMiles(snapshot.mileage)} ${t("quote.confirm.miles")}`}
+          />
 
           <div className="border-t border-border pt-4">
             <p className="text-xs tracking-[0.16em] text-muted-foreground uppercase">
-              Requested services
+              {t("quote.confirm.requested")}
             </p>
             <ul className="mt-2 space-y-2">
               {snapshot.services.map((key) => {
@@ -1387,15 +1455,15 @@ function Confirmation({
                 const detail = Object.entries(answers)
                   .flatMap(([qid, v]) =>
                     Array.isArray(v)
-                      ? v.map((x) => answerLabel(key, qid, x))
+                      ? v.map((x) => localizedAnswerLabel(key, qid, x, lang))
                       : String(v).trim()
-                        ? [answerLabel(key, qid, String(v).trim())]
+                        ? [localizedAnswerLabel(key, qid, String(v).trim(), lang)]
                         : [],
                   )
                   .join(" · ");
                 return (
                   <li key={key} className="text-sm">
-                    <span className="font-medium">{serviceLabel(key)}</span>
+                    <span className="font-medium">{localizedServiceLabel(key, lang)}</span>
                     {detail && (
                       <span className="mt-0.5 block text-xs text-muted-foreground">{detail}</span>
                     )}
@@ -1406,13 +1474,13 @@ function Confirmation({
           </div>
 
           <div className="border-t border-border pt-4">
-            <Row label="Preferred contact" value={contactLabel} />
+            <Row label={t("quote.confirm.preferredContact")} value={contactLabel} />
           </div>
         </div>
 
         <div className="mt-8 space-y-3">
           <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
-            <Link to="/">BACK TO REPARA</Link>
+            <Link to="/">{t("quote.confirm.backHome")}</Link>
           </Button>
           <Button
             variant="outline"
@@ -1420,12 +1488,21 @@ function Confirmation({
             onClick={onAnother}
             className="h-13 w-full rounded-full border-border bg-transparent text-sm tracking-[0.12em]"
           >
-            REQUEST ANOTHER QUOTE
+            {t("quote.confirm.another")}
           </Button>
         </div>
       </div>
     </div>
   );
+}
+
+/** Contact-method choices with localized labels; stored values stay stable. */
+function contactMethodChoices(t: (path: string) => string) {
+  return [
+    { value: "text", label: t("quote.contact.methodText") },
+    { value: "call", label: t("quote.contact.methodCall") },
+    { value: "email", label: t("quote.contact.methodEmail") },
+  ];
 }
 
 function Row({ label, value }: { label: string; value: string }) {
