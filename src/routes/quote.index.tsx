@@ -964,6 +964,8 @@ function ServiceStep({
   patch: (n: Partial<FormState>) => void;
   errors: Record<string, string>;
 }) {
+  const { t, lang } = useI18n();
+
   function toggleService(key: string) {
     const selected = form.services.includes(key);
     const services = selected ? form.services.filter((k) => k !== key) : [...form.services, key];
@@ -984,8 +986,8 @@ function ServiceStep({
   return (
     <div className="space-y-7">
       <div>
-        <h1 className="font-display text-3xl font-extrabold">What does your vehicle need?</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Select all that apply.</p>
+        <h1 className="font-display text-3xl font-extrabold">{t("quote.service.title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("quote.service.sub")}</p>
         {errors.services && <p className="mt-2 text-sm text-destructive">{errors.services}</p>}
       </div>
 
@@ -993,23 +995,23 @@ function ServiceStep({
         {SERVICES.map((s) => (
           <ServiceCard
             key={s.key}
-            label={s.label}
-            blurb={s.blurb}
+            label={localizedServiceLabel(s.key, lang)}
+            blurb={localizedServiceBlurb(s.key, lang)}
             selected={form.services.includes(s.key)}
             onSelect={() => toggleService(s.key)}
           />
         ))}
       </div>
 
-      <p className="text-xs leading-relaxed text-muted-foreground">{MOBILE_SCOPE_NOTE}</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">{t("quote.scopeNote")}</p>
 
       {form.services.map((key) => {
-        const questions = SERVICE_QUESTIONS[key as ServiceKey] ?? [];
+        const questions = localizedQuestions(key as ServiceKey, lang);
         if (questions.length === 0) return null;
         return (
           <section key={key} className="surface-panel space-y-5 p-5">
             <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">
-              {serviceLabel(key)}
+              {localizedServiceLabel(key, lang)}
             </p>
             {questions.map((q) => (
               <QuestionField
@@ -1102,16 +1104,17 @@ function DetailsStep({
   patch: (n: Partial<FormState>) => void;
   errors: Record<string, string>;
 }) {
+  const { t, lang } = useI18n();
   const photoPrompt =
-    form.services.map((k) => PHOTO_PROMPTS[k as ServiceKey]).find(Boolean) ??
-    "Warning lights, leaks, tires, damaged parts — anything you'd like us to see.";
+    form.services.map((k) => localizedPhotoPrompt(k as ServiceKey, lang)).find(Boolean) ??
+    t("quote.details.photosDefaultHint");
 
   function handleFiles(files: FileList | null) {
     if (!files?.length) return;
     const remaining = MAX_PHOTOS - form.photos.length;
     const selected = Array.from(files).slice(0, remaining);
     if (selected.length === 0) {
-      toast.error(`You can attach up to ${MAX_PHOTOS} photos.`);
+      toast.error(t("quote.details.photoMax", { max: MAX_PHOTOS }));
       return;
     }
 
@@ -1119,11 +1122,11 @@ function DetailsStep({
     const accepted: File[] = [];
     for (const file of selected) {
       if (!file.type.startsWith("image/")) {
-        toast.error("Photos only for now — please upload an image.");
+        toast.error(t("quote.details.photoImagesOnly"));
         continue;
       }
       if (file.size > MAX_PHOTO_BYTES) {
-        toast.error(`${file.name} is too large. Keep photos under 8 MB.`);
+        toast.error(t("quote.details.photoTooLarge", { name: file.name }));
         continue;
       }
       accepted.push(file);
@@ -1135,17 +1138,15 @@ function DetailsStep({
   return (
     <div className="space-y-7">
       <div>
-        <h1 className="font-display text-3xl font-extrabold">A few more details</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This helps us quote accurately the first time.
-        </p>
+        <h1 className="font-display text-3xl font-extrabold">{t("quote.details.title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("quote.details.sub")}</p>
       </div>
 
       <Field
-        label="Current mileage"
+        label={t("quote.details.mileage")}
         htmlFor="mileage"
         error={errors.mileage}
-        hint="We record mileage at each visit to keep your vehicle's service history accurate."
+        hint={t("quote.details.mileageHint")}
       >
         <Input
           id="mileage"
@@ -1160,10 +1161,10 @@ function DetailsStep({
       </Field>
 
       <Field
-        label="ZIP code"
+        label={t("quote.details.zip")}
         htmlFor="zip"
         error={errors.zipCode}
-        hint="We come to you — ZIP code lets us confirm you're in our service area. You'll provide the exact service address when scheduling."
+        hint={t("quote.details.zipHint")}
       >
         <Input
           id="zip"
@@ -1178,17 +1179,17 @@ function DetailsStep({
         />
       </Field>
 
-      <Field label="Anything else we should know?" optional htmlFor="notes">
+      <Field label={t("quote.details.notes")} optional htmlFor="notes">
         <Textarea
           id="notes"
           rows={4}
           value={form.notes}
-          placeholder="Timing, previous work, symptoms, anything else that may help…"
+          placeholder={t("quote.details.notesPlaceholder")}
           onChange={(e) => patch({ notes: e.target.value })}
         />
       </Field>
 
-      <Field label="Photos" optional hint={photoPrompt}>
+      <Field label={t("quote.details.photos")} optional hint={photoPrompt}>
         <div className="space-y-3">
           <label className="flex min-h-[110px] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface px-4 py-6 text-center transition-colors hover:border-chrome/50">
             <input
@@ -1203,7 +1204,7 @@ function DetailsStep({
               }}
             />
             <Camera className="size-5 text-chrome" />
-            <span className="text-sm text-muted-foreground">Take or choose photos</span>
+            <span className="text-sm text-muted-foreground">{t("quote.details.photoAdd")}</span>
           </label>
 
           {form.photos.length > 0 && (
@@ -1219,7 +1220,7 @@ function DetailsStep({
                   </span>
                   <button
                     type="button"
-                    aria-label="Remove photo"
+                    aria-label={t("quote.details.photoRemove")}
                     className="-m-2 p-2 text-muted-foreground hover:text-foreground"
                     onClick={() => patch({ photos: form.photos.filter((_, i) => i !== index) })}
                   >
@@ -1249,25 +1250,26 @@ function ContactStep({
   patch: (n: Partial<FormState>) => void;
   errors: Record<string, string>;
 }) {
+  const { t } = useI18n();
   const emailRequired = form.contactMethod === "email";
   const phoneRequired = form.contactMethod === "text" || form.contactMethod === "call";
 
   return (
     <div className="space-y-7">
       <div>
-        <h1 className="font-display text-3xl font-extrabold">Where should we send your quote?</h1>
-        <p className="mt-2 text-sm text-muted-foreground">No account needed.</p>
+        <h1 className="font-display text-3xl font-extrabold">{t("quote.contact.title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("quote.contact.sub")}</p>
       </div>
 
-      <Field label="Preferred contact method">
+      <Field label={t("quote.contact.method")}>
         <OptionGroup
-          options={CONTACT_METHODS}
+          options={contactMethodChoices(t)}
           value={[form.contactMethod]}
           onChange={(v) => patch({ contactMethod: v[0] ?? "text" })}
         />
       </Field>
 
-      <Field label="First name" htmlFor="first" error={errors.firstName}>
+      <Field label={t("quote.contact.first")} htmlFor="first" error={errors.firstName}>
         <Input
           id="first"
           value={form.firstName}
@@ -1277,7 +1279,7 @@ function ContactStep({
         />
       </Field>
 
-      <Field label="Last name" htmlFor="last" optional>
+      <Field label={t("quote.contact.last")} htmlFor="last" optional>
         <Input
           id="last"
           value={form.lastName}
@@ -1287,7 +1289,12 @@ function ContactStep({
         />
       </Field>
 
-      <Field label="Mobile phone" htmlFor="phone" optional={!phoneRequired} error={errors.phone}>
+      <Field
+        label={t("quote.contact.phone")}
+        htmlFor="phone"
+        optional={!phoneRequired}
+        error={errors.phone}
+      >
         <Input
           id="phone"
           type="tel"
@@ -1300,7 +1307,12 @@ function ContactStep({
         />
       </Field>
 
-      <Field label="Email" htmlFor="email" optional={!emailRequired} error={errors.email}>
+      <Field
+        label={t("quote.contact.email")}
+        htmlFor="email"
+        optional={!emailRequired}
+        error={errors.email}
+      >
         <Input
           id="email"
           type="email"
