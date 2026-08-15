@@ -48,12 +48,9 @@ export function ComboboxInput({
   const wrapRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  // An exact match means "already chosen" — show the full list rather than a
-  // single row, so the customer can switch to a neighbouring option in one tap.
-  const exact = options.some((o) => o.toLowerCase() === value.trim().toLowerCase());
   const results = useMemo(
-    () => rankSuggestions(options, exact ? "" : value, Math.max(limit * 4, 40)),
-    [options, value, exact, limit],
+    () => rankSuggestions(options, value, Math.max(limit * 4, 40)),
+    [options, value, limit],
   );
 
   // Close on outside pointer down — more reliable on mobile than blur, which
@@ -134,10 +131,26 @@ export function ComboboxInput({
         className="h-12 pr-10"
         onFocus={() => setOpen(true)}
         onClick={() => setOpen(true)}
+        onBlur={() => {
+          // Let an option's pointerdown commit first, then close for keyboard or
+          // mobile focus changes while preserving any free-typed value.
+          window.setTimeout(() => {
+            if (!wrapRef.current?.contains(document.activeElement)) {
+              setOpen(false);
+              setActive(-1);
+            }
+          }, 0);
+        }}
         onKeyDown={onKeyDown}
         onChange={(event) => {
-          onChange(event.target.value);
-          setOpen(true);
+          const next = event.target.value;
+          const exactMatch = options.find(
+            (option) => option.toLowerCase() === next.trim().toLowerCase(),
+          );
+          onChange(exactMatch ?? next);
+          // A complete known value resolves immediately. Focusing/clicking the
+          // completed field later intentionally opens it again for editing.
+          setOpen(!exactMatch);
           setActive(-1);
         }}
       />

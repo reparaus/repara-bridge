@@ -22,6 +22,16 @@ import { OptionGroup } from "@/components/common/OptionGroup";
 import { ProgressStepper } from "@/components/common/ProgressStepper";
 import { ServiceCard } from "@/components/common/ServiceCard";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
@@ -239,6 +249,7 @@ function QuoteFlow() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [hydrated, setHydrated] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<ReturnType<typeof loadDraft>>(null);
   /** True only while the AI is preparing intake follow-ups. */
   const [preparing, setPreparing] = useState(false);
   const [confirmation, setConfirmation] = useState<{
@@ -249,10 +260,7 @@ function QuoteFlow() {
 
   useEffect(() => {
     const draft = loadDraft();
-    if (draft?.data) {
-      setForm((f) => ({ ...f, ...(draft.data as Partial<FormState>) }));
-      setStep(Math.min(draft.step ?? 0, STEP_CONTACT));
-    }
+    if (draft?.data) setPendingDraft(draft);
     if (preselectedService) {
       setForm((f) =>
         f.services.includes(preselectedService)
@@ -262,9 +270,34 @@ function QuoteFlow() {
     }
     // One idempotency key per quote attempt, reused across retries.
     setForm((f) => (f.submissionId ? f : { ...f, submissionId: crypto.randomUUID() }));
-    setHydrated(true);
+    // Do not save the empty initial state over a draft while the choice is open.
+    setHydrated(!draft);
     track("quote_started");
   }, [preselectedService]);
+
+  function continueDraft() {
+    if (!pendingDraft) return;
+    setForm((current) => ({
+      ...current,
+      ...(pendingDraft.data as Partial<FormState>),
+      submissionId:
+        typeof pendingDraft.data.submissionId === "string"
+          ? pendingDraft.data.submissionId
+          : current.submissionId,
+    }));
+    setStep(Math.min(pendingDraft.step ?? 0, STEP_CONTACT));
+    setPendingDraft(null);
+    setHydrated(true);
+  }
+
+  function startNewRequest() {
+    clearDraft();
+    setForm({ ...EMPTY, submissionId: crypto.randomUUID() });
+    setStep(0);
+    setErrors({});
+    setPendingDraft(null);
+    setHydrated(true);
+  }
 
   useEffect(() => {
     if (!hydrated || confirmation) return;
@@ -534,6 +567,24 @@ function QuoteFlow() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <AlertDialog open={Boolean(pendingDraft)}>
+        <AlertDialogContent className="max-w-sm rounded-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("home.draftPrompt")}</AlertDialogTitle>
+            <AlertDialogDescription className="sr-only">
+              {t("home.draftPrompt")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={startNewRequest}>
+              {t("home.startNewRequest")}
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={continueDraft}>
+              {t("home.continueRequest")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
           {step === STEP_VEHICLE ? (
@@ -864,10 +915,6 @@ function VehicleFields({
   );
   const trims = useMemo(() => trimSuggestions(form.make, form.model), [form.make, form.model]);
 
-  /** A value is "suggested" when it came from a list, so it's safe to refresh. */
-  const isSuggested = (value: string, options: string[]) =>
-    options.some((o) => o.toLowerCase() === value.trim().toLowerCase());
-
   return (
     <>
       <Field
@@ -894,16 +941,7 @@ function VehicleFields({
           options={MAKES}
           autoCapitalize="words"
           placeholder="Lexus"
-          onChange={(next) => {
-            // Changing the make invalidates suggestion-derived model/trim only.
-            const keepModel = form.model && !isSuggested(form.model, modelOptions);
-            const keepTrim = form.trim && !isSuggested(form.trim, trims);
-            patch({
-              make: next,
-              model: keepModel ? form.model : "",
-              trim: keepTrim ? form.trim : "",
-            });
-          }}
+          onChange={(next) => patch({ make: next })}
         />
       </Field>
 
@@ -915,10 +953,7 @@ function VehicleFields({
           loading={modelsLoading}
           autoCapitalize="words"
           placeholder="RX 350"
-          onChange={(next) => {
-            const keepTrim = form.trim && !isSuggested(form.trim, trims);
-            patch({ model: next, trim: keepTrim ? form.trim : "" });
-          }}
+          onChange={(next) => patch({ model: next })}
         />
       </Field>
 
