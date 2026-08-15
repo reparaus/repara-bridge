@@ -1,11 +1,12 @@
 /**
  * VIN barcode scanning helpers (browser-only, no network, no uploads).
  *
- * Detection happens entirely on-device with ZXing. We intentionally do not use
- * the browser's native `BarcodeDetector`: some Android browser/camera builds
- * surface their own Google barcode action UI over the page. Keeping one decoder
- * also makes detection behavior consistent across iOS and Android.
+ * Decoding runs on the ZXing WASM engine — the same C++ implementation native
+ * apps use — inside a Web Worker when available. We intentionally do not use the
+ * browser's native `BarcodeDetector`: some Android camera builds surface their
+ * own barcode action UI over the page.
  */
+
 
 import { VIN_LENGTH } from "./vin";
 
