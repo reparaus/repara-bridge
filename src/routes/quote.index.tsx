@@ -67,6 +67,10 @@ import {
   validateVin,
 } from "@/lib/vin";
 import { VinScanner } from "@/components/quote/VinScanner";
+import { ComboboxInput } from "@/components/quote/ComboboxInput";
+import { MAKES, trimSuggestions, yearOptions } from "@/lib/vehicle-data";
+import { useModelSuggestions } from "@/lib/use-model-suggestions";
+
 
 export const Route = createFileRoute("/quote/")({
   /**
