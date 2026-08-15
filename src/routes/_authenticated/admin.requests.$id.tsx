@@ -6,6 +6,8 @@ import { ArrowLeft, Copy, Loader2, Mail, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { CopyValue } from "@/components/admin/CopyValue";
+import { ReparaAiCard } from "@/components/admin/ReparaAiCard";
+
 import { Field } from "@/components/common/Field";
 import { LoadingState } from "@/components/common/LoadingState";
 import { formatCurrency, PriceSummary } from "@/components/common/PriceSummary";
