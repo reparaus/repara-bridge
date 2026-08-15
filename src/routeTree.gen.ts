@@ -17,6 +17,7 @@ import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminResetPasswordRouteImport } from './routes/admin.reset-password'
 import { Route as QuoteIndexRouteImport } from './routes/quote.index'
 import { Route as QuoteTokenRouteImport } from './routes/quote.$token'
+import { Route as ReplyTokenRouteImport } from './routes/reply.$token'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as AuthenticatedAdminRequestsIndexRouteImport } from './routes/_authenticated/admin.requests.index'
 import { Route as AuthenticatedAdminRequestsIdRouteImport } from './routes/_authenticated/admin.requests.$id'
@@ -60,6 +61,11 @@ const QuoteTokenRoute = QuoteTokenRouteImport.update({
   path: '/quote/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReplyTokenRoute = ReplyTokenRouteImport.update({
+  id: '/reply/$token',
+  path: '/reply/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
@@ -85,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/quote/$token': typeof QuoteTokenRoute
+  '/reply/$token': typeof ReplyTokenRoute
   '/quote/': typeof QuoteIndexRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
@@ -97,6 +104,7 @@ export interface FileRoutesByTo {
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/quote/$token': typeof QuoteTokenRoute
+  '/reply/$token': typeof ReplyTokenRoute
   '/quote': typeof QuoteIndexRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
@@ -111,6 +119,7 @@ export interface FileRoutesById {
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/quote/$token': typeof QuoteTokenRoute
+  '/reply/$token': typeof ReplyTokenRoute
   '/quote/': typeof QuoteIndexRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/reset-password'
     | '/quote/$token'
+    | '/reply/$token'
     | '/quote/'
     | '/admin/'
     | '/admin/requests/$id'
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/reset-password'
     | '/quote/$token'
+    | '/reply/$token'
     | '/quote'
     | '/admin'
     | '/admin/requests/$id'
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/reset-password'
     | '/quote/$token'
+    | '/reply/$token'
     | '/quote/'
     | '/_authenticated/admin/'
     | '/_authenticated/admin/requests/$id'
@@ -164,6 +176,7 @@ export interface RootRouteChildren {
   AdminLoginRoute: typeof AdminLoginRoute
   AdminResetPasswordRoute: typeof AdminResetPasswordRoute
   QuoteTokenRoute: typeof QuoteTokenRoute
+  ReplyTokenRoute: typeof ReplyTokenRoute
   QuoteIndexRoute: typeof QuoteIndexRoute
 }
 
@@ -225,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof QuoteTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reply/$token': {
+      id: '/reply/$token'
+      path: '/reply/$token'
+      fullPath: '/reply/$token'
+      preLoaderRoute: typeof ReplyTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/admin/': {
       id: '/_authenticated/admin/'
       path: '/admin'
@@ -272,6 +292,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminLoginRoute: AdminLoginRoute,
   AdminResetPasswordRoute: AdminResetPasswordRoute,
   QuoteTokenRoute: QuoteTokenRoute,
+  ReplyTokenRoute: ReplyTokenRoute,
   QuoteIndexRoute: QuoteIndexRoute,
 }
 export const routeTree = rootRouteImport
