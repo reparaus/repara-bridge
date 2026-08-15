@@ -117,6 +117,9 @@ type FormState = {
   year: string;
   make: string;
   model: string;
+  /** Optional trim, typed or suggested. Prefilled from a VIN decode. */
+  trim: string;
+
   /** Structured engine/drivetrain configuration, sourced from VIN or customer. */
   config: VehicleConfig;
   /** Selected engine option id, when the customer had to answer the fallback. */
