@@ -113,6 +113,12 @@ export const es: Dictionary = {
       year: "Año",
       make: "Marca",
       model: "Modelo",
+      trim: "Versión",
+      searchHint: "Escribe para buscar o ingresa tu propio valor",
+      loadingOptions: "Cargando opciones del vehículo…",
+      noMatches: "Sin coincidencias — puedes ingresar tu propio valor",
+      editDecoded: "Revisar o editar los datos del vehículo",
+
       configIntro:
         "Un par de datos rápidos para cotizar correctamente refacciones, fluidos y mano de obra.",
       engineQNamed: "¿Qué motor tiene tu {vehicle}?",
