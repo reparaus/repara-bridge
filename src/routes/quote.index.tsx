@@ -188,6 +188,25 @@ function vehicleTitle(form: FormState) {
   return `${form.year} ${form.make} ${form.model}`.trim();
 }
 
+/** Localized label for a stored answer value (choice id or free text). */
+function answerText(serviceKey: string, questionId: string, value: string) {
+  return localizedAnswerLabel(serviceKey, questionId, value, "en");
+}
+
+/** Turns the AI questions + the customer's answers into storable follow-ups. */
+function collectFollowups(form: FormState): IntakeFollowup[] {
+  return form.intakeQuestions.map((q) => {
+    const answer = (form.intakeAnswers[q.id] ?? "").trim();
+    return {
+      questionId: q.id,
+      question: q.question,
+      answer,
+      category: q.category,
+      skipped: answer.length === 0,
+    };
+  });
+}
+
 function formatMiles(value: string) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toLocaleString() : value;
@@ -577,12 +596,16 @@ function QuoteFlow() {
 /* ------------------------------ shared pieces ------------------------------ */
 
 function InspectionNote() {
+  const { t } = useI18n();
+
   return (
     <div className="flex items-start gap-3 rounded-xl border border-chrome/30 bg-accent/60 p-4">
       <ShieldCheck className="mt-0.5 size-4 shrink-0 text-chrome" />
       <div>
-        <p className="text-sm font-medium">{INSPECTION_TITLE}</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{INSPECTION_BODY}</p>
+        <p className="text-sm font-medium">{t("quote.inspectionTitle")}</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {t("quote.inspectionBody")}
+        </p>
       </div>
     </div>
   );
@@ -599,6 +622,7 @@ function VehicleStep({
   patch: (n: Partial<FormState>) => void;
   errors: Record<string, string>;
 }) {
+  const { t, lang } = useI18n();
   const [decoding, setDecoding] = useState(false);
   const [vinMessage, setVinMessage] = useState<string | null>(null);
   const attempted = useRef<string | null>(null);
@@ -664,20 +688,18 @@ function VehicleStep({
   return (
     <div className="space-y-7">
       <div>
-        <h1 className="font-display text-3xl font-extrabold">What do you drive?</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Your VIN is the fastest way — we'll pull your year, make and model automatically.
-        </p>
+        <h1 className="font-display text-3xl font-extrabold">{t("quote.vehicle.title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("quote.vehicle.sub")}</p>
       </div>
 
       {form.vehicleMode === "vin" ? (
         <>
           <section className="surface-panel space-y-4 p-5">
             <Field
-              label="VIN"
+              label={t("quote.vehicle.vinLabel")}
               htmlFor="vin"
               error={errors.vin ?? vinMessage}
-              hint="17 characters — dashboard, door jamb, or your insurance card."
+              hint={t("quote.vehicle.vinHint")}
             >
               <Input
                 id="vin"
@@ -706,7 +728,7 @@ function VehicleStep({
                 disabled={decoding}
               >
                 {decoding ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-                {decoding ? "DECODING" : "DECODE VIN"}
+                {decoding ? t("quote.vehicle.decoding") : t("quote.vehicle.decode")}
               </Button>
               {/* Camera scan: decoding happens on-device, nothing is uploaded. */}
               <Button
@@ -715,14 +737,14 @@ function VehicleStep({
                 className="h-12 rounded-xl border-border bg-transparent"
                 onClick={() => {
                   if (!scanSupported) {
-                    toast("Camera scanning isn't available. Enter your VIN manually instead.");
+                    toast(t("vin.unavailable"));
                     return;
                   }
                   setVinMessage(null);
                   setScannerOpen(true);
                 }}
               >
-                <ScanLine className="mr-2 size-4" /> SCAN VIN
+                <ScanLine className="mr-2 size-4" /> {t("quote.vehicle.scan")}
               </Button>
             </div>
 
@@ -738,15 +760,16 @@ function VehicleStep({
                 }}
                 onClose={(reason) => {
                   setScannerOpen(false);
-                  if (reason === "unavailable")
-                    toast("Camera scanning isn't available. Enter your VIN manually instead.");
+                  if (reason === "unavailable") toast(t("vin.unavailable"));
                 }}
               />
             )}
 
             {form.decoded && (
               <div className="rounded-xl border border-chrome/40 bg-accent p-4">
-                <p className="text-[11px] tracking-[0.2em] text-chrome uppercase">Vehicle found</p>
+                <p className="text-[11px] tracking-[0.2em] text-chrome uppercase">
+                  {t("quote.vehicle.found")}
+                </p>
                 <p className="mt-1 font-display text-lg font-semibold">{vehicleTitle(form)}</p>
                 {configSummary(form.config) && (
                   <p className="mt-1 text-xs text-muted-foreground">{configSummary(form.config)}</p>
@@ -771,13 +794,13 @@ function VehicleStep({
             }
             className="mx-auto flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
           >
-            <Pencil className="size-3.5" /> Enter vehicle details instead
+            <Pencil className="size-3.5" /> {t("quote.vehicle.manualLink")}
           </button>
         </>
       ) : (
         <>
           <section className="surface-panel space-y-4 p-5">
-            <Field label="Year" htmlFor="year" error={errors.year}>
+            <Field label={t("quote.vehicle.year")} htmlFor="year" error={errors.year}>
               <Input
                 id="year"
                 value={form.year}
@@ -789,7 +812,7 @@ function VehicleStep({
                 className="h-12"
               />
             </Field>
-            <Field label="Make" htmlFor="make" error={errors.make}>
+            <Field label={t("quote.vehicle.make")} htmlFor="make" error={errors.make}>
               <Input
                 id="make"
                 value={form.make}
@@ -800,7 +823,7 @@ function VehicleStep({
                 className="h-12"
               />
             </Field>
-            <Field label="Model" htmlFor="model" error={errors.model}>
+            <Field label={t("quote.vehicle.model")} htmlFor="model" error={errors.model}>
               <Input
                 id="model"
                 value={form.model}
@@ -818,7 +841,7 @@ function VehicleStep({
             onClick={() => patch({ vehicleMode: "vin" })}
             className="mx-auto flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
           >
-            <ScanLine className="size-3.5" /> Use my VIN instead
+            <ScanLine className="size-3.5" /> {t("quote.vehicle.useVinLink")}
           </button>
         </>
       )}
@@ -839,6 +862,7 @@ function VehicleConfigFallback({
   form: FormState;
   patch: (n: Partial<FormState>) => void;
 }) {
+  const { t, lang } = useI18n();
   const identified =
     form.vehicleMode === "vin"
       ? Boolean(form.decoded)
@@ -886,21 +910,26 @@ function VehicleConfigFallback({
   return (
     <section className="surface-panel space-y-6 p-5">
       <p className="text-xs leading-relaxed text-muted-foreground">
-        A couple of quick details so your parts, fluids and labor are quoted accurately.
+        {t("quote.vehicle.configIntro")}
       </p>
 
       {needsEngine && (
         <div className="space-y-3">
           <h2 className="text-sm font-medium">
             {engines.specific && make && model
-              ? `Which engine is in your ${year ? `${year} ` : ""}${make} ${model}?`
-              : "Which engine does your vehicle have?"}
+              ? t("quote.vehicle.engineQNamed", {
+                  vehicle: `${year ? `${year} ` : ""}${make} ${model}`,
+                })
+              : t("quote.vehicle.engineQ")}
           </h2>
           <OptionGroup
             columns={1}
             value={form.engineChoice ? [form.engineChoice] : []}
             onChange={(next) => chooseEngine(next[0] ?? "")}
-            options={engines.options.map((o) => ({ value: o.id, label: o.label }))}
+            options={engines.options.map((o) => ({
+              value: o.id,
+              label: localizedVehicleOption(o.id, o.label, lang),
+            }))}
           />
         </div>
       )}
@@ -912,7 +941,10 @@ function VehicleConfigFallback({
             columns={1}
             value={form.config.drivetrainSource === "customer" ? [form.config.drivetrain] : []}
             onChange={(next) => chooseDrivetrain(next[0] ?? "unknown")}
-            options={drivetrain.options.map((o) => ({ value: o.value, label: o.label }))}
+            options={drivetrain.options.map((o) => ({
+              value: o.value,
+              label: localizedVehicleOption(o.value, o.label, lang),
+            }))}
           />
         </div>
       )}
