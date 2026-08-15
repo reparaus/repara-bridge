@@ -20,7 +20,7 @@ const lineItemSchema = z.object({
 export const getAdminContext = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    // Approved admin (admin_users) + phone MFA completed (aal2 in the token).
+    // Approved admin (admin_users) + TOTP MFA completed (aal2 in the token).
     const claims = context.claims as { aal?: string } | null;
     const aal2 = claims?.aal === "aal2";
 

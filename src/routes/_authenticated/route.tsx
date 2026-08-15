@@ -9,7 +9,7 @@ export const Route = createFileRoute("/_authenticated")({
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) throw redirect({ to: "/admin/login" });
 
-    // First factor only (aal1) → finish phone MFA on the login screen.
+    // First factor only (aal1) → finish TOTP MFA on the login screen.
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (aal?.currentLevel !== "aal2") throw redirect({ to: "/admin/login" });
 
