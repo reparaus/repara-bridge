@@ -1,12 +1,15 @@
 /**
  * ZXing WASM decode core, shared by the main thread and the scan worker.
  *
- * The WASM binary is bundled with the app (no runtime CDN fetch), so scanning
- * works offline and no frame ever leaves the device.
+ * The WASM binary is served from our own origin (`public/wasm/`) and fetched by
+ * URL at runtime — never imported into a bundle — so scanning stays client-only
+ * and no frame ever leaves the device.
  */
 import type { ReaderOptions } from "zxing-wasm/reader";
-// Vite resolves this to a hashed asset served from our own origin.
-import wasmUrl from "zxing-wasm/reader/zxing_reader.wasm?url";
+
+/** Same-origin path to the decoder binary shipped in `public/wasm/`. */
+const WASM_URL = "/wasm/zxing_reader.wasm";
+
 
 /**
  * Tuned for factory VIN labels: long, thin Code 39 (often `I…I` delimited) and
