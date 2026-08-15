@@ -216,6 +216,10 @@ export async function persistQuoteRequest(data: QuoteInput) {
       vehicleEntryMethod: data.vehicle.entryMethod,
       vehicleTrim: data.vehicle.trim || "",
       services: Object.fromEntries(data.services.map((s) => [s.key, s.answers])),
+      // Duplicated inside details so the answers survive even on a database
+      // that has not run the intake migration yet.
+      preferredLanguage: data.preferredLanguage,
+      intakeFollowups: data.intakeFollowups,
     },
     notes: data.details.notes || null,
     mileage: data.details.mileage,
