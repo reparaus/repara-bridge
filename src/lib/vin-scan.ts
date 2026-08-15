@@ -35,7 +35,8 @@ export function extractVin(raw: string): string | null {
   if (!cleaned) return null;
 
   const candidates = [cleaned];
-  if (cleaned.length === VIN_LENGTH + 1 && cleaned.startsWith("I")) candidates.push(cleaned.slice(1));
+  if (cleaned.length === VIN_LENGTH + 1 && cleaned.startsWith("I"))
+    candidates.push(cleaned.slice(1));
   if (cleaned.length === VIN_LENGTH + 2 && cleaned.startsWith("I") && cleaned.endsWith("I"))
     candidates.push(cleaned.slice(1, -1));
 
@@ -75,6 +76,7 @@ export async function createFrameDecoder(): Promise<FrameDecoder> {
     BarcodeFormat,
     BinaryBitmap,
     HybridBinarizer,
+    GlobalHistogramBinarizer,
   } = zxing;
 
   const hints = new Map<number, unknown>();
@@ -100,17 +102,27 @@ export async function createFrameDecoder(): Promise<FrameDecoder> {
       () => source,
       () => source.invert(),
       () => source.rotateCounterClockwise(),
+      () => source.rotateCounterClockwise().invert(),
+    ];
+    // Hybrid handles uneven lighting; the global histogram binarizer is often
+    // the one that locks onto high-contrast printed VIN labels.
+    const binarizers = [
+      (s: unknown) => new HybridBinarizer(s as never),
+      (s: unknown) => new GlobalHistogramBinarizer(s as never),
     ];
     for (const make of variants) {
-      try {
-        const bitmap = new BinaryBitmap(new HybridBinarizer(make() as never));
-        const result = reader.decode(bitmap);
-        const text = result?.getText?.();
-        if (text) return text;
-      } catch {
-        // NotFoundException per variant is normal.
-      } finally {
-        reader.reset();
+      const luminance = make();
+      for (const binarize of binarizers) {
+        try {
+          const bitmap = new BinaryBitmap(binarize(luminance));
+          const result = reader.decode(bitmap);
+          const text = result?.getText?.();
+          if (text) return text;
+        } catch {
+          // NotFoundException per variant is normal.
+        } finally {
+          reader.reset();
+        }
       }
     }
     return null;
@@ -185,7 +197,7 @@ export async function findVinInSource(
   for (const raw of rects) {
     const rect = clampRect(raw, frameW, frameH);
     // Upscale narrow crops; downscale enormous ones to keep decoding fast.
-    const scales = rect.w < 1200 ? [Math.min(3, 1400 / rect.w), 1] : [1, 0.6];
+    const scales = rect.w < 1600 ? [Math.min(4, 1800 / rect.w), 2, 1] : [1, 0.6];
     for (const scale of scales) {
       const w = Math.max(16, Math.round(rect.w * scale));
       const h = Math.max(16, Math.round(rect.h * scale));
@@ -251,4 +263,3 @@ async function loadImage(file: File): Promise<ImageBitmap | HTMLImageElement> {
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 }
-
