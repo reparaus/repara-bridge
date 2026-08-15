@@ -4,10 +4,13 @@ import { ArrowRight, Wrench, BadgeCheck, Car } from "lucide-react";
 
 import heroVehicle from "@/assets/hero-vehicle.jpg";
 import { Logo } from "@/components/brand/Logo";
+import { LanguageToggle } from "@/components/common/LanguageToggle";
 import { ServiceCard } from "@/components/common/ServiceCard";
 import { Reviews } from "@/components/marketing/Reviews";
 import { TechnicianProfile, type Technician } from "@/components/marketing/TechnicianProfile";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
+import { localizedServiceBlurb, localizedServiceLabel } from "@/lib/i18n/catalog";
 import { LANDING_SERVICE_KEYS, SERVICES } from "@/lib/services";
 import { siteConfig } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
@@ -32,82 +35,74 @@ export const Route = createFileRoute("/")({
   component: Landing,
 });
 
-const STEPS = [
-  { n: "01", title: "Tell Us What You Drive", copy: "Year, make and model — or your VIN." },
-  { n: "02", title: "Choose What You Need", copy: "A few quick questions, no jargon." },
-  { n: "03", title: "Get Your Quote", copy: "Parts, labor and fees, itemized." },
-  { n: "04", title: "Approve & Schedule", copy: "Approve online. Nothing extra without you." },
+const STEP_NUMBERS = ["01", "02", "03", "04"] as const;
+const STEP_KEYS = [
+  { title: "home.steps.s1t", copy: "home.steps.s1c" },
+  { title: "home.steps.s2t", copy: "home.steps.s2c" },
+  { title: "home.steps.s3t", copy: "home.steps.s3c" },
+  { title: "home.steps.s4t", copy: "home.steps.s4c" },
 ];
 
 const TRUST_INDICATORS = [
-  { icon: Wrench, value: "5 Years", label: "Dealer Experience" },
-  { icon: BadgeCheck, value: "ASE Certified", label: "Technician" },
-  { icon: Car, value: "Toyota & Lexus", label: "Specialized" },
+  { icon: Wrench, key: "years" },
+  { icon: BadgeCheck, key: "ase" },
+  { icon: Car, key: "brands" },
 ];
 
-const WHY = [
-  {
-    title: "Dealer Experience",
-    copy: "Trained on the same procedures and tooling dealerships use.",
-  },
-  {
-    title: "Transparent Estimates",
-    copy: "Line-item parts, labor and fees before any work begins.",
-  },
-  {
-    title: "Personalized Service",
-    copy: "Work directly with the technician servicing your vehicle.",
-  },
-  {
-    title: "Simple Communication",
-    copy: "Text, call or email — clear answers, no runaround.",
-  },
+const WHY_KEYS = [
+  { title: "home.why.w1t", copy: "home.why.w1c" },
+  { title: "home.why.w2t", copy: "home.why.w2c" },
+  { title: "home.why.w3t", copy: "home.why.w3c" },
+  { title: "home.why.w4t", copy: "home.why.w4c" },
 ];
-
-const CARLOS: Technician = {
-  name: "Carlos",
-  role: "Founder • ASE Certified Automotive Technician",
-  bio: "ASE Certified automotive technician with 5 years of dealership experience — 3 years with Toyota and 2 years with Lexus. I started Repara to offer the same level of care and expertise without the dealership pricing and hassle.",
-  credentials: [
-    { value: "ASE Certified", label: "Automotive Technician" },
-    { value: "3 Years", label: "Toyota Experience" },
-    { value: "2 Years", label: "Lexus Experience" },
-  ],
-};
 
 function Landing() {
+  const { t, lang } = useI18n();
+
   useEffect(() => {
     track("landing_view");
   }, []);
+
+  const carlos: Technician = {
+    name: "Carlos",
+    role: t("home.techRole"),
+    bio: t("home.techBio"),
+    credentials: [
+      { value: t("home.creds.c1v"), label: t("home.creds.c1l") },
+      { value: t("home.creds.c2v"), label: t("home.creds.c2l") },
+      { value: t("home.creds.c3v"), label: t("home.creds.c3l") },
+    ],
+  };
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background">
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-xl">
         <div className="mx-auto grid h-16 max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5">
           <Logo />
-          <nav className="flex items-center gap-5 sm:gap-6">
+          <nav className="flex items-center gap-4 sm:gap-6">
             <a
               href="#services"
               className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block"
             >
-              Services
+              {t("nav.services")}
             </a>
             <a
               href="#how"
               className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block"
             >
-              How it works
+              {t("nav.how")}
             </a>
+            <LanguageToggle />
             <Button asChild size="sm" className="rounded-full px-5 tracking-wide">
               <Link to="/quote" onClick={() => track("quote_started", { source: "nav" })}>
-                Get a Quote
+                {t("nav.quote")}
               </Link>
             </Button>
           </nav>
         </div>
       </header>
 
-      <main>
+      <main key={lang} className="animate-in fade-in duration-300">
         {/* HERO */}
         <section className="relative overflow-hidden">
           <div className="absolute inset-0">
@@ -125,21 +120,20 @@ function Landing() {
 
           <div className="relative mx-auto max-w-6xl px-5 pt-14 pb-12 sm:pt-24 sm:pb-20">
             <p className="text-[11px] tracking-[0.24em] text-chrome uppercase">
-              Specializing in Toyota &amp; Lexus
+              {t("home.eyebrow")}
             </p>
             <h1 className="mt-4 max-w-2xl font-display text-[2.1rem] leading-[1.06] font-extrabold sm:text-6xl">
-              Dealer-Level Care.
-              <span className="block chrome-text">Without Dealer Prices.</span>
+              {t("home.title1")}
+              <span className="block chrome-text">{t("home.title2")}</span>
             </h1>
             <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground sm:text-lg">
-              Toyota &amp; Lexus service backed by dealership experience, with transparent pricing
-              and a simpler way to get your car serviced.
+              {t("home.sub")}
             </p>
 
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg" className="h-13 rounded-full px-8 text-sm tracking-[0.12em]">
                 <Link to="/quote" onClick={() => track("quote_started", { source: "hero" })}>
-                  GET A QUOTE <ArrowRight className="ml-1 size-4" />
+                  {t("home.ctaQuote")} <ArrowRight className="ml-1 size-4" />
                 </Link>
               </Button>
               <Button
@@ -148,21 +142,23 @@ function Landing() {
                 variant="outline"
                 className="h-13 rounded-full border-border bg-transparent px-8 text-sm tracking-[0.12em]"
               >
-                <a href="#services">VIEW SERVICES</a>
+                <a href="#services">{t("home.ctaServices")}</a>
               </Button>
             </div>
 
             <ul className="mt-9 grid max-w-2xl grid-cols-1 gap-2.5 sm:mt-10 sm:grid-cols-3 sm:gap-3">
-              {TRUST_INDICATORS.map(({ icon: Icon, value, label }) => (
+              {TRUST_INDICATORS.map(({ icon: Icon, key }) => (
                 <li
-                  key={label}
+                  key={key}
                   className="flex items-center gap-3 rounded-xl border border-border bg-surface/70 px-4 py-3 backdrop-blur hairline-top"
                 >
                   <Icon className="size-4 shrink-0 text-chrome" aria-hidden />
                   <span className="min-w-0 leading-tight">
-                    <span className="block text-sm font-semibold">{value}</span>
+                    <span className="block text-sm font-semibold">
+                      {t(`home.trust.${key}.value`)}
+                    </span>
                     <span className="block text-[11px] tracking-[0.16em] text-muted-foreground uppercase">
-                      {label}
+                      {t(`home.trust.${key}.label`)}
                     </span>
                   </span>
                 </li>
@@ -175,21 +171,21 @@ function Landing() {
         <section id="how" className="border-y border-border bg-light py-12 sm:py-16">
           <div className="mx-auto max-w-6xl px-5">
             <h2 className="font-display text-xs tracking-[0.28em] text-light-muted uppercase">
-              How it works
+              {t("home.howTitle")}
             </h2>
             <div className="mt-6 grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-              {STEPS.map((s) => (
+              {STEP_KEYS.map((s, i) => (
                 <div
-                  key={s.n}
+                  key={STEP_NUMBERS[i]}
                   className="rounded-xl border border-light-border bg-light-foreground/[0.03] p-5"
                 >
                   <span className="font-display text-sm tracking-[0.2em] text-light-muted">
-                    {s.n}
+                    {STEP_NUMBERS[i]}
                   </span>
                   <h3 className="mt-2 text-base font-semibold text-light-foreground sm:text-lg">
-                    {s.title}
+                    {t(s.title)}
                   </h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-light-muted">{s.copy}</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-light-muted">{t(s.copy)}</p>
                 </div>
               ))}
             </div>
@@ -199,10 +195,9 @@ function Landing() {
         {/* SERVICES */}
         <section id="services" className="py-14 sm:py-16">
           <div className="mx-auto max-w-6xl px-5">
-            <SectionLabel>Services</SectionLabel>
+            <SectionLabel>{t("home.servicesTitle")}</SectionLabel>
             <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
-              Tap a service to start your quote. Pricing is quoted per vehicle and per job — you'll
-              see the full breakdown before you approve anything.
+              {t("home.servicesIntro")}
             </p>
             <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {LANDING_SERVICE_KEYS.map((key) => {
@@ -210,8 +205,8 @@ function Landing() {
                 return (
                   <ServiceCard
                     key={key}
-                    label={service.label}
-                    blurb={service.blurb}
+                    label={localizedServiceLabel(service.key, lang)}
+                    blurb={localizedServiceBlurb(service.key, lang)}
                     startingAt={service.startingAt ?? undefined}
                     quoteServiceKey={service.key}
                   />
@@ -224,12 +219,14 @@ function Landing() {
         {/* WHY REPARA */}
         <section className="border-t border-border bg-surface/40 py-14 sm:py-16">
           <div className="mx-auto max-w-6xl px-5">
-            <SectionLabel>Why Repara</SectionLabel>
+            <SectionLabel>{t("home.whyTitle")}</SectionLabel>
             <div className="mt-6 grid gap-3 sm:grid-cols-2 sm:gap-4">
-              {WHY.map((w) => (
+              {WHY_KEYS.map((w) => (
                 <div key={w.title} className="elevated-panel p-5 sm:p-6">
-                  <h3 className="text-base font-semibold sm:text-lg">{w.title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{w.copy}</p>
+                  <h3 className="text-base font-semibold sm:text-lg">{t(w.title)}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                    {t(w.copy)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -239,22 +236,20 @@ function Landing() {
         {/* MEET YOUR TECHNICIAN */}
         <section className="border-t border-border py-14 sm:py-16">
           <div className="mx-auto max-w-6xl px-5">
-            <SectionLabel>Meet Your Technician</SectionLabel>
+            <SectionLabel>{t("home.techTitle")}</SectionLabel>
             <div className="mt-6">
-              <TechnicianProfile technician={CARLOS} />
+              <TechnicianProfile technician={carlos} />
             </div>
 
             <div className="mt-8 flex flex-col items-start gap-4 rounded-xl border border-border bg-surface/60 p-5 hairline-top sm:flex-row sm:items-center sm:justify-between sm:p-6">
-              <p className="font-display text-lg font-semibold">
-                Have a Toyota or Lexus that needs service?
-              </p>
+              <p className="font-display text-lg font-semibold">{t("home.bannerTitle")}</p>
               <Button
                 asChild
                 size="lg"
                 className="h-12 w-full shrink-0 rounded-full px-7 text-sm tracking-[0.12em] sm:w-auto"
               >
                 <Link to="/quote" onClick={() => track("quote_started", { source: "technician" })}>
-                  GET A QUOTE
+                  {t("home.ctaQuote")}
                 </Link>
               </Button>
             </div>
@@ -268,14 +263,12 @@ function Landing() {
         <section className="border-t border-border bg-surface/40 py-14 sm:py-16">
           <div className="mx-auto max-w-2xl px-5 text-center">
             <h2 className="font-display text-2xl font-extrabold sm:text-4xl">
-              Ready for Better Car Care?
+              {t("home.finalTitle")}
             </h2>
-            <p className="mt-3 text-sm text-muted-foreground sm:text-base">
-              Professional service. Straightforward pricing. No runaround.
-            </p>
+            <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t("home.finalSub")}</p>
             <Button asChild size="lg" className="mt-6 h-13 rounded-full px-9 text-sm tracking-[0.12em]">
               <Link to="/quote" onClick={() => track("quote_started", { source: "footer_cta" })}>
-                GET YOUR QUOTE
+                {t("home.finalCta")}
               </Link>
             </Button>
           </div>
@@ -286,8 +279,7 @@ function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-5 text-center sm:flex-row sm:justify-between sm:text-left">
           <Logo compact />
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Repara. Independent service provider. Not affiliated with
-            Toyota or Lexus.
+            © {new Date().getFullYear()} {t("home.footerNote")}
           </p>
         </div>
       </footer>
