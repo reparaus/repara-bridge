@@ -93,6 +93,10 @@ function AdminLoginPage() {
   }, [navigate]);
 
   useEffect(() => {
+    if (reset) toast.success("Password updated. Sign in with your new password.");
+  }, [reset]);
+
+  useEffect(() => {
     if (denied) {
       void supabase.auth.signOut().then(() => {
         setStage("password");
@@ -102,6 +106,24 @@ function AdminLoginPage() {
     }
     void resolveStage();
   }, [denied, resolveStage]);
+
+  async function handleForgotPassword() {
+    const target = email.trim();
+    if (!target) {
+      toast.error("Enter your admin email first.");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: `${window.location.origin}/admin/reset-password`,
+    });
+    setBusy(false);
+    if (error) {
+      toast.error(error.message || "Couldn't send the reset email.");
+      return;
+    }
+    toast.success("Check your email for a password reset link.");
+  }
 
   async function handlePassword(e: React.FormEvent) {
     e.preventDefault();
