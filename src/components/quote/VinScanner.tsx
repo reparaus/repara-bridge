@@ -40,6 +40,9 @@ export function VinScanner({
   const [torchOn, setTorchOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [frames, setFrames] = useState(0);
+  const [found, setFound] = useState(false);
+
 
   const stopCamera = useCallback(() => {
     stoppedRef.current = true;
