@@ -430,7 +430,7 @@ function QuoteFlow() {
             year: form.vehicleMode === "vin" ? form.decoded?.year : form.year,
             make: form.vehicleMode === "vin" ? form.decoded?.make : form.make,
             model: form.vehicleMode === "vin" ? form.decoded?.model : form.model,
-            trim: form.decoded?.trim ?? "",
+            trim: form.decoded?.trim ?? form.trim.trim(),
             engine: configSummary(form.config) || undefined,
             drivetrain: form.config.drivetrain,
             hasVin: form.vehicleMode === "vin",
