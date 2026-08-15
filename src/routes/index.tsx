@@ -131,7 +131,11 @@ function Landing() {
             </p>
 
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="h-13 rounded-full px-8 text-sm tracking-[0.12em]">
+              <Button
+                asChild
+                size="lg"
+                className="h-13 rounded-full px-8 text-sm tracking-[0.12em]"
+              >
                 <Link to="/quote" onClick={() => track("quote_started", { source: "hero" })}>
                   {t("home.ctaQuote")} <ArrowRight className="ml-1 size-4" />
                 </Link>
@@ -266,7 +270,11 @@ function Landing() {
               {t("home.finalTitle")}
             </h2>
             <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t("home.finalSub")}</p>
-            <Button asChild size="lg" className="mt-6 h-13 rounded-full px-9 text-sm tracking-[0.12em]">
+            <Button
+              asChild
+              size="lg"
+              className="mt-6 h-13 rounded-full px-9 text-sm tracking-[0.12em]"
+            >
               <Link to="/quote" onClick={() => track("quote_started", { source: "footer_cta" })}>
                 {t("home.finalCta")}
               </Link>

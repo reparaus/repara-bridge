@@ -58,7 +58,14 @@ import {
   type Drivetrain,
   type VehicleConfig,
 } from "@/lib/vehicle-config";
-import { decodeVin, isCompleteVin, isVinScanSupported, maskVin, normalizeVin, validateVin } from "@/lib/vin";
+import {
+  decodeVin,
+  isCompleteVin,
+  isVinScanSupported,
+  maskVin,
+  normalizeVin,
+  validateVin,
+} from "@/lib/vin";
 import { VinScanner } from "@/components/quote/VinScanner";
 
 export const Route = createFileRoute("/quote/")({
@@ -229,9 +236,7 @@ function QuoteFlow() {
     requestNumber: string;
     snapshot: FormState;
     outsideArea: boolean;
-  } | null>(
-    null,
-  );
+  } | null>(null);
 
   useEffect(() => {
     const draft = loadDraft();
@@ -389,8 +394,7 @@ function QuoteFlow() {
       if (!needsPhone && form.phone.trim() && !phoneOk)
         e.phone = t("quote.contact.errPhoneInvalid");
       const emailOk = /^\S+@\S+\.\S+$/.test(form.email.trim());
-      if (form.contactMethod === "email" && !emailOk)
-        e.email = t("quote.contact.errEmail");
+      if (form.contactMethod === "email" && !emailOk) e.email = t("quote.contact.errEmail");
       if (form.contactMethod !== "email" && form.email.trim() && !emailOk)
         e.email = t("quote.contact.errEmailInvalid");
     }
@@ -548,7 +552,10 @@ function QuoteFlow() {
       </header>
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-8 pb-36">
-        <div key={`${step}-${lang}`} className="animate-in fade-in slide-in-from-bottom-1 duration-300">
+        <div
+          key={`${step}-${lang}`}
+          className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+        >
           {step === STEP_VEHICLE && <VehicleStep form={form} patch={patch} errors={errors} />}
           {step === STEP_SERVICE && <ServiceStep form={form} patch={patch} errors={errors} />}
           {step === STEP_DETAILS && <DetailsStep form={form} patch={patch} errors={errors} />}
@@ -672,7 +679,6 @@ function VehicleStep({
       patch({ decoded: null, config: EMPTY_VEHICLE_CONFIG, engineChoice: "" });
       setVinMessage(result.message);
     }
-
   }
 
   // Auto-decode as soon as a complete VIN is present — no button press needed.
@@ -779,7 +785,6 @@ function VehicleStep({
                 </p>
               </div>
             )}
-
           </section>
 
           <button
@@ -952,7 +957,6 @@ function VehicleConfigFallback({
   );
 }
 
-
 /* ---------------------------------- STEP 2 --------------------------------- */
 
 function ServiceStep({
@@ -1050,11 +1054,7 @@ function QuestionField({
 
   if (question.kind === "single" || question.kind === "multi") {
     return (
-      <Field
-        label={question.label}
-        hint={question.hint}
-        error={error}
-      >
+      <Field label={question.label} hint={question.hint} error={error}>
         <OptionGroup
           multiple={question.kind === "multi"}
           options={question.options ?? []}
@@ -1133,7 +1133,6 @@ function DetailsStep({
     }
     if (accepted.length) patch({ photos: [...form.photos, ...accepted] });
   }
-
 
   return (
     <div className="space-y-7">
@@ -1230,7 +1229,6 @@ function DetailsStep({
               ))}
             </ul>
           )}
-
         </div>
       </Field>
 
@@ -1432,7 +1430,6 @@ function Confirmation({
             ? t("quote.confirm.bodyOutside", { zip: snapshot.zipCode.trim().slice(0, 5) })
             : t("quote.confirm.body")}
         </p>
-
 
         <div className="surface-panel mt-8 space-y-4 p-5 text-left">
           <Row label={t("quote.confirm.request")} value={`#${requestNumber}`} />

@@ -82,8 +82,7 @@ export const es: Dictionary = {
     finalTitle: "¿Listo para un mejor cuidado de tu auto?",
     finalSub: "Servicio profesional. Precios claros. Sin vueltas.",
     finalCta: "SOLICITAR MI COTIZACIÓN",
-    footerNote:
-      "Repara. Proveedor de servicio independiente. Sin afiliación con Toyota ni Lexus.",
+    footerNote: "Repara. Proveedor de servicio independiente. Sin afiliación con Toyota ni Lexus.",
   },
   quote: {
     steps: {

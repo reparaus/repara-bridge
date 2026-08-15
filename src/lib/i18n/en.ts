@@ -82,8 +82,7 @@ export const en = {
     finalTitle: "Ready for Better Car Care?",
     finalSub: "Professional service. Straightforward pricing. No runaround.",
     finalCta: "GET YOUR QUOTE",
-    footerNote:
-      "Repara. Independent service provider. Not affiliated with Toyota or Lexus.",
+    footerNote: "Repara. Independent service provider. Not affiliated with Toyota or Lexus.",
   },
   quote: {
     steps: {
