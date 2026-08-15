@@ -344,9 +344,14 @@ export function VinScanner({
             <div className="w-full max-w-sm">
               <div
                 ref={guideRef}
-                className="relative aspect-[3/1.1] w-full rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
+                onClick={() => void refocus()}
+                className={`relative aspect-[3/1.1] w-full rounded-2xl border-2 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] transition-colors ${
+                  found ? "border-emerald-400" : "border-white/80"
+                }`}
               >
-                <span className="absolute inset-x-6 top-1/2 h-px bg-white/70" />
+                <span
+                  className={`absolute inset-x-6 top-1/2 h-px ${found ? "bg-emerald-400" : "bg-white/70"}`}
+                />
               </div>
             </div>
           )}
@@ -363,7 +368,11 @@ export function VinScanner({
                 t("vin.point")
               )}
             </p>
-            <p className="mt-1 text-xs text-white/70">{hint ?? t("vin.hint")}</p>
+            <p className="mt-1 text-xs text-white/70">
+              {hint ?? t("vin.hint")}
+              {phase === "scanning" && frames > 0 ? ` · ${frames}` : ""}
+            </p>
+
 
             {phase === "scanning" && (
               <div className="mt-4 flex items-center justify-center gap-2">
