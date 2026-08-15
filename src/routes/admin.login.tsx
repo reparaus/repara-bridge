@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, ShieldCheck, Smartphone } from "lucide-react";
+import { Loader2, ShieldCheck, QrCode } from "lucide-react";
 import { toast } from "sonner";
 
 import { Logo } from "@/components/brand/Logo";
@@ -15,11 +15,14 @@ export const Route = createFileRoute("/admin/login")({
   head: () => ({
     meta: [
       { title: "Admin Sign In — Repara" },
-      { name: "description", content: "Repara internal admin sign in with phone multi-factor auth." },
+      {
+        name: "description",
+        content: "Repara internal admin sign in with authenticator app multi-factor auth.",
+      },
       { property: "og:title", content: "Admin Sign In — Repara" },
       {
         property: "og:description",
-        content: "Repara internal admin sign in with phone multi-factor auth.",
+        content: "Repara internal admin sign in with authenticator app multi-factor auth.",
       },
       { name: "robots", content: "noindex" },
     ],
@@ -27,7 +30,7 @@ export const Route = createFileRoute("/admin/login")({
   component: AdminLoginPage,
 });
 
-type Stage = "loading" | "password" | "enroll" | "enroll-verify" | "challenge";
+type Stage = "loading" | "password" | "enroll" | "verify";
 
 function AdminLoginPage() {
   const navigate = useNavigate();
@@ -38,10 +41,10 @@ function AdminLoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [factorId, setFactorId] = useState<string | null>(null);
-  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [secret, setSecret] = useState<string | null>(null);
 
   /** Decides what the admin has to do next based on session + MFA state. */
   const resolveStage = useCallback(async () => {
@@ -58,26 +61,32 @@ function AdminLoginPage() {
     }
 
     const { data: factors } = await supabase.auth.mfa.listFactors();
-    const verified = (factors?.phone ?? []).find((f) => f.status === "verified");
+    const verified = (factors?.totp ?? []).find((f) => f.status === "verified");
 
-    if (!verified) {
-      // Clean up any half-finished enrollment so a retry can start fresh.
-      for (const f of factors?.phone ?? []) {
-        if (f.status !== "verified") await supabase.auth.mfa.unenroll({ factorId: f.id });
-      }
-      setStage("enroll");
+    if (verified) {
+      setFactorId(verified.id);
+      setStage("verify");
       return;
     }
 
-    setFactorId(verified.id);
-    const { data: challenge, error } = await supabase.auth.mfa.challenge({ factorId: verified.id });
-    if (error || !challenge) {
-      toast.error("Couldn't send your verification code.");
+    // Clean up any half-finished enrollment so a retry can start fresh.
+    for (const f of factors?.totp ?? []) {
+      if (f.status !== "verified") await supabase.auth.mfa.unenroll({ factorId: f.id });
+    }
+
+    const { data: enrolled, error } = await supabase.auth.mfa.enroll({
+      factorType: "totp",
+      friendlyName: `Repara Admin ${Date.now()}`,
+    });
+    if (error || !enrolled) {
+      toast.error(error?.message ?? "Couldn't start authenticator setup.");
       setStage("password");
       return;
     }
-    setChallengeId(challenge.id);
-    setStage("challenge");
+    setFactorId(enrolled.id);
+    setQrCode(enrolled.totp.qr_code);
+    setSecret(enrolled.totp.secret);
+    setStage("enroll");
   }, [navigate]);
 
   useEffect(() => {
@@ -108,44 +117,23 @@ function AdminLoginPage() {
     setBusy(false);
   }
 
-  async function handleEnroll(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    const { data, error } = await supabase.auth.mfa.enroll({
-      factorType: "phone",
-      phone: phone.trim(),
-    });
-    if (error || !data) {
-      setBusy(false);
-      toast.error(error?.message ?? "Couldn't start phone enrollment.");
-      return;
-    }
-    setFactorId(data.id);
-    setStage("enroll-verify");
-    setBusy(false);
-    toast.success("We texted you a 6-digit code.");
-  }
-
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
     if (!factorId) return;
     setBusy(true);
 
-    let currentChallenge = challengeId;
-    if (stage === "enroll-verify" || !currentChallenge) {
-      const { data, error } = await supabase.auth.mfa.challenge({ factorId });
-      if (error || !data) {
-        setBusy(false);
-        toast.error("Couldn't send your verification code.");
-        return;
-      }
-      currentChallenge = data.id;
-      setChallengeId(data.id);
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+      factorId,
+    });
+    if (challengeError || !challenge) {
+      setBusy(false);
+      toast.error("Couldn't start verification. Try again.");
+      return;
     }
 
     const { error } = await supabase.auth.mfa.verify({
       factorId,
-      challengeId: currentChallenge,
+      challengeId: challenge.id,
       code: code.trim(),
     });
     setBusy(false);
@@ -157,24 +145,16 @@ function AdminLoginPage() {
     navigate({ to: "/admin", replace: true });
   }
 
-  async function resend() {
-    if (!factorId) return;
-    const { data, error } = await supabase.auth.mfa.challenge({ factorId });
-    if (error || !data) {
-      toast.error("Couldn't resend the code.");
-      return;
-    }
-    setChallengeId(data.id);
-    toast.success("New code sent.");
-  }
-
   async function startOver() {
     await supabase.auth.signOut();
     setCode("");
     setFactorId(null);
-    setChallengeId(null);
+    setQrCode(null);
+    setSecret(null);
     setStage("password");
   }
+
+
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-5">
