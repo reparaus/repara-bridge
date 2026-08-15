@@ -37,7 +37,7 @@ type Stage = "loading" | "password" | "enroll" | "verify";
 
 function AdminLoginPage() {
   const navigate = useNavigate();
-  const { denied } = Route.useSearch();
+  const { denied, reset } = Route.useSearch();
 
   const [stage, setStage] = useState<Stage>("loading");
   const [busy, setBusy] = useState(false);
