@@ -211,43 +211,33 @@ function AdminLoginPage() {
           </form>
         ) : null}
 
-        {stage === "enroll" ? (
-          <form onSubmit={handleEnroll} className="space-y-6">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Smartphone className="size-4" /> Register a phone for two-step sign in.
-            </div>
-            <Field label="Phone number (e.g. +15551234567)" htmlFor="phone">
-              <Input
-                id="phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="+15551234567"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="h-12"
-                required
-              />
-            </Field>
-            <Button type="submit" size="lg" className="h-12 w-full rounded-full" disabled={busy}>
-              {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} SEND CODE
-            </Button>
-            <button
-              type="button"
-              onClick={startOver}
-              className="w-full text-center text-xs text-muted-foreground underline"
-            >
-              Use a different account
-            </button>
-          </form>
-        ) : null}
-
-        {stage === "enroll-verify" || stage === "challenge" ? (
+        {stage === "enroll" || stage === "verify" ? (
           <form onSubmit={handleVerify} className="space-y-6">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <ShieldCheck className="size-4" /> Enter the 6-digit code we texted you.
-            </div>
-            <Field label="Verification code" htmlFor="code">
+            {stage === "enroll" ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <QrCode className="size-4" /> Scan this with your authenticator app.
+                </div>
+                {qrCode ? (
+                  <img
+                    src={qrCode}
+                    alt="Authenticator app QR code"
+                    className="mx-auto size-44 rounded-xl border border-border bg-white p-2"
+                  />
+                ) : null}
+                {secret ? (
+                  <p className="text-center text-[11px] break-all text-muted-foreground">
+                    Can't scan? Enter this key manually: <span className="font-mono">{secret}</span>
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <ShieldCheck className="size-4" /> Enter the 6-digit code from your authenticator
+                app.
+              </div>
+            )}
+            <Field label="Authenticator code" htmlFor="code">
               <Input
                 id="code"
                 inputMode="numeric"
@@ -267,16 +257,16 @@ function AdminLoginPage() {
             >
               {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} VERIFY
             </Button>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <button type="button" onClick={resend} className="underline">
-                Resend code
-              </button>
-              <button type="button" onClick={startOver} className="underline">
-                Start over
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={startOver}
+              className="w-full text-center text-xs text-muted-foreground underline"
+            >
+              Start over
+            </button>
           </form>
         ) : null}
+
       </div>
     </div>
   );
