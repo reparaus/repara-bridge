@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import { Logo } from "@/components/brand/Logo";
+import { LanguageToggle } from "@/components/common/LanguageToggle";
 import { Field } from "@/components/common/Field";
 import { OptionGroup } from "@/components/common/OptionGroup";
 import { ProgressStepper } from "@/components/common/ProgressStepper";
@@ -25,18 +26,23 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { track } from "@/lib/analytics";
+import type { IntakeFollowup, IntakeQuestion } from "@/lib/ai/intake-types";
+import { useI18n } from "@/lib/i18n";
+import {
+  localizedAnswerLabel,
+  localizedPhotoPrompt,
+  localizedQuestions,
+  localizedServiceBlurb,
+  localizedServiceLabel,
+  localizedVehicleOption,
+} from "@/lib/i18n/catalog";
+import { requestIntakeQuestions } from "@/lib/intake.functions";
 import { quoteRequestSchema } from "@/lib/quote-schema";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/quote-storage";
 import { discardQuotePhotos, submitQuoteRequest } from "@/lib/quote.functions";
 import {
-  CONTACT_METHODS,
-  INSPECTION_BODY,
-  INSPECTION_TITLE,
-  MOBILE_SCOPE_NOTE,
-  PHOTO_PROMPTS,
   SERVICES,
   SERVICE_QUESTIONS,
-  answerLabel,
   isServiceKey,
   serviceLabel,
   type ServiceKey,
@@ -83,7 +89,12 @@ export const Route = createFileRoute("/quote/")({
   component: QuoteFlow,
 });
 
-const STEP_LABELS = ["Vehicle", "Service", "Details", "Contact"];
+/** Step indexes. The AI follow-up step (3) is skipped when there are no questions. */
+const STEP_VEHICLE = 0;
+const STEP_SERVICE = 1;
+const STEP_DETAILS = 2;
+const STEP_QUESTIONS = 3;
+const STEP_CONTACT = 4;
 const MAX_PHOTOS = 6;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
@@ -121,6 +132,9 @@ type FormState = {
    * customers can always submit again.
    */
   submissionId: string;
+  /** AI-assisted intake follow-ups: the questions asked and what was answered. */
+  intakeQuestions: IntakeQuestion[];
+  intakeAnswers: Record<string, string>;
 };
 
 const EMPTY: FormState = {
@@ -145,6 +159,8 @@ const EMPTY: FormState = {
 
   contactMethod: "text",
   submissionId: "",
+  intakeQuestions: [],
+  intakeAnswers: {},
 };
 
 /** Uploads locally held photos at submission time and returns storage paths. */
