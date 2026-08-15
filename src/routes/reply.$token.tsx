@@ -61,7 +61,7 @@ function CustomerReply() {
         <LoadingState label="Loading your question…" />
       ) : !data?.found ? (
         <EmptyState
-          icon={MessageCircleQuestion}
+          icon={<MessageCircleQuestion className="size-6" aria-hidden />}
           title="This link is no longer active"
           description="The link may have expired or already been used. Please reply to our email or give us a call and we'll pick up right where we left off."
         />
