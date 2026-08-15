@@ -240,4 +240,7 @@ export const en = {
   },
 } as const;
 
-export type Dictionary = typeof en;
+/** Same tree shape as `en`, but every leaf widened to `string`. */
+type Translated<T> = { [K in keyof T]: T[K] extends string ? string : Translated<T[K]> };
+
+export type Dictionary = Translated<typeof en>;
