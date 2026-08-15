@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useI18n } from "@/lib/i18n";
 import { getReplyContextFn, submitCustomerReplyFn } from "@/lib/reply.functions";
 
 export const Route = createFileRoute("/reply/$token")({
@@ -20,7 +21,10 @@ export const Route = createFileRoute("/reply/$token")({
         content: "Answer a quick question from the Repara team about your service request.",
       },
       { property: "og:title", content: "Answer a question — Repara" },
-      { property: "og:description", content: "Reply to the Repara team about your service request." },
+      {
+        property: "og:description",
+        content: "Reply to the Repara team about your service request.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex" },
@@ -30,6 +34,7 @@ export const Route = createFileRoute("/reply/$token")({
 });
 
 function CustomerReply() {
+  const { t } = useI18n();
   const { token } = Route.useParams();
   const getContext = useServerFn(getReplyContextFn);
   const submitReply = useServerFn(submitCustomerReplyFn);
@@ -48,9 +53,9 @@ function CustomerReply() {
     mutationFn: () => submitReply({ data: { token, message } }),
     onSuccess: (result) => {
       if (result.ok) setSent(true);
-      else setError(result.error ?? "Your reply could not be sent.");
+      else setError(result.error ?? t("reply.failed"));
     },
-    onError: () => setError("Something went wrong. Please try again."),
+    onError: () => setError(t("reply.failed")),
   });
 
   return (
@@ -58,30 +63,28 @@ function CustomerReply() {
       <Logo className="h-9 w-auto self-start" />
 
       {isPending ? (
-        <LoadingState label="Loading your question…" />
+        <LoadingState label={t("reply.loading")} />
       ) : !data?.found ? (
         <EmptyState
           icon={<MessageCircleQuestion className="size-6" aria-hidden />}
-          title="This link is no longer active"
-          description="The link may have expired or already been used. Please reply to our email or give us a call and we'll pick up right where we left off."
+          title={t("reply.inactiveTitle")}
+          description={t("reply.inactiveBody")}
         />
       ) : sent ? (
         <div className="rounded-2xl border bg-card p-6 text-center">
           <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-primary/10">
             <Check className="size-5 text-primary" aria-hidden />
           </div>
-          <h1 className="text-lg font-semibold">Thanks — we got your answer</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            A Repara technician will review it and follow up with you shortly.
-          </p>
+          <h1 className="text-lg font-semibold">{t("reply.sentTitle")}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{t("reply.sentBody")}</p>
         </div>
       ) : (
         <div className="rounded-2xl border bg-card p-6">
           <h1 className="text-xl font-semibold">
-            {data.firstName ? `Hi ${data.firstName}, one quick question` : "One quick question"}
+            {data.firstName ? t("reply.titleNamed", { name: data.firstName }) : t("reply.title")}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            About your request {data.requestNumber}
+            {t("reply.about", { request: data.requestNumber })}
             {data.vehicle ? ` · ${data.vehicle}` : ""}
           </p>
 
@@ -93,7 +96,7 @@ function CustomerReply() {
               event.preventDefault();
               setError(null);
               if (message.trim().length < 2) {
-                setError("Please type your answer first.");
+                setError(t("reply.typeFirst"));
                 return;
               }
               mutation.mutate();
@@ -102,20 +105,18 @@ function CustomerReply() {
             <Textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
-              placeholder="Type your answer…"
+              placeholder={t("reply.placeholder")}
               rows={5}
               maxLength={2000}
-              aria-label="Your answer"
+              aria-label={t("reply.yourAnswer")}
               required
             />
             {error && <p className="text-xs text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={mutation.isPending}>
               {mutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-              Send answer
+              {t("reply.send")}
             </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              No account needed. We only use this to finish reviewing your request.
-            </p>
+            <p className="text-center text-xs text-muted-foreground">{t("reply.footnote")}</p>
           </form>
         </div>
       )}
