@@ -26,6 +26,27 @@ export const quoteRequestSchema = z.object({
    * quote gets a brand-new key and therefore a brand-new request.
    */
   submissionId: z.string().trim().uuid().optional(),
+  /**
+   * Language the customer used to complete the form. Stored so admins can
+   * follow up in the same language the customer chose.
+   */
+  preferredLanguage: z.enum(["en", "es"]).default("en"),
+  /**
+   * Answers to the AI-assisted intake follow-up questions. Advisory only — the
+   * AI never diagnoses or prices; these are the customer's own words.
+   */
+  intakeFollowups: z
+    .array(
+      z.object({
+        questionId: z.string().trim().max(40),
+        question: z.string().trim().max(400),
+        answer: z.string().trim().max(1000),
+        category: z.string().trim().max(40).default("general"),
+        skipped: z.boolean().default(false),
+      }),
+    )
+    .max(6)
+    .default([]),
   vehicle: z.object({
     /** How the customer identified the vehicle — kept for data quality. */
     entryMethod: z.enum(["vin", "manual"]).default("manual"),

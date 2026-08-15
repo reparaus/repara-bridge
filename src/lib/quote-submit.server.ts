@@ -248,6 +248,8 @@ export async function persistQuoteRequest(data: QuoteInput) {
     ...baseRequest,
     service_area_status: area.status,
     city: area.city,
+    preferred_language: data.preferredLanguage,
+    intake_followups: data.intakeFollowups,
     ...(submissionId ? { submission_id: submissionId } : {}),
   });
 
