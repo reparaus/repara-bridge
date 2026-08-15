@@ -113,6 +113,12 @@ export const en = {
       year: "Year",
       make: "Make",
       model: "Model",
+      trim: "Trim",
+      searchHint: "Type to search or enter your own",
+      loadingOptions: "Loading vehicle options…",
+      noMatches: "No matches — you can enter your own value",
+      editDecoded: "Review or edit vehicle details",
+
       configIntro:
         "A couple of quick details so your parts, fluids and labor are quoted accurately.",
       engineQNamed: "Which engine is in your {vehicle}?",

@@ -67,6 +67,10 @@ import {
   validateVin,
 } from "@/lib/vin";
 import { VinScanner } from "@/components/quote/VinScanner";
+import { ComboboxInput } from "@/components/quote/ComboboxInput";
+import { MAKES, trimSuggestions, yearOptions } from "@/lib/vehicle-data";
+import { useModelSuggestions } from "@/lib/use-model-suggestions";
+
 
 export const Route = createFileRoute("/quote/")({
   /**
@@ -117,6 +121,9 @@ type FormState = {
   year: string;
   make: string;
   model: string;
+  /** Optional trim, typed or suggested. Prefilled from a VIN decode. */
+  trim: string;
+
   /** Structured engine/drivetrain configuration, sourced from VIN or customer. */
   config: VehicleConfig;
   /** Selected engine option id, when the customer had to answer the fallback. */
@@ -151,6 +158,8 @@ const EMPTY: FormState = {
   year: "",
   make: "",
   model: "",
+  trim: "",
+
   config: EMPTY_VEHICLE_CONFIG,
   engineChoice: "",
   services: [],
@@ -276,7 +285,9 @@ function QuoteFlow() {
         year: form.vehicleMode === "vin" && form.decoded ? form.decoded.year : form.year,
         make: form.vehicleMode === "vin" && form.decoded ? form.decoded.make : form.make,
         model: form.vehicleMode === "vin" && form.decoded ? form.decoded.model : form.model,
-        trim: form.vehicleMode === "vin" ? (form.decoded?.trim ?? "") : "",
+        trim:
+          form.vehicleMode === "vin" ? (form.decoded?.trim ?? "") : form.trim.trim(),
+
         engineDisplacement: form.config.engineDisplacement,
         engineCode: form.config.engineCode ?? "",
         cylinderCount: form.config.cylinderCount,
@@ -423,7 +434,7 @@ function QuoteFlow() {
             year: form.vehicleMode === "vin" ? form.decoded?.year : form.year,
             make: form.vehicleMode === "vin" ? form.decoded?.make : form.make,
             model: form.vehicleMode === "vin" ? form.decoded?.model : form.model,
-            trim: form.decoded?.trim ?? "",
+            trim: form.decoded?.trim ?? form.trim.trim(),
             engine: configSummary(form.config) || undefined,
             drivetrain: form.config.drivetrain,
             hasVin: form.vehicleMode === "vin",
@@ -792,54 +803,26 @@ function VehicleStep({
             onClick={() =>
               patch({
                 vehicleMode: "manual",
+                // Carry every decoded value across so nothing is re-entered.
                 year: form.decoded ? String(form.decoded.year) : form.year,
                 make: form.decoded?.make ?? form.make,
                 model: form.decoded?.model ?? form.model,
+                trim: form.decoded?.trim ?? form.trim,
               })
             }
             className="mx-auto flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
           >
-            <Pencil className="size-3.5" /> {t("quote.vehicle.manualLink")}
+            <Pencil className="size-3.5" />{" "}
+            {form.decoded ? t("quote.vehicle.editDecoded") : t("quote.vehicle.manualLink")}
           </button>
+
         </>
       ) : (
         <>
           <section className="surface-panel space-y-4 p-5">
-            <Field label={t("quote.vehicle.year")} htmlFor="year" error={errors.year}>
-              <Input
-                id="year"
-                value={form.year}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="2021"
-                maxLength={4}
-                onChange={(e) => patch({ year: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                className="h-12"
-              />
-            </Field>
-            <Field label={t("quote.vehicle.make")} htmlFor="make" error={errors.make}>
-              <Input
-                id="make"
-                value={form.make}
-                placeholder="Lexus"
-                autoComplete="off"
-                autoCapitalize="words"
-                onChange={(e) => patch({ make: e.target.value })}
-                className="h-12"
-              />
-            </Field>
-            <Field label={t("quote.vehicle.model")} htmlFor="model" error={errors.model}>
-              <Input
-                id="model"
-                value={form.model}
-                placeholder="RX 350"
-                autoComplete="off"
-                autoCapitalize="words"
-                onChange={(e) => patch({ model: e.target.value })}
-                className="h-12"
-              />
-            </Field>
+            <VehicleFields form={form} patch={patch} errors={errors} />
           </section>
+
 
           <button
             type="button"
@@ -855,6 +838,105 @@ function VehicleStep({
     </div>
   );
 }
+
+/**
+ * Year → Make → Model → Trim as searchable comboboxes.
+ *
+ * Each field is a plain text input with suggestions attached: earlier answers
+ * narrow later suggestion lists, but never restrict what can be typed, and a
+ * downstream value the customer already entered is left alone when an upstream
+ * field changes (we only clear values that came from a suggestion list).
+ */
+function VehicleFields({
+  form,
+  patch,
+  errors,
+}: {
+  form: FormState;
+  patch: (n: Partial<FormState>) => void;
+  errors: Record<string, string>;
+}) {
+  const { t } = useI18n();
+  const years = useMemo(() => yearOptions(), []);
+  const { options: modelOptions, loading: modelsLoading } = useModelSuggestions(
+    form.make,
+    form.year,
+  );
+  const trims = useMemo(() => trimSuggestions(form.make, form.model), [form.make, form.model]);
+
+  /** A value is "suggested" when it came from a list, so it's safe to refresh. */
+  const isSuggested = (value: string, options: string[]) =>
+    options.some((o) => o.toLowerCase() === value.trim().toLowerCase());
+
+  return (
+    <>
+      <Field
+        label={t("quote.vehicle.year")}
+        htmlFor="year"
+        error={errors.year}
+        hint={t("quote.vehicle.searchHint")}
+      >
+        <ComboboxInput
+          id="year"
+          value={form.year}
+          options={years}
+          inputMode="numeric"
+          maxLength={4}
+          placeholder="2021"
+          onChange={(next) => patch({ year: next.replace(/[^\d]/g, "").slice(0, 4) })}
+        />
+      </Field>
+
+      <Field label={t("quote.vehicle.make")} htmlFor="make" error={errors.make}>
+        <ComboboxInput
+          id="make"
+          value={form.make}
+          options={MAKES}
+          autoCapitalize="words"
+          placeholder="Lexus"
+          onChange={(next) => {
+            // Changing the make invalidates suggestion-derived model/trim only.
+            const keepModel = form.model && !isSuggested(form.model, modelOptions);
+            const keepTrim = form.trim && !isSuggested(form.trim, trims);
+            patch({
+              make: next,
+              model: keepModel ? form.model : "",
+              trim: keepTrim ? form.trim : "",
+            });
+          }}
+        />
+      </Field>
+
+      <Field label={t("quote.vehicle.model")} htmlFor="model" error={errors.model}>
+        <ComboboxInput
+          id="model"
+          value={form.model}
+          options={modelOptions}
+          loading={modelsLoading}
+          autoCapitalize="words"
+          placeholder="RX 350"
+          onChange={(next) => {
+            const keepTrim = form.trim && !isSuggested(form.trim, trims);
+            patch({ model: next, trim: keepTrim ? form.trim : "" });
+          }}
+        />
+      </Field>
+
+      <Field label={t("quote.vehicle.trim")} htmlFor="trim">
+        <ComboboxInput
+          id="trim"
+          value={form.trim}
+          options={trims}
+          autoCapitalize="words"
+          placeholder="Premium"
+          onChange={(next) => patch({ trim: next })}
+        />
+      </Field>
+    </>
+  );
+}
+
+
 
 /**
  * Only asks what the VIN didn't answer. Every question offers "Not sure", and
