@@ -1,11 +1,12 @@
 /**
  * VIN barcode scanning helpers (browser-only, no network, no uploads).
  *
- * Detection happens entirely on-device with ZXing. We intentionally do not use
- * the browser's native `BarcodeDetector`: some Android browser/camera builds
- * surface their own Google barcode action UI over the page. Keeping one decoder
- * also makes detection behavior consistent across iOS and Android.
+ * Decoding runs on the ZXing WASM engine — the same C++ implementation native
+ * apps use — inside a Web Worker when available. We intentionally do not use the
+ * browser's native `BarcodeDetector`: some Android camera builds surface their
+ * own barcode action UI over the page.
  */
+
 
 import { VIN_LENGTH } from "./vin";
 
@@ -55,79 +56,71 @@ function isVinShape(value: string) {
   return value.length === VIN_LENGTH && VIN_CHARS.test(value);
 }
 
-/** Raw text decoder over a canvas frame. Returns null when nothing decodes. */
-export type FrameDecoder = (canvas: HTMLCanvasElement) => Promise<string | null>;
+/** Raw text decoder over a frame's pixels. Returns null when nothing decodes. */
+export type FrameDecoder = ((image: ImageData) => Promise<string | null>) & {
+  dispose?: () => void;
+};
 
 /**
- * Builds the best available frame decoder.
+ * Builds a frame decoder backed by the ZXing WASM engine.
  *
- * ZXing is configured for the formats found on factory VIN labels and runs
- * locally. Avoiding native detection prevents Android's external barcode action
- * sheet while `TRY_HARDER` improves long, narrow door-jamb labels.
+ * Decoding happens in a Web Worker so grabbing and decoding frames never blocks
+ * the camera preview (the previous main-thread decoder made live frames go
+ * stale, which is why nothing ever locked on). If workers are unavailable the
+ * same engine runs inline.
  */
 export async function createFrameDecoder(): Promise<FrameDecoder> {
-  const [{ HTMLCanvasElementLuminanceSource }, zxing] = await Promise.all([
-    import("@zxing/browser"),
-    import("@zxing/library"),
-  ]);
-  const {
-    MultiFormatReader,
-    DecodeHintType,
-    BarcodeFormat,
-    BinaryBitmap,
-    HybridBinarizer,
-    GlobalHistogramBinarizer,
-  } = zxing;
-
-  const hints = new Map<number, unknown>();
-  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-    BarcodeFormat.CODE_39,
-    BarcodeFormat.CODE_128,
-    BarcodeFormat.CODE_93,
-    BarcodeFormat.ITF,
-    BarcodeFormat.DATA_MATRIX,
-    BarcodeFormat.PDF_417,
-    BarcodeFormat.QR_CODE,
-  ]);
-  hints.set(DecodeHintType.TRY_HARDER, true);
-  hints.set(DecodeHintType.ASSUME_GS1, false);
-
-  const reader = new MultiFormatReader();
-  reader.setHints(hints as never);
-
-  return async (canvas) => {
-    const source = new HTMLCanvasElementLuminanceSource(canvas);
-    // Straight, inverted (white-on-black labels) and rotated (vertical labels).
-    const variants = [
-      () => source,
-      () => source.invert(),
-      () => source.rotateCounterClockwise(),
-      () => source.rotateCounterClockwise().invert(),
-    ];
-    // Hybrid handles uneven lighting; the global histogram binarizer is often
-    // the one that locks onto high-contrast printed VIN labels.
-    const binarizers = [
-      (s: unknown) => new HybridBinarizer(s as never),
-      (s: unknown) => new GlobalHistogramBinarizer(s as never),
-    ];
-    for (const make of variants) {
-      const luminance = make();
-      for (const binarize of binarizers) {
-        try {
-          const bitmap = new BinaryBitmap(binarize(luminance));
-          const result = reader.decode(bitmap);
-          const text = result?.getText?.();
-          if (text) return text;
-        } catch {
-          // NotFoundException per variant is normal.
-        } finally {
-          reader.reset();
-        }
+  const worker = createWorker();
+  if (worker) {
+    let seq = 0;
+    const pending = new Map<number, (text: string | null) => void>();
+    worker.onmessage = (event: MessageEvent<{ id: number; text: string | null }>) => {
+      const resolve = pending.get(event.data.id);
+      if (resolve) {
+        pending.delete(event.data.id);
+        resolve(event.data.text ?? null);
       }
-    }
-    return null;
-  };
+    };
+    worker.onerror = () => {
+      // Fail the in-flight jobs rather than hanging the scan loop.
+      pending.forEach((resolve) => resolve(null));
+      pending.clear();
+    };
+    const decode: FrameDecoder = (image) =>
+      new Promise<string | null>((resolve) => {
+        const id = ++seq;
+        pending.set(id, resolve);
+        try {
+          worker.postMessage({ id, image });
+        } catch {
+          pending.delete(id);
+          resolve(null);
+        }
+      });
+    decode.dispose = () => {
+      pending.forEach((resolve) => resolve(null));
+      pending.clear();
+      worker.terminate();
+    };
+    return decode;
+  }
+
+  const { decodeImageData, warmDecoder } = await import("./vin-decode");
+  await warmDecoder();
+  return (image) => decodeImageData(image);
 }
+
+function createWorker(): Worker | null {
+  if (typeof Worker === "undefined") return null;
+  try {
+    return new Worker(new URL("./vin-scan.worker.ts", import.meta.url), {
+      type: "module",
+    });
+  } catch {
+    return null;
+  }
+}
+
 
 /** A crop rectangle in source-image pixels. */
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -177,11 +170,11 @@ export function expandRect(rect: Rect, factor: number, frameW: number, frameH: n
 const scratch = typeof document === "undefined" ? null : document.createElement("canvas");
 
 /**
- * Tries to read a VIN out of an image source across several crops and scales.
+ * Tries to read a VIN out of an image source across the given crops.
  *
- * Thin 1D VIN bars need pixels: small crops get upscaled before decoding, and
- * every crop is tried in order so the tight guide-box region (highest effective
- * resolution) wins before wider fallbacks.
+ * Thin VIN bars need pixels, so a small crop is upscaled once before decoding;
+ * the WASM engine handles rotation, inversion and downscaled passes itself, so
+ * we no longer brute-force variants here (that only made frames go stale).
  */
 export async function findVinInSource(
   decode: FrameDecoder,
@@ -196,12 +189,13 @@ export async function findVinInSource(
 
   for (const raw of rects) {
     const rect = clampRect(raw, frameW, frameH);
-    // Upscale narrow crops; downscale enormous ones to keep decoding fast.
-    const scales = rect.w < 1600 ? [Math.min(4, 1800 / rect.w), 2, 1] : [1, 0.6];
+    // One upscale pass for narrow crops, then the crop at native resolution.
+    const upscale = rect.w < 1400 ? Math.min(3, 1600 / rect.w) : 1;
+    const scales = upscale > 1.05 ? [upscale, 1] : [1];
     for (const scale of scales) {
       const w = Math.max(16, Math.round(rect.w * scale));
       const h = Math.max(16, Math.round(rect.h * scale));
-      if (w > 4000 || h > 4000) continue;
+      if (w > 4096 || h > 4096) continue;
       scratch.width = w;
       scratch.height = h;
       // Smoothing softens the thin transitions that carry a 1D barcode.
@@ -209,7 +203,7 @@ export async function findVinInSource(
       ctx.drawImage(source, rect.x, rect.y, rect.w, rect.h, 0, 0, w, h);
       let text: string | null = null;
       try {
-        text = await decode(scratch);
+        text = await decode(ctx.getImageData(0, 0, w, h));
       } catch {
         text = null;
       }
@@ -232,16 +226,21 @@ export function isVinScanAvailable(): boolean {
 /** Decodes a VIN from a still photo (camera capture or gallery pick). */
 export async function scanVinFromFile(file: File): Promise<string | null> {
   const decode = await createFrameDecoder();
-  const bitmap = await loadImage(file);
-  const w = "width" in bitmap ? bitmap.width : 0;
-  const h = "height" in bitmap ? bitmap.height : 0;
-  if (!w || !h) return null;
-  return findVinInSource(decode, bitmap as CanvasImageSource, w, h, [
-    { x: 0, y: h * 0.34, w, h: h * 0.32 },
-    { x: 0, y: 0, w, h },
-    { x: w * 0.1, y: h * 0.25, w: w * 0.8, h: h * 0.5 },
-  ]);
+  try {
+    const bitmap = await loadImage(file);
+    const w = "width" in bitmap ? bitmap.width : 0;
+    const h = "height" in bitmap ? bitmap.height : 0;
+    if (!w || !h) return null;
+    return await findVinInSource(decode, bitmap as CanvasImageSource, w, h, [
+      { x: 0, y: 0, w, h },
+      { x: 0, y: h * 0.34, w, h: h * 0.32 },
+      { x: w * 0.1, y: h * 0.25, w: w * 0.8, h: h * 0.5 },
+    ]);
+  } finally {
+    decode.dispose?.();
+  }
 }
+
 
 async function loadImage(file: File): Promise<ImageBitmap | HTMLImageElement> {
   if (typeof createImageBitmap === "function") {

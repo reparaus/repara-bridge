@@ -40,14 +40,45 @@ export function VinScanner({
   const [torchOn, setTorchOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [frames, setFrames] = useState(0);
+  const [found, setFound] = useState(false);
+
 
   const stopCamera = useCallback(() => {
     stoppedRef.current = true;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    decoderRef.current?.dispose?.();
+    decoderRef.current = null;
     const video = videoRef.current;
     if (video) video.srcObject = null;
   }, []);
+
+  /**
+   * Tap-to-focus. iOS Safari drops focus constraints after the first frames, so
+   * a manual re-trigger is the reliable way to get a sharp barcode.
+   */
+  const refocus = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const caps = (track.getCapabilities?.() ?? {}) as { focusMode?: string[] };
+    const modes = caps.focusMode ?? [];
+    try {
+      if (modes.includes("single-shot")) {
+        await track.applyConstraints({
+          advanced: [{ focusMode: "single-shot" }],
+        } as unknown as MediaTrackConstraints);
+      }
+      if (modes.includes("continuous")) {
+        await track.applyConstraints({
+          advanced: [{ focusMode: "continuous" }],
+        } as unknown as MediaTrackConstraints);
+      }
+    } catch {
+      // Focus control is best-effort; iOS often exposes none of it.
+    }
+  }, []);
+
 
   const finish = useCallback(
     (vin: string) => {
@@ -148,21 +179,28 @@ export function VinScanner({
         const decode = await createFrameDecoder();
         decoderRef.current = decode;
 
+        // Frame pump: one decode in flight at a time, and the next frame is
+        // grabbed as soon as the previous decode returns, so we always work on
+        // fresh pixels instead of a queued backlog.
         const tick = async () => {
           if (stoppedRef.current || doneRef.current) return;
           const v = videoRef.current;
-          if (v && v.videoWidth > 0) {
+          if (v && v.videoWidth > 0 && v.readyState >= 2) {
             const fw = v.videoWidth;
             const fh = v.videoHeight;
             const vin = await findVinInSource(decode, v, fw, fh, cropsForFrame(fw, fh));
             if (vin) {
+              setFound(true);
               finish(vin);
               return;
             }
+            setFrames((n) => n + 1);
           }
-          timer = window.setTimeout(() => void tick(), 90);
+          if (stoppedRef.current || doneRef.current) return;
+          timer = window.setTimeout(() => void tick(), 0);
         };
         void tick();
+
       } catch (err) {
         const name = (err as { name?: string })?.name;
         setPhase("error");
@@ -306,9 +344,14 @@ export function VinScanner({
             <div className="w-full max-w-sm">
               <div
                 ref={guideRef}
-                className="relative aspect-[3/1.1] w-full rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
+                onClick={() => void refocus()}
+                className={`relative aspect-[3/1.1] w-full rounded-2xl border-2 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] transition-colors ${
+                  found ? "border-emerald-400" : "border-white/80"
+                }`}
               >
-                <span className="absolute inset-x-6 top-1/2 h-px bg-white/70" />
+                <span
+                  className={`absolute inset-x-6 top-1/2 h-px ${found ? "bg-emerald-400" : "bg-white/70"}`}
+                />
               </div>
             </div>
           )}
@@ -325,7 +368,11 @@ export function VinScanner({
                 t("vin.point")
               )}
             </p>
-            <p className="mt-1 text-xs text-white/70">{hint ?? t("vin.hint")}</p>
+            <p className="mt-1 text-xs text-white/70">
+              {hint ?? t("vin.hint")}
+              {phase === "scanning" && frames > 0 ? ` · ${frames}` : ""}
+            </p>
+
 
             {phase === "scanning" && (
               <div className="mt-4 flex items-center justify-center gap-2">
