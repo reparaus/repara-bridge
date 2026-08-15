@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Flashlight, Image as ImageIcon, Loader2, X } from "lucide-react";
+import { Camera, Flashlight, Loader2, RotateCcw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
@@ -9,7 +9,7 @@ import {
   createFrameDecoder,
   expandRect,
   findVinInSource,
-  scanVinFromFile,
+  getVinScanDiagnostics,
   type FrameDecoder,
   type Rect,
 } from "@/lib/vin-scan";
@@ -42,6 +42,7 @@ export function VinScanner({
   const [busy, setBusy] = useState(false);
   const [frames, setFrames] = useState(0);
   const [found, setFound] = useState(false);
+  const [scanAttempt, setScanAttempt] = useState(0);
 
 
   const stopCamera = useCallback(() => {
@@ -178,6 +179,13 @@ export function VinScanner({
 
         const decode = await createFrameDecoder();
         decoderRef.current = decode;
+        if (import.meta.env.DEV) {
+          console.info("[vin-scanner] ready", {
+            ...getVinScanDiagnostics(),
+            frame: `${video?.videoWidth ?? 0}x${video?.videoHeight ?? 0}`,
+            track: track?.getSettings?.(),
+          });
+        }
 
         // Frame pump: one decode in flight at a time, and the next frame is
         // grabbed as soon as the previous decode returns, so we always work on
@@ -190,6 +198,7 @@ export function VinScanner({
             const fh = v.videoHeight;
             const vin = await findVinInSource(decode, v, fw, fh, cropsForFrame(fw, fh));
             if (vin) {
+              if (import.meta.env.DEV) console.info("[vin-scanner] valid VIN detected");
               setFound(true);
               finish(vin);
               return;
@@ -219,7 +228,7 @@ export function VinScanner({
       stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [scanAttempt]);
 
   async function toggleTorch() {
     const track = streamRef.current?.getVideoTracks()[0];
@@ -255,24 +264,6 @@ export function VinScanner({
         finish(vin);
         return;
       }
-      setHint(t("vin.noVinPhoto"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onPickPhoto(file: File | undefined) {
-    if (!file || busy) return;
-    setBusy(true);
-    setHint(t("vin.reading"));
-    try {
-      const vin = await scanVinFromFile(file);
-      if (vin) {
-        finish(vin);
-        return;
-      }
-      setHint(t("vin.noVinPhoto"));
-    } catch {
       setHint(t("vin.noVinPhoto"));
     } finally {
       setBusy(false);
@@ -321,17 +312,6 @@ export function VinScanner({
           {phase === "error" ? (
             <div className="surface-panel max-w-sm space-y-4 p-5 text-center">
               <p className="text-sm">{message ?? t("vin.unavailable")}</p>
-              <label className="block">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  onChange={(e) => void onPickPhoto(e.target.files?.[0])}
-                />
-                <span className="inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-border text-sm font-medium">
-                  <ImageIcon className="size-4" /> {t("vin.usePhoto")}
-                </span>
-              </label>
               <Button
                 type="button"
                 className="h-11 w-full rounded-xl"
@@ -390,17 +370,21 @@ export function VinScanner({
                   )}
                   {t("vin.capture")}
                 </Button>
-                <label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    onChange={(e) => void onPickPhoto(e.target.files?.[0])}
-                  />
-                  <span className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-white/15 px-4 text-sm font-medium text-white backdrop-blur">
-                    <ImageIcon className="size-4" /> {t("vin.photo")}
-                  </span>
-                </label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-11 rounded-xl"
+                  disabled={busy}
+                  onClick={() => {
+                    stopCamera();
+                    setPhase("starting");
+                    setHint(null);
+                    setFrames(0);
+                    setScanAttempt((attempt) => attempt + 1);
+                  }}
+                >
+                  <RotateCcw className="mr-2 size-4" /> {t("vin.tryAgain")}
+                </Button>
               </div>
             )}
 

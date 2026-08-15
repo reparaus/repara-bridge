@@ -25,6 +25,15 @@ export const VIN_BARCODE_FORMATS = [
   "qr_code",
 ] as const;
 
+/** Non-sensitive scanner details for local development diagnostics. */
+export function getVinScanDiagnostics() {
+  return {
+    decoder: "zxing-wasm/reader",
+    formats: [...VIN_BARCODE_FORMATS],
+    worker: typeof Worker !== "undefined",
+  };
+}
+
 const VIN_CHARS = /^[A-HJ-NPR-Z0-9]+$/; // no I, O or Q
 
 /**
@@ -198,8 +207,11 @@ export async function findVinInSource(
       if (w > 4096 || h > 4096) continue;
       scratch.width = w;
       scratch.height = h;
-      // Smoothing softens the thin transitions that carry a 1D barcode.
-      ctx.imageSmoothingEnabled = false;
+      // High-quality interpolation preserves the edge shape of narrow bars when
+      // an iPhone preview crop needs enlarging; nearest-neighbour introduced
+      // blocky aliasing and was the concrete regression from the working path.
+      ctx.imageSmoothingEnabled = scale > 1;
+      if (scale > 1) ctx.imageSmoothingQuality = "high";
       ctx.drawImage(source, rect.x, rect.y, rect.w, rect.h, 0, 0, w, h);
       let text: string | null = null;
       try {
@@ -223,42 +235,3 @@ export function isVinScanAvailable(): boolean {
   return Boolean(navigator.mediaDevices?.getUserMedia);
 }
 
-/** Decodes a VIN from a still photo (camera capture or gallery pick). */
-export async function scanVinFromFile(file: File): Promise<string | null> {
-  const decode = await createFrameDecoder();
-  try {
-    const bitmap = await loadImage(file);
-    const w = "width" in bitmap ? bitmap.width : 0;
-    const h = "height" in bitmap ? bitmap.height : 0;
-    if (!w || !h) return null;
-    return await findVinInSource(decode, bitmap as CanvasImageSource, w, h, [
-      { x: 0, y: 0, w, h },
-      { x: 0, y: h * 0.34, w, h: h * 0.32 },
-      { x: w * 0.1, y: h * 0.25, w: w * 0.8, h: h * 0.5 },
-    ]);
-  } finally {
-    decode.dispose?.();
-  }
-}
-
-
-async function loadImage(file: File): Promise<ImageBitmap | HTMLImageElement> {
-  if (typeof createImageBitmap === "function") {
-    try {
-      return await createImageBitmap(file);
-    } catch {
-      // Fall through to <img>.
-    }
-  }
-  const url = URL.createObjectURL(file);
-  try {
-    return await new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("image decode failed"));
-      img.src = url;
-    });
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  }
-}
