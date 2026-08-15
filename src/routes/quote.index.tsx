@@ -799,15 +799,19 @@ function VehicleStep({
             onClick={() =>
               patch({
                 vehicleMode: "manual",
+                // Carry every decoded value across so nothing is re-entered.
                 year: form.decoded ? String(form.decoded.year) : form.year,
                 make: form.decoded?.make ?? form.make,
                 model: form.decoded?.model ?? form.model,
+                trim: form.decoded?.trim ?? form.trim,
               })
             }
             className="mx-auto flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
           >
-            <Pencil className="size-3.5" /> {t("quote.vehicle.manualLink")}
+            <Pencil className="size-3.5" />{" "}
+            {form.decoded ? t("quote.vehicle.editDecoded") : t("quote.vehicle.manualLink")}
           </button>
+
         </>
       ) : (
         <>
