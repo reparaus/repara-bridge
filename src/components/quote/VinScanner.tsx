@@ -148,21 +148,28 @@ export function VinScanner({
         const decode = await createFrameDecoder();
         decoderRef.current = decode;
 
+        // Frame pump: one decode in flight at a time, and the next frame is
+        // grabbed as soon as the previous decode returns, so we always work on
+        // fresh pixels instead of a queued backlog.
         const tick = async () => {
           if (stoppedRef.current || doneRef.current) return;
           const v = videoRef.current;
-          if (v && v.videoWidth > 0) {
+          if (v && v.videoWidth > 0 && v.readyState >= 2) {
             const fw = v.videoWidth;
             const fh = v.videoHeight;
             const vin = await findVinInSource(decode, v, fw, fh, cropsForFrame(fw, fh));
             if (vin) {
+              setFound(true);
               finish(vin);
               return;
             }
+            setFrames((n) => n + 1);
           }
-          timer = window.setTimeout(() => void tick(), 90);
+          if (stoppedRef.current || doneRef.current) return;
+          timer = window.setTimeout(() => void tick(), 0);
         };
         void tick();
+
       } catch (err) {
         const name = (err as { name?: string })?.name;
         setPhase("error");
