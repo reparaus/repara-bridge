@@ -154,6 +154,8 @@ const EMPTY: FormState = {
   year: "",
   make: "",
   model: "",
+  trim: "",
+
   config: EMPTY_VEHICLE_CONFIG,
   engineChoice: "",
   services: [],
