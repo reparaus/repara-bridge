@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, ShieldCheck, Smartphone } from "lucide-react";
+import { Loader2, ShieldCheck, QrCode } from "lucide-react";
 import { toast } from "sonner";
 
 import { Logo } from "@/components/brand/Logo";
@@ -15,11 +15,14 @@ export const Route = createFileRoute("/admin/login")({
   head: () => ({
     meta: [
       { title: "Admin Sign In — Repara" },
-      { name: "description", content: "Repara internal admin sign in with phone multi-factor auth." },
+      {
+        name: "description",
+        content: "Repara internal admin sign in with authenticator app multi-factor auth.",
+      },
       { property: "og:title", content: "Admin Sign In — Repara" },
       {
         property: "og:description",
-        content: "Repara internal admin sign in with phone multi-factor auth.",
+        content: "Repara internal admin sign in with authenticator app multi-factor auth.",
       },
       { name: "robots", content: "noindex" },
     ],
@@ -27,7 +30,7 @@ export const Route = createFileRoute("/admin/login")({
   component: AdminLoginPage,
 });
 
-type Stage = "loading" | "password" | "enroll" | "enroll-verify" | "challenge";
+type Stage = "loading" | "password" | "enroll" | "verify";
 
 function AdminLoginPage() {
   const navigate = useNavigate();
@@ -38,10 +41,10 @@ function AdminLoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [factorId, setFactorId] = useState<string | null>(null);
-  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [secret, setSecret] = useState<string | null>(null);
 
   /** Decides what the admin has to do next based on session + MFA state. */
   const resolveStage = useCallback(async () => {
@@ -58,26 +61,32 @@ function AdminLoginPage() {
     }
 
     const { data: factors } = await supabase.auth.mfa.listFactors();
-    const verified = (factors?.phone ?? []).find((f) => f.status === "verified");
+    const verified = (factors?.totp ?? []).find((f) => f.status === "verified");
 
-    if (!verified) {
-      // Clean up any half-finished enrollment so a retry can start fresh.
-      for (const f of factors?.phone ?? []) {
-        if (f.status !== "verified") await supabase.auth.mfa.unenroll({ factorId: f.id });
-      }
-      setStage("enroll");
+    if (verified) {
+      setFactorId(verified.id);
+      setStage("verify");
       return;
     }
 
-    setFactorId(verified.id);
-    const { data: challenge, error } = await supabase.auth.mfa.challenge({ factorId: verified.id });
-    if (error || !challenge) {
-      toast.error("Couldn't send your verification code.");
+    // Clean up any half-finished enrollment so a retry can start fresh.
+    for (const f of factors?.totp ?? []) {
+      if (f.status !== "verified") await supabase.auth.mfa.unenroll({ factorId: f.id });
+    }
+
+    const { data: enrolled, error } = await supabase.auth.mfa.enroll({
+      factorType: "totp",
+      friendlyName: `Repara Admin ${Date.now()}`,
+    });
+    if (error || !enrolled) {
+      toast.error(error?.message ?? "Couldn't start authenticator setup.");
       setStage("password");
       return;
     }
-    setChallengeId(challenge.id);
-    setStage("challenge");
+    setFactorId(enrolled.id);
+    setQrCode(enrolled.totp.qr_code);
+    setSecret(enrolled.totp.secret);
+    setStage("enroll");
   }, [navigate]);
 
   useEffect(() => {
@@ -108,44 +117,23 @@ function AdminLoginPage() {
     setBusy(false);
   }
 
-  async function handleEnroll(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    const { data, error } = await supabase.auth.mfa.enroll({
-      factorType: "phone",
-      phone: phone.trim(),
-    });
-    if (error || !data) {
-      setBusy(false);
-      toast.error(error?.message ?? "Couldn't start phone enrollment.");
-      return;
-    }
-    setFactorId(data.id);
-    setStage("enroll-verify");
-    setBusy(false);
-    toast.success("We texted you a 6-digit code.");
-  }
-
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
     if (!factorId) return;
     setBusy(true);
 
-    let currentChallenge = challengeId;
-    if (stage === "enroll-verify" || !currentChallenge) {
-      const { data, error } = await supabase.auth.mfa.challenge({ factorId });
-      if (error || !data) {
-        setBusy(false);
-        toast.error("Couldn't send your verification code.");
-        return;
-      }
-      currentChallenge = data.id;
-      setChallengeId(data.id);
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+      factorId,
+    });
+    if (challengeError || !challenge) {
+      setBusy(false);
+      toast.error("Couldn't start verification. Try again.");
+      return;
     }
 
     const { error } = await supabase.auth.mfa.verify({
       factorId,
-      challengeId: currentChallenge,
+      challengeId: challenge.id,
       code: code.trim(),
     });
     setBusy(false);
@@ -157,24 +145,16 @@ function AdminLoginPage() {
     navigate({ to: "/admin", replace: true });
   }
 
-  async function resend() {
-    if (!factorId) return;
-    const { data, error } = await supabase.auth.mfa.challenge({ factorId });
-    if (error || !data) {
-      toast.error("Couldn't resend the code.");
-      return;
-    }
-    setChallengeId(data.id);
-    toast.success("New code sent.");
-  }
-
   async function startOver() {
     await supabase.auth.signOut();
     setCode("");
     setFactorId(null);
-    setChallengeId(null);
+    setQrCode(null);
+    setSecret(null);
     setStage("password");
   }
+
+
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-5">
@@ -231,43 +211,33 @@ function AdminLoginPage() {
           </form>
         ) : null}
 
-        {stage === "enroll" ? (
-          <form onSubmit={handleEnroll} className="space-y-6">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Smartphone className="size-4" /> Register a phone for two-step sign in.
-            </div>
-            <Field label="Phone number (e.g. +15551234567)" htmlFor="phone">
-              <Input
-                id="phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="+15551234567"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="h-12"
-                required
-              />
-            </Field>
-            <Button type="submit" size="lg" className="h-12 w-full rounded-full" disabled={busy}>
-              {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} SEND CODE
-            </Button>
-            <button
-              type="button"
-              onClick={startOver}
-              className="w-full text-center text-xs text-muted-foreground underline"
-            >
-              Use a different account
-            </button>
-          </form>
-        ) : null}
-
-        {stage === "enroll-verify" || stage === "challenge" ? (
+        {stage === "enroll" || stage === "verify" ? (
           <form onSubmit={handleVerify} className="space-y-6">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <ShieldCheck className="size-4" /> Enter the 6-digit code we texted you.
-            </div>
-            <Field label="Verification code" htmlFor="code">
+            {stage === "enroll" ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <QrCode className="size-4" /> Scan this with your authenticator app.
+                </div>
+                {qrCode ? (
+                  <img
+                    src={qrCode}
+                    alt="Authenticator app QR code"
+                    className="mx-auto size-44 rounded-xl border border-border bg-white p-2"
+                  />
+                ) : null}
+                {secret ? (
+                  <p className="text-center text-[11px] break-all text-muted-foreground">
+                    Can't scan? Enter this key manually: <span className="font-mono">{secret}</span>
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <ShieldCheck className="size-4" /> Enter the 6-digit code from your authenticator
+                app.
+              </div>
+            )}
+            <Field label="Authenticator code" htmlFor="code">
               <Input
                 id="code"
                 inputMode="numeric"
@@ -287,16 +257,16 @@ function AdminLoginPage() {
             >
               {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} VERIFY
             </Button>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <button type="button" onClick={resend} className="underline">
-                Resend code
-              </button>
-              <button type="button" onClick={startOver} className="underline">
-                Start over
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={startOver}
+              className="w-full text-center text-xs text-muted-foreground underline"
+            >
+              Start over
+            </button>
           </form>
         ) : null}
+
       </div>
     </div>
   );
