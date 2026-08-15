@@ -230,6 +230,14 @@ function AdminLoginPage() {
             <Button type="submit" size="lg" className="h-12 w-full rounded-full" disabled={busy}>
               {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} CONTINUE
             </Button>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={busy}
+              className="w-full text-center text-xs text-muted-foreground underline disabled:opacity-60"
+            >
+              Forgot password?
+            </button>
             <p className="text-center text-xs text-muted-foreground">
               Admin accounts are created internally. There is no public signup.
             </p>
