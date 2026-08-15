@@ -571,7 +571,9 @@ function QuoteFlow() {
         <AlertDialogContent className="max-w-sm rounded-xl">
           <AlertDialogHeader>
             <AlertDialogTitle>{t("home.draftPrompt")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("home.draftPrompt")}</AlertDialogDescription>
+            <AlertDialogDescription className="sr-only">
+              {t("home.draftPrompt")}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={startNewRequest}>
