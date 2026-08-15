@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CardRouteImport } from './routes/card'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
+import { Route as AdminResetPasswordRouteImport } from './routes/admin.reset-password'
 import { Route as QuoteIndexRouteImport } from './routes/quote.index'
 import { Route as QuoteTokenRouteImport } from './routes/quote.$token'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
@@ -42,6 +43,11 @@ const CardRoute = CardRouteImport.update({
 const AdminLoginRoute = AdminLoginRouteImport.update({
   id: '/admin/login',
   path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminResetPasswordRoute = AdminResetPasswordRouteImport.update({
+  id: '/admin/reset-password',
+  path: '/admin/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const QuoteIndexRoute = QuoteIndexRouteImport.update({
@@ -77,6 +83,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/reset-password': typeof AdminResetPasswordRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/quote/': typeof QuoteIndexRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/reset-password': typeof AdminResetPasswordRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/quote': typeof QuoteIndexRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/reset-password': typeof AdminResetPasswordRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/quote/': typeof QuoteIndexRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/card'
     | '/admin/login'
+    | '/admin/reset-password'
     | '/quote/$token'
     | '/quote/'
     | '/admin/'
@@ -125,6 +135,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/card'
     | '/admin/login'
+    | '/admin/reset-password'
     | '/quote/$token'
     | '/quote'
     | '/admin'
@@ -137,6 +148,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/card'
     | '/admin/login'
+    | '/admin/reset-password'
     | '/quote/$token'
     | '/quote/'
     | '/_authenticated/admin/'
@@ -150,6 +162,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   CardRoute: typeof CardRoute
   AdminLoginRoute: typeof AdminLoginRoute
+  AdminResetPasswordRoute: typeof AdminResetPasswordRoute
   QuoteTokenRoute: typeof QuoteTokenRoute
   QuoteIndexRoute: typeof QuoteIndexRoute
 }
@@ -189,6 +202,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/login'
       fullPath: '/admin/login'
       preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/reset-password': {
+      id: '/admin/reset-password'
+      path: '/admin/reset-password'
+      fullPath: '/admin/reset-password'
+      preLoaderRoute: typeof AdminResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/quote/': {
@@ -250,6 +270,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   CardRoute: CardRoute,
   AdminLoginRoute: AdminLoginRoute,
+  AdminResetPasswordRoute: AdminResetPasswordRoute,
   QuoteTokenRoute: QuoteTokenRoute,
   QuoteIndexRoute: QuoteIndexRoute,
 }

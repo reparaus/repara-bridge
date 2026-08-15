@@ -11,7 +11,10 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/admin/login")({
-  validateSearch: z.object({ denied: z.boolean().optional() }),
+  validateSearch: z.object({
+    denied: z.boolean().optional(),
+    reset: z.boolean().optional(),
+  }),
   head: () => ({
     meta: [
       { title: "Admin Sign In — Repara" },
@@ -34,7 +37,7 @@ type Stage = "loading" | "password" | "enroll" | "verify";
 
 function AdminLoginPage() {
   const navigate = useNavigate();
-  const { denied } = Route.useSearch();
+  const { denied, reset } = Route.useSearch();
 
   const [stage, setStage] = useState<Stage>("loading");
   const [busy, setBusy] = useState(false);
@@ -90,6 +93,10 @@ function AdminLoginPage() {
   }, [navigate]);
 
   useEffect(() => {
+    if (reset) toast.success("Password updated. Sign in with your new password.");
+  }, [reset]);
+
+  useEffect(() => {
     if (denied) {
       void supabase.auth.signOut().then(() => {
         setStage("password");
@@ -99,6 +106,24 @@ function AdminLoginPage() {
     }
     void resolveStage();
   }, [denied, resolveStage]);
+
+  async function handleForgotPassword() {
+    const target = email.trim();
+    if (!target) {
+      toast.error("Enter your admin email first.");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: `${window.location.origin}/admin/reset-password`,
+    });
+    setBusy(false);
+    if (error) {
+      toast.error(error.message || "Couldn't send the reset email.");
+      return;
+    }
+    toast.success("Check your email for a password reset link.");
+  }
 
   async function handlePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -205,6 +230,14 @@ function AdminLoginPage() {
             <Button type="submit" size="lg" className="h-12 w-full rounded-full" disabled={busy}>
               {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} CONTINUE
             </Button>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={busy}
+              className="w-full text-center text-xs text-muted-foreground underline disabled:opacity-60"
+            >
+              Forgot password?
+            </button>
             <p className="text-center text-xs text-muted-foreground">
               Admin accounts are created internally. There is no public signup.
             </p>
