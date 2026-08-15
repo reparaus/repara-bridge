@@ -295,3 +295,30 @@ ${banner}
 <p style="margin:24px 0 0;">
 <a href="${d.link}" style="display:inline-block;background:#111111;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;">Open request</a></p>`);
 }
+
+/** Repara AI clarification question. Plain, no pricing, no diagnosis claims. */
+function clarificationHtml(d: {
+  firstName: string;
+  requestNumber: string;
+  vehicle: string;
+  question: string;
+  replyUrl: string;
+}) {
+  return shell(`
+    <h1 style="margin:0 0 16px;font-size:20px;">Hi ${d.firstName},</h1>
+    <p style="margin:0 0 16px;line-height:1.6;">
+      Thanks for your Repara request${d.requestNumber ? ` <strong>${d.requestNumber}</strong>` : ""}${
+        d.vehicle ? ` for your ${d.vehicle}` : ""
+      }. Before we can finish reviewing it, we have a quick question:
+    </p>
+    <p style="margin:0 0 24px;padding:14px 16px;background:#f4f4f5;border-radius:10px;line-height:1.6;">
+      ${d.question}
+    </p>
+    <p style="margin:0 0 24px;">
+      <a href="${d.replyUrl}" style="display:inline-block;padding:12px 20px;background:#111827;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;">Answer the question</a>
+    </p>
+    <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6;">
+      No account needed — the link opens a short form. You can also reply to this email.
+    </p>
+  `);
+}
