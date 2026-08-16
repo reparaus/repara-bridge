@@ -1,14 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import type { IntakeQuestion } from "@/lib/ai/intake-types";
+import type { IntakeRound } from "@/lib/ai/intake-types";
 
 /**
- * Public server function powering AI-assisted customer intake.
+ * Public server functions powering AI-assisted customer intake.
  *
- * It is intentionally read-only: it never writes to the database, never sees
- * contact details, and returns an empty question list on any AI failure so the
- * quote form always stays usable. The AI never diagnoses or prices anything.
+ * They are intentionally read-only: they never write to the database, never see
+ * contact details, and degrade to an empty result on any AI failure so the quote
+ * form always stays usable. The AI never diagnoses or prices anything.
  */
 
 const contextSchema = z.object({
@@ -32,16 +32,46 @@ const contextSchema = z.object({
     )
     .max(8)
     .default([]),
+  serviceKeys: z.array(z.string().trim().max(40)).max(8).default([]),
   notes: z.string().trim().max(2000).optional(),
   previousAnswers: z
     .array(z.object({ question: z.string().max(400), answer: z.string().max(1000) }))
-    .max(6)
+    .max(12)
     .optional(),
+  round: z.number().int().min(1).max(3).default(1),
 });
 
 export const requestIntakeQuestions = createServerFn({ method: "POST" })
   .inputValidator((data) => contextSchema.parse(data))
-  .handler(async ({ data }): Promise<{ questions: IntakeQuestion[]; degraded: boolean }> => {
+  .handler(async ({ data }): Promise<IntakeRound> => {
     const { generateIntakeQuestions } = await import("@/lib/ai/intake.server");
     return generateIntakeQuestions(data);
+  });
+
+const summarySchema = z.object({
+  language: z.enum(["en", "es"]).default("en"),
+  notes: z.string().trim().max(2000).optional(),
+  services: z.array(z.string().trim().max(80)).max(8).default([]),
+  followups: z
+    .array(
+      z.object({
+        questionId: z.string().trim().max(40),
+        question: z.string().trim().max(400),
+        answer: z.string().trim().max(1000),
+        category: z.string().trim().max(40).default("general"),
+        skipped: z.boolean().default(false),
+        concern: z.string().trim().max(40).optional(),
+        otherText: z.string().trim().max(1000).optional(),
+      }),
+    )
+    .max(12)
+    .default([]),
+});
+
+/** Service-advisor style restatement of the customer's own reported symptoms. */
+export const requestIntakeSummary = createServerFn({ method: "POST" })
+  .inputValidator((data) => summarySchema.parse(data))
+  .handler(async ({ data }): Promise<{ summary: string; degraded: boolean }> => {
+    const { summarizeIntake } = await import("@/lib/ai/intake.server");
+    return summarizeIntake(data);
   });
