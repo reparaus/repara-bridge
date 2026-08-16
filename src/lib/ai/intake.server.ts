@@ -1,41 +1,74 @@
 /**
  * Customer-side intake assistance (SERVER ONLY).
  *
- * Turns the information a customer has already given into 1–3 useful follow-up
- * questions, the way an experienced service advisor would. It never diagnoses,
- * never prices, never promises anything, and it never writes to the database:
- * the answers travel with the submission and are persisted there.
+ * Repara AI interviews the customer the way an experienced dealership SERVICE
+ * ADVISOR would before a repair order reaches a technician: it classifies the
+ * concern, works through the relevant pre-check dimensions from a structured
+ * playbook, adapts to each answer, and stops as soon as the intake is useful.
+ *
+ * It never diagnoses, never names a failed part, never prices anything, and it
+ * never writes to the database — answers travel with the submission.
  *
  * Provider-agnostic: the only AI dependency is `runJsonCompletion`.
  */
 
 import { parseJsonObject, ReparaAiError, runJsonCompletion } from "./provider.server";
-import type { IntakeContext, IntakeQuestion } from "./intake-types";
+import type { IntakeContext, IntakeFollowup, IntakeQuestion, IntakeRound } from "./intake-types";
+import { guessFamilies, isComplaintFamily, PLAYBOOKS, FAMILY_LIST } from "./playbooks";
 
-const MAX_QUESTIONS = 3;
-const MAX_OPTIONS = 6;
+const MAX_QUESTIONS_PER_ROUND = 3;
+const MAX_OPTIONS = 8;
+/** Hard ceiling on the whole interview — professional intake, not a survey. */
+export const MAX_TOTAL_QUESTIONS = 6;
 
-const SYSTEM_EN = `You are an experienced automotive service advisor taking in a customer's mobile-service request for Repara.
+const OTHER_RE = /^(other|others|something else|other\b.*|otro|otra|otro.*|algo m[aá]s)$/i;
+const OTHER_LOOSE = /other|something else|otro|otra|algo m[aá]s/i;
 
-Your only job is to ask the few follow-up questions that would materially improve the request before a technician reviews it. You are talking directly to the customer.
+function systemPrompt(families: string[], language: "en" | "es", round: number): string {
+  const playbooks = families
+    .filter(isComplaintFamily)
+    .map((f) => PLAYBOOKS[f])
+    .join("\n\n");
 
-Hard rules:
-- Ask at most 3 questions, fewer when the request is already clear. Ask 0 questions when nothing useful is missing.
-- Never diagnose, never name a failed part as fact, never speculate about cause, never say whether the vehicle is safe to drive, never mention price, cost or repair time.
-- Never ask for information already supplied (vehicle, mileage, VIN, selected services, existing answers, contact details).
-- Never ask for personal or contact information.
-- Plain, friendly, non-technical wording. One short question at a time. No jargon the customer would need to look up.
-- Customers are allowed not to know: every choice question must include a "not sure" style option as its last option.
-- Prefer single_choice with 2-5 short concrete options. Use yes_no for simple confirmations, and text only when a short description is genuinely better.
-- Good areas to clarify: where/when a symptom happens, cold start vs every start, how a noise would be described, fluid colour and location, which warning light and whether it flashes, when vibration occurs, whether temperature or fluid loss was noticed, which fluids were serviced before and roughly when.
+  const base = `You are an experienced automotive dealership service advisor (Lexus/Toyota-level intake quality, applicable to every make and model) taking in a customer's mobile-service request for Repara. You are talking directly to the customer.
+
+YOUR JOB: gather the information a TECHNICIAN would want obtained from the customer BEFORE diagnosis begins. You are NOT the technician.
+
+Never do these things:
+- Never diagnose, never name a failed part as fact, never speculate about a cause, never say whether the vehicle is safe to drive, never mention price, cost or repair time.
+- Never ask for information already supplied (vehicle, mileage, VIN, selected services, previous answers, contact details) and never ask for personal or contact information.
+- Never use technician jargon unexplained. Bad: "Is NVH frequency proportional to engine RPM?" Good: "Does the humming get louder as the engine revs higher?"
+
+HOW TO WORK:
+1. Classify the customer's concern into one or more complaint families: ${FAMILY_LIST}. The customer must never have to know the category. If the customer describes TWO concerns (e.g. a noise AND a warning light), treat them as separate concerns and tag every question with its own concern; never mix their answers.
+2. Use the matching service-advisor playbook below and pick only the dimensions that would meaningfully help reproduce, narrow or document THIS concern. Ask nothing that would not help.
+3. Ask at most ${MAX_QUESTIONS_PER_ROUND} questions in this round, in priority order (highest value first). This is round ${round}; the whole interview must stay at about 3-6 focused questions for a diagnostic concern, fewer for simple ones.
+4. If the customer already knows exactly what they want (e.g. "I need an oil change"), ask nothing: return needs_follow_up false.
+5. If the customer has repeatedly answered "not sure", stop asking: return needs_follow_up false.
+6. Set may_continue true only when a further round, based on the answers you expect, would genuinely add value.
+
+ANSWER TYPES:
+- single_choice: 2-5 short, concrete options.
+- multi_choice: when several conditions can legitimately apply at once (e.g. "when does it happen?").
+- yes_no: simple confirmations.
+- text: only when a short free description is genuinely better (e.g. the exact dashboard message).
+- Every choice question ends with a "not sure" style option — customers are allowed not to know.
+- Add an "Other" option (with allow_other true and a short other_prompt such as "Describe the sound in your own words") whenever the option list may not cover the customer's experience.
+
+PLAYBOOK GUIDANCE FOR THIS REQUEST:
+${playbooks || PLAYBOOKS.other}
 
 Reply with ONLY a json object of this exact shape:
-{"needs_follow_up":boolean,"questions":[{"question":string,"answer_type":"single_choice"|"yes_no"|"text","options":[string],"category":string}]}
-category is a short snake_case label such as fluid_leak, startup_noise, warning_light, vibration, overheating, fluid_history, brake_concern, general.`;
+{"concerns":[{"family":string,"label":string}],"needs_follow_up":boolean,"may_continue":boolean,"questions":[{"question":string,"answer_type":"single_choice"|"multi_choice"|"yes_no"|"text","options":[string],"allow_other":boolean,"other_prompt":string,"category":string,"concern":string}]}
+"concern" is the family key from the list above. "category" is a short snake_case dimension label such as sound_type, sound_location, when_it_occurs, speed_effect, rpm_effect, temperature, road_surface, frequency, warning_light_state, fluid_color, service_history, general.`;
 
-const SYSTEM_ES = `${SYSTEM_EN}
+  if (language === "es") {
+    return `${base}
 
-IMPORTANT: The customer's selected interface language is Spanish. Write every question, every option and every category-facing text in natural, professional Latin American Spanish for automotive service. Understand the customer's input in either English or Spanish. The "not sure" option must read like "No estoy seguro".`;
+IMPORTANT: The customer's selected language is Spanish. Write every question, option, other_prompt and concern label in natural, professional Latin American automotive Spanish — never a literal translation of English shop phrases. Understand the customer's input in English or Spanish. The "not sure" option must read like "No estoy seguro", and the "Other" option like "Otro — descríbelo".`;
+  }
+  return base;
+}
 
 function line(label: string, value: unknown) {
   const text = String(value ?? "").trim();
@@ -60,10 +93,10 @@ function buildContextText(context: IntakeContext): string {
     line("VIN", v.hasVin ? "provided" : null),
     line("Mileage", context.mileage),
     line("Requested services and answers", services),
-    line("Customer's own description", (context.notes ?? "").slice(0, 1200)),
+    line("Customer's own description (verbatim)", (context.notes ?? "").slice(0, 1200)),
     (context.previousAnswers ?? []).length
-      ? `Already answered:\n${(context.previousAnswers ?? [])
-          .slice(0, 8)
+      ? `Already answered (never re-ask these):\n${(context.previousAnswers ?? [])
+          .slice(0, 12)
           .map((a) => `- ${a.question} -> ${a.answer}`)
           .join("\n")}`
       : null,
@@ -75,22 +108,46 @@ function buildContextText(context: IntakeContext): string {
 const NOT_SURE_EN = /not sure|don'?t know|unsure|skip/i;
 const NOT_SURE_ES = /no estoy segur|no s[eé]|no lo s[eé]|omitir/i;
 
-function validateQuestions(raw: string, language: "en" | "es"): IntakeQuestion[] {
+function normalizeQuestions(
+  raw: string,
+  language: "en" | "es",
+  round: number,
+): { questions: IntakeQuestion[]; mayContinue: boolean } {
   const parsed = parseJsonObject(raw);
   const list = Array.isArray(parsed['questions']) ? (parsed['questions'] as unknown[]) : [];
-  if (parsed['needs_follow_up'] === false && list.length === 0) return [];
+  const mayContinue = parsed['may_continue'] === true;
+  if (parsed['needs_follow_up'] === false && list.length === 0) return { questions: [], mayContinue: false };
+
+  const concerns = Array.isArray(parsed['concerns']) ? (parsed['concerns'] as unknown[]) : [];
+  const labels = new Map<string, string>();
+  concerns.forEach((c) => {
+    const o = (c ?? {}) as Record<string, unknown>;
+    const family = String(o['family'] ?? "").trim();
+    const label = String(o['label'] ?? "").trim().slice(0, 60);
+    if (family && label) labels.set(family, label);
+  });
 
   const notSureLabel = language === "es" ? "No estoy seguro" : "I'm not sure";
+  const otherLabel = language === "es" ? "Otro — descríbelo" : "Other — please describe";
+  const defaultOtherPrompt =
+    language === "es" ? "Descríbelo en tus propias palabras" : "Describe it in your own words";
+
   const questions: IntakeQuestion[] = [];
 
-  list.slice(0, MAX_QUESTIONS).forEach((item, index) => {
+  list.slice(0, MAX_QUESTIONS_PER_ROUND).forEach((item, index) => {
     const o = (item ?? {}) as Record<string, unknown>;
     const question = String(o['question'] ?? "").trim().slice(0, 220);
     if (question.length < 6) return;
 
     const rawType = String(o['answer_type'] ?? "").trim();
     let answerType: IntakeQuestion["answerType"] =
-      rawType === "yes_no" ? "yes_no" : rawType === "text" ? "text" : "single_choice";
+      rawType === "yes_no"
+        ? "yes_no"
+        : rawType === "text" || rawType === "free_text"
+          ? "text"
+          : rawType === "multi_choice" || rawType === "multi_select"
+            ? "multi_choice"
+            : "single_choice";
 
     let options = Array.isArray(o['options'])
       ? (o['options'] as unknown[])
@@ -102,51 +159,90 @@ function validateQuestions(raw: string, language: "en" | "es"): IntakeQuestion[]
     if (answerType === "yes_no") {
       options = language === "es" ? ["Sí", "No"] : ["Yes", "No"];
     }
-    if (answerType === "single_choice" && options.length < 2) {
+    if ((answerType === "single_choice" || answerType === "multi_choice") && options.length < 2) {
       // Unusable choice list — a short text answer is still useful.
       answerType = "text";
       options = [];
     }
-    if (answerType !== "text") {
+
+    let allowOther = false;
+    if (answerType === "single_choice" || answerType === "multi_choice") {
+      // Any "Other"-style option MUST reveal a free-text field in the UI.
+      const hasOther = options.some((x) => OTHER_RE.test(x) || OTHER_LOOSE.test(x));
+      allowOther = hasOther || o['allow_other'] === true;
+      if (allowOther && !hasOther && options.length < MAX_OPTIONS) options.push(otherLabel);
+
       const hasNotSure = options.some((x) => NOT_SURE_EN.test(x) || NOT_SURE_ES.test(x));
       if (!hasNotSure && options.length < MAX_OPTIONS) options.push(notSureLabel);
     }
 
+    const concern = String(o['concern'] ?? "").trim().toLowerCase();
+
     questions.push({
-      id: `q${index + 1}`,
+      id: `r${round}q${index + 1}`,
       question,
       answerType,
       options,
-      category: String(o['category'] ?? "general")
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9_]+/g, "_")
-        .slice(0, 40) || "general",
+      category:
+        String(o['category'] ?? "general")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9_]+/g, "_")
+          .slice(0, 40) || "general",
+      ...(isComplaintFamily(concern) ? { concern } : {}),
+      ...(labels.get(concern) ? { concernLabel: labels.get(concern)! } : {}),
+      ...(allowOther
+        ? {
+            allowOther: true,
+            otherPrompt: String(o['other_prompt'] ?? "").trim().slice(0, 120) || defaultOtherPrompt,
+          }
+        : {}),
     });
   });
 
-  return questions;
+  return { questions, mayContinue: mayContinue && questions.length > 0 };
 }
 
 /**
- * Generates the customer-facing follow-up questions for one intake snapshot.
+ * Generates one round of service-advisor follow-up questions.
  * Any AI problem returns an empty list — the form must always remain usable.
  */
-export async function generateIntakeQuestions(
-  context: IntakeContext,
-): Promise<{ questions: IntakeQuestion[]; degraded: boolean }> {
+export async function generateIntakeQuestions(context: IntakeContext): Promise<IntakeRound> {
+  const round = Math.max(1, Math.min(3, context.round ?? 1));
+  const answered = (context.previousAnswers ?? []).length;
+  if (answered >= MAX_TOTAL_QUESTIONS) return { questions: [], mayContinue: false, degraded: false };
+
   const contextText = buildContextText(context);
   // Nothing meaningful to reason about yet: don't spend a model call.
-  if (contextText.length < 24) return { questions: [], degraded: false };
+  if (contextText.length < 24) return { questions: [], mayContinue: false, degraded: false };
+
+  // Deterministic pre-classification keeps the prompt (and cost) small by
+  // sending only the relevant playbooks.
+  const complaintText = [
+    context.notes ?? "",
+    ...(context.services ?? []).map((s) => `${s.label} ${s.answers.join(" ")}`),
+    ...(context.previousAnswers ?? []).map((a) => `${a.question} ${a.answer}`),
+  ].join(" ");
+  const families = guessFamilies(complaintText, context.serviceKeys ?? []);
+
+  // The customer keeps saying "not sure" — stop interviewing them.
+  const unsureCount = (context.previousAnswers ?? []).filter(
+    (a) => NOT_SURE_EN.test(a.answer) || NOT_SURE_ES.test(a.answer) || !a.answer.trim(),
+  ).length;
+  if (answered > 0 && unsureCount >= Math.ceil(answered / 2) && unsureCount >= 2) {
+    return { questions: [], mayContinue: false, degraded: false };
+  }
 
   try {
     const { text } = await runJsonCompletion({
-      system: context.language === "es" ? SYSTEM_ES : SYSTEM_EN,
-      user: `Here is what the customer has told us so far. Decide whether follow-up questions would materially help, then reply with the json object only.\n\n${contextText}`,
-      maxOutputTokens: 700,
+      system: systemPrompt(families, context.language, round),
+      user: `Here is what the customer has told us so far. Classify the concern(s), then ask only the highest-value service-advisor questions that are still missing. Reply with the json object only.\n\n${contextText}`,
+      maxOutputTokens: 900,
       temperature: 0.3,
     });
-    return { questions: validateQuestions(text, context.language), degraded: false };
+    const { questions, mayContinue } = normalizeQuestions(text, context.language, round);
+    const remaining = MAX_TOTAL_QUESTIONS - answered - questions.length;
+    return { questions, mayContinue: mayContinue && remaining > 0 && round < 3, degraded: false };
   } catch (error) {
     if (error instanceof ReparaAiError) {
       console.error("[repara-ai] intake questions unavailable:", error.kind, error.message);
@@ -154,6 +250,74 @@ export async function generateIntakeQuestions(
       console.error("[repara-ai] intake questions failed", error);
     }
     // AI is never required to submit a request.
-    return { questions: [], degraded: true };
+    return { questions: [], mayContinue: false, degraded: true };
+  }
+}
+
+/* --------------------------- concern summarisation -------------------------- */
+
+/** Deterministic fallback: pure restatement of what the customer reported. */
+function fallbackSummary(followups: IntakeFollowup[], language: "en" | "es"): string {
+  const answered = followups.filter((f) => !f.skipped && f.answer.trim());
+  if (answered.length === 0) return "";
+  const lead = language === "es" ? "El cliente reporta:" : "Customer reports:";
+  return `${lead} ${answered
+    .map((f) => `${f.question} — ${f.answer}${f.otherText ? ` (${f.otherText})` : ""}`)
+    .join("; ")}`;
+}
+
+/**
+ * Turns the customer's OWN reported information into a short service-advisor
+ * style concern statement for the admin/technician. It restates; it never adds
+ * a cause the customer did not report. The original wording is preserved
+ * separately by the caller.
+ */
+export async function summarizeIntake(input: {
+  language: "en" | "es";
+  notes?: string;
+  services: string[];
+  followups: IntakeFollowup[];
+}): Promise<{ summary: string; degraded: boolean }> {
+  const answered = input.followups.filter((f) => !f.skipped && f.answer.trim());
+  if (answered.length === 0) return { summary: "", degraded: false };
+
+  const body = [
+    input.notes ? `Customer's own words: ${input.notes.slice(0, 1000)}` : null,
+    input.services.length ? `Requested services: ${input.services.join(", ")}` : null,
+    `Intake answers:\n${answered
+      .map(
+        (f) =>
+          `- [${f.concern ?? "general"}/${f.category}] ${f.question} -> ${f.answer}${
+            f.otherText ? ` (${f.otherText})` : ""
+          }`,
+      )
+      .join("\n")}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    const { text } = await runJsonCompletion({
+      system: `You write the "customer concern" section of a repair order for a dealership service advisor. The reader is a technician.
+
+Rules:
+- Restate ONLY what the customer reported. Never add a cause, a suspected part, a diagnosis, a price or a safety judgement.
+- Write in English regardless of the customer's language (the admin dashboard is English), 1-3 sentences, factual advisor phrasing such as "Customer reports…".
+- When the customer described more than one concern, write one short sentence per concern, kept separate.
+- Never invent details that are not in the answers.
+
+Reply with ONLY a json object: {"summary":string}`,
+      user: body,
+      maxOutputTokens: 300,
+      temperature: 0.1,
+    });
+    const parsed = parseJsonObject(text);
+    const summary = String(parsed['summary'] ?? "").trim().slice(0, 1000);
+    return summary
+      ? { summary, degraded: false }
+      : { summary: fallbackSummary(input.followups, input.language), degraded: true };
+  } catch (error) {
+    console.error("[repara-ai] intake summary unavailable", error);
+    return { summary: fallbackSummary(input.followups, input.language), degraded: true };
   }
 }
