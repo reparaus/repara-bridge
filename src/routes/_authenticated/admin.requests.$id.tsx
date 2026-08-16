@@ -177,6 +177,33 @@ function RequestDetail() {
   const request = detail.request as Record<string, any>;
   const customer = request.customers ?? {};
   const vehicle = request.vehicles ?? {};
+  // AI-assisted intake: the summary is stored alongside the answers, and the
+  // customer's original wording stays untouched in `notes`.
+  const intake = (() => {
+    type Followup = {
+      questionId: string;
+      question: string;
+      answer: string;
+      category: string;
+      skipped?: boolean;
+      concern?: string;
+      otherText?: string;
+    };
+    const all: Followup[] = Array.isArray(request.intake_followups)
+      ? (request.intake_followups as Followup[])
+      : [];
+    const summary = all.find((f) => f.category === "intake_summary")?.answer ?? "";
+    const followups = all.filter((f) => f.category !== "intake_summary");
+    const groups: { concern: string; items: Followup[] }[] = [];
+    for (const f of followups) {
+      const concern = f.concern || "general";
+      const group = groups.find((g) => g.concern === concern);
+      if (group) group.items.push(f);
+      else groups.push({ concern, items: [f] });
+    }
+    return { summary, followups, groups };
+  })();
+
   // Multi-service requests store the full selection; older rows have one category.
   const requestedServices: { key: string; label: string; detail: string }[] = Array.isArray(
     request.services,
