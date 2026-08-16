@@ -18,6 +18,8 @@ import { guessFamilies, isComplaintFamily, PLAYBOOKS, FAMILY_LIST } from "./play
 
 const MAX_QUESTIONS_PER_ROUND = 3;
 const MAX_OPTIONS = 8;
+/** Room for the appended "Other" / "not sure" options beyond the model's list. */
+const HARD_OPTION_LIMIT = 10;
 /** Hard ceiling on the whole interview — professional intake, not a survey. */
 export const MAX_TOTAL_QUESTIONS = 6;
 
@@ -151,7 +153,7 @@ function normalizeQuestions(
 
     let options = Array.isArray(o['options'])
       ? (o['options'] as unknown[])
-          .map((x) => String(x ?? "").trim().slice(0, 60))
+          .map((x) => String(x ?? "").trim().slice(0, 90))
           .filter(Boolean)
           .slice(0, MAX_OPTIONS)
       : [];
@@ -170,10 +172,10 @@ function normalizeQuestions(
       // Any "Other"-style option MUST reveal a free-text field in the UI.
       const hasOther = options.some((x) => OTHER_RE.test(x) || OTHER_LOOSE.test(x));
       allowOther = hasOther || o['allow_other'] === true;
-      if (allowOther && !hasOther && options.length < MAX_OPTIONS) options.push(otherLabel);
+      if (allowOther && !hasOther && options.length < HARD_OPTION_LIMIT) options.push(otherLabel);
 
       const hasNotSure = options.some((x) => NOT_SURE_EN.test(x) || NOT_SURE_ES.test(x));
-      if (!hasNotSure && options.length < MAX_OPTIONS) options.push(notSureLabel);
+      if (!hasNotSure && options.length < HARD_OPTION_LIMIT) options.push(notSureLabel);
     }
 
     const concern = String(o['concern'] ?? "").trim().toLowerCase();
