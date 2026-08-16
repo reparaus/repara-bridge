@@ -76,3 +76,62 @@ export function isComplaintFamily(value: string): value is ComplaintFamily {
 
 /** Catalog line used for classification, without the full playbook bodies. */
 export const FAMILY_LIST = COMPLAINT_FAMILIES.join(", ");
+
+/* --------------------- deterministic pre-classification -------------------- */
+
+/**
+ * Cheap keyword pre-classification (EN + ES). It costs nothing and lets us send
+ * only the RELEVANT playbooks to the model instead of the whole catalog — the
+ * model still classifies authoritatively and may return a different family,
+ * which the next round then honours.
+ */
+const KEYWORDS: [ComplaintFamily, RegExp][] = [
+  ["noise", /noise|sound|hum|whin|squeal|chirp|click|clunk|rattl|grind|knock|buzz|scrap|pop|tick|ruido|zumb|chill|rechin|golpe|traquete|clic/i],
+  ["vibration", /vibrat|shak|shudder|wobbl|vibra|tiembl|tembl|cimbre/i],
+  ["fluid_leak", /leak|drip|puddle|fluid on|fuga|gotea|charco|derrame|liquido|líquido/i],
+  ["warning_light", /warning light|check engine|engine light|dash light|abs light|airbag light|message on the dash|luz de|testigo|check engine|tablero/i],
+  ["starting", /won'?t start|wont start|no start|doesn'?t start|hard to start|crank|turn over|no arranca|no prende|cuesta arrancar|marcha/i],
+  ["overheating", /overheat|temperature gauge|coolant|antifreeze|steam|sobrecalent|temperatura|refrigerante|anticongelante|vapor/i],
+  ["braking", /brake|braking|pedal|freno|frena/i],
+  ["steering", /steer|steering|pull(s|ing)? to|direccion|dirección|volante|jala/i],
+  ["suspension", /suspension|bump|pothole|ride|strut|shock|bache|topes|amortigua|suspensi/i],
+  ["transmission", /transmission|shift|gear|slipp|clutch|transmisi|cambio|velocidad(es)?|embrague|patina/i],
+  ["hvac", /a\/?c\b|air condition|heater|heat(ing)? doesn|blower|defrost|aire acondicionado|calefacc|clima|ventilador/i],
+  ["electrical", /electrical|window|lights don|radio|fuse|wiring|screen|electric|ventana|luces no|fusible|pantalla/i],
+  ["battery_charging", /battery|jump start|alternator|dead in the morning|bateria|batería|alternador|pasar corriente/i],
+  ["tire_wheel", /tire|tyre|wheel|tpms|flat|llanta|neumatic|rueda|ponchad/i],
+  ["fuel_economy", /gas mileage|fuel economy|mpg|using more gas|gasta más|rendimiento de gasolina|gasolina/i],
+  ["odor", /smell|odor|odour|burning|stink|olor|huele|quemad/i],
+  ["engine_performance", /hesitat|stall|misfire|rough idle|no power|lack of power|surg|sputter|jalone|se apaga|falla|pierde fuerza|ralent/i],
+  ["fluid_service", /fluids?\b|flush|which fluids|fluid change|fluidos|liquidos|líquidos|cambio de aceite de la transmisi/i],
+  ["maintenance", /oil change|maintenance|service due|spark plug|wiper|tune up|mantenimiento|cambio de aceite|bujia|bujía|limpiaparabrisas/i],
+  ["intermittent", /sometimes|intermittent|once in a while|randomly|a veces|intermitente|de vez en cuando/i],
+];
+
+/** Service-catalog keys map onto a family when the customer wrote nothing useful. */
+const SERVICE_FAMILY: Record<string, ComplaintFamily> = {
+  oil_filter: "maintenance",
+  oil_change: "maintenance",
+  maintenance: "maintenance",
+  filters: "maintenance",
+  fluid_service: "fluid_service",
+  brakes: "braking",
+  battery: "battery_charging",
+  diagnostics: "other",
+  suspension: "suspension",
+  other: "other",
+};
+
+export function guessFamilies(text: string, serviceKeys: string[] = []): ComplaintFamily[] {
+  const found: ComplaintFamily[] = [];
+  for (const [family, re] of KEYWORDS) {
+    if (re.test(text) && !found.includes(family)) found.push(family);
+  }
+  for (const key of serviceKeys) {
+    const family = SERVICE_FAMILY[key];
+    if (family && !found.includes(family)) found.push(family);
+  }
+  if (found.length === 0) found.push("other");
+  // Three playbooks is plenty of guidance and keeps the prompt small.
+  return found.slice(0, 3);
+}
