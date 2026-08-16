@@ -341,6 +341,47 @@ function RequestDetail() {
             )}
           </Panel>
 
+          {intake.followups.length > 0 && (
+            <Panel title="Repara intake">
+              {/* The customer's own words are never replaced by AI output. */}
+              {request.notes && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Original customer concern</p>
+                  <p className="pt-1 text-sm whitespace-pre-line">{request.notes}</p>
+                </div>
+              )}
+              {intake.summary && (
+                <div className="pt-3">
+                  <p className="text-xs text-muted-foreground">
+                    Repara intake summary (customer-reported, not a diagnosis)
+                  </p>
+                  <p className="pt-1 text-sm whitespace-pre-line">{intake.summary}</p>
+                </div>
+              )}
+              <div className="space-y-3 pt-3">
+                {intake.groups.map((group) => (
+                  <div key={group.concern}>
+                    <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      {group.concern.replace(/_/g, " ")}
+                    </p>
+                    <ul className="mt-1 space-y-1.5">
+                      {group.items.map((f) => (
+                        <li key={f.questionId}>
+                          <span className="block text-xs text-muted-foreground">{f.question}</span>
+                          <span className="text-sm">
+                            {f.skipped
+                              ? "Not answered"
+                              : [f.answer, f.otherText].filter(Boolean).join(" — ")}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
+
           <Panel title="Timeline">
             <Row label="Submitted" value={new Date(request.created_at).toLocaleString()} />
             <Row
