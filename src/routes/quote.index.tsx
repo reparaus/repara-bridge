@@ -46,7 +46,7 @@ import {
   localizedServiceLabel,
   localizedVehicleOption,
 } from "@/lib/i18n/catalog";
-import { requestIntakeQuestions } from "@/lib/intake.functions";
+import { requestIntakeQuestions, requestIntakeSummary } from "@/lib/intake.functions";
 import { quoteRequestSchema } from "@/lib/quote-schema";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/quote-storage";
 import { discardQuotePhotos, submitQuoteRequest } from "@/lib/quote.functions";
@@ -158,7 +158,16 @@ type FormState = {
   submissionId: string;
   /** AI-assisted intake follow-ups: the questions asked and what was answered. */
   intakeQuestions: IntakeQuestion[];
-  intakeAnswers: Record<string, string>;
+  /** Selected option(s) per question. Free-text answers use a single entry. */
+  intakeAnswers: Record<string, string[]>;
+  /** Free text typed after choosing an "Other" option. */
+  intakeOther: Record<string, string>;
+  /** Which interview round has been asked so far (0 = none). */
+  intakeRound: number;
+  /** True while the advisor logic may still add one more round of questions. */
+  intakeMayContinue: boolean;
+  /** Service-advisor restatement of the answers, for the admin/technician. */
+  intakeSummary: string;
 };
 
 const EMPTY: FormState = {
@@ -187,7 +196,18 @@ const EMPTY: FormState = {
   submissionId: "",
   intakeQuestions: [],
   intakeAnswers: {},
+  intakeOther: {},
+  intakeRound: 0,
+  intakeMayContinue: false,
+  intakeSummary: "",
 };
+
+/** Draft-safe read: older drafts stored a single string per question. */
+function answerList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((x) => String(x)).filter(Boolean);
+  const text = String(value ?? "").trim();
+  return text ? [text] : [];
+}
 
 /** Uploads locally held photos at submission time and returns storage paths. */
 async function uploadQuotePhotos(photos: File[]): Promise<string[]> {
@@ -221,16 +241,33 @@ function answerText(serviceKey: string, questionId: string, value: string) {
 
 /** Turns the AI questions + the customer's answers into storable follow-ups. */
 function collectFollowups(form: FormState): IntakeFollowup[] {
-  return form.intakeQuestions.map((q) => {
-    const answer = (form.intakeAnswers[q.id] ?? "").trim();
+  const followups: IntakeFollowup[] = form.intakeQuestions.map((q) => {
+    const selected = answerList(form.intakeAnswers[q.id]);
+    const otherText = (form.intakeOther[q.id] ?? "").trim();
+    const answer = selected.join(", ");
     return {
       questionId: q.id,
       question: q.question,
       answer,
       category: q.category,
-      skipped: answer.length === 0,
+      skipped: answer.length === 0 && otherText.length === 0,
+      ...(q.concern ? { concern: q.concern } : {}),
+      ...(otherText ? { otherText } : {}),
     };
   });
+
+  // The organized concern statement travels with the answers; the customer's
+  // original wording stays untouched in `notes`.
+  if (form.intakeSummary.trim()) {
+    followups.push({
+      questionId: "__summary",
+      question: "Repara intake summary",
+      answer: form.intakeSummary.trim().slice(0, 1000),
+      category: "intake_summary",
+      skipped: false,
+    });
+  }
+  return followups;
 }
 
 function formatMiles(value: string) {
