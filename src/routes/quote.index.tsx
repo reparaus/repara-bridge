@@ -46,7 +46,7 @@ import {
   localizedServiceLabel,
   localizedVehicleOption,
 } from "@/lib/i18n/catalog";
-import { requestIntakeQuestions } from "@/lib/intake.functions";
+import { requestIntakeQuestions, requestIntakeSummary } from "@/lib/intake.functions";
 import { quoteRequestSchema } from "@/lib/quote-schema";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/quote-storage";
 import { discardQuotePhotos, submitQuoteRequest } from "@/lib/quote.functions";
@@ -158,7 +158,16 @@ type FormState = {
   submissionId: string;
   /** AI-assisted intake follow-ups: the questions asked and what was answered. */
   intakeQuestions: IntakeQuestion[];
-  intakeAnswers: Record<string, string>;
+  /** Selected option(s) per question. Free-text answers use a single entry. */
+  intakeAnswers: Record<string, string[]>;
+  /** Free text typed after choosing an "Other" option. */
+  intakeOther: Record<string, string>;
+  /** Which interview round has been asked so far (0 = none). */
+  intakeRound: number;
+  /** True while the advisor logic may still add one more round of questions. */
+  intakeMayContinue: boolean;
+  /** Service-advisor restatement of the answers, for the admin/technician. */
+  intakeSummary: string;
 };
 
 const EMPTY: FormState = {
@@ -187,7 +196,24 @@ const EMPTY: FormState = {
   submissionId: "",
   intakeQuestions: [],
   intakeAnswers: {},
+  intakeOther: {},
+  intakeRound: 0,
+  intakeMayContinue: false,
+  intakeSummary: "",
 };
+
+/** Ceiling on the whole AI interview — professional intake, not a survey. */
+const MAX_INTAKE_QUESTIONS = 6;
+
+/** Matches the "Other" style option that must reveal a free-text field. */
+const OTHER_OPTION_RE = /other|something else|otro|otra|algo m[aá]s/i;
+
+/** Draft-safe read: older drafts stored a single string per question. */
+function answerList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((x) => String(x)).filter(Boolean);
+  const text = String(value ?? "").trim();
+  return text ? [text] : [];
+}
 
 /** Uploads locally held photos at submission time and returns storage paths. */
 async function uploadQuotePhotos(photos: File[]): Promise<string[]> {
@@ -221,16 +247,33 @@ function answerText(serviceKey: string, questionId: string, value: string) {
 
 /** Turns the AI questions + the customer's answers into storable follow-ups. */
 function collectFollowups(form: FormState): IntakeFollowup[] {
-  return form.intakeQuestions.map((q) => {
-    const answer = (form.intakeAnswers[q.id] ?? "").trim();
+  const followups: IntakeFollowup[] = form.intakeQuestions.map((q) => {
+    const selected = answerList(form.intakeAnswers[q.id]);
+    const otherText = (form.intakeOther[q.id] ?? "").trim();
+    const answer = selected.join(", ");
     return {
       questionId: q.id,
       question: q.question,
       answer,
       category: q.category,
-      skipped: answer.length === 0,
+      skipped: answer.length === 0 && otherText.length === 0,
+      ...(q.concern ? { concern: q.concern } : {}),
+      ...(otherText ? { otherText } : {}),
     };
   });
+
+  // The organized concern statement travels with the answers; the customer's
+  // original wording stays untouched in `notes`.
+  if (form.intakeSummary.trim()) {
+    followups.push({
+      questionId: "__summary",
+      question: "Repara intake summary",
+      answer: form.intakeSummary.trim().slice(0, 1000),
+      category: "intake_summary",
+      skipped: false,
+    });
+  }
+  return followups;
 }
 
 function formatMiles(value: string) {
@@ -243,6 +286,7 @@ function QuoteFlow() {
   const submit = useServerFn(submitQuoteRequest);
   const discardPhotos = useServerFn(discardQuotePhotos);
   const askIntakeQuestions = useServerFn(requestIntakeQuestions);
+  const summarizeIntakeAnswers = useServerFn(requestIntakeSummary);
   const { service: preselectedService } = Route.useSearch();
 
   const [step, setStep] = useState(0);
@@ -453,16 +497,26 @@ function QuoteFlow() {
   }
 
   /**
-   * Asks the AI for 1–3 clarifying questions about what the customer described.
+   * Asks the AI for one round of service-advisor follow-up questions.
    * Any failure (or nothing worth asking) simply skips the step — AI is never
    * allowed to block a submission.
    */
-  async function loadIntakeQuestions() {
+  async function loadIntakeRound(round: number) {
     setPreparing(true);
     try {
+      const previousAnswers = form.intakeQuestions
+        .map((q) => {
+          const selected = answerList(form.intakeAnswers[q.id]);
+          const other = (form.intakeOther[q.id] ?? "").trim();
+          const answer = [selected.join(", "), other].filter(Boolean).join(" — ");
+          return { question: q.question, answer };
+        })
+        .filter((a) => a.answer.length > 0);
+
       const result = await askIntakeQuestions({
         data: {
           language: lang,
+          round,
           vehicle: {
             year: form.vehicleMode === "vin" ? form.decoded?.year : form.year,
             make: form.vehicleMode === "vin" ? form.decoded?.make : form.make,
@@ -473,6 +527,7 @@ function QuoteFlow() {
             hasVin: form.vehicleMode === "vin",
           },
           mileage: form.mileage,
+          serviceKeys: form.services,
           services: form.services.map((key) => ({
             label: serviceLabel(key),
             answers: Object.entries(form.answers[key] ?? {}).flatMap(([qid, v]) =>
@@ -482,13 +537,36 @@ function QuoteFlow() {
             ),
           })),
           notes: form.notes || undefined,
+          ...(previousAnswers.length ? { previousAnswers } : {}),
         },
       });
-      return result.questions;
+      return result;
     } catch {
-      return [] as IntakeQuestion[];
+      return { questions: [] as IntakeQuestion[], mayContinue: false, degraded: true };
     } finally {
       setPreparing(false);
+    }
+  }
+
+  /**
+   * Restates the customer's own answers as a service-advisor concern statement.
+   * Best-effort: the request is submitted with or without it.
+   */
+  async function loadIntakeSummary(questions: IntakeQuestion[]) {
+    const followups = collectFollowups({ ...form, intakeQuestions: questions, intakeSummary: "" });
+    if (followups.every((f) => f.skipped)) return "";
+    try {
+      const result = await summarizeIntakeAnswers({
+        data: {
+          language: lang,
+          notes: form.notes || undefined,
+          services: form.services.map((key) => serviceLabel(key)),
+          followups,
+        },
+      });
+      return result.summary;
+    } catch {
+      return "";
     }
   }
 
@@ -503,12 +581,18 @@ function QuoteFlow() {
       track("quote_form_completed");
       track("details_completed");
 
-      const questions = form.intakeQuestions.length
-        ? form.intakeQuestions
-        : await loadIntakeQuestions();
-      if (questions.length) {
-        patch({ intakeQuestions: questions });
-        track("intake_questions_shown", { count: questions.length });
+      if (form.intakeQuestions.length) {
+        goTo(STEP_QUESTIONS);
+        return;
+      }
+      const round = await loadIntakeRound(1);
+      if (round.questions.length) {
+        patch({
+          intakeQuestions: round.questions,
+          intakeRound: 1,
+          intakeMayContinue: round.mayContinue,
+        });
+        track("intake_questions_shown", { count: round.questions.length });
         goTo(STEP_QUESTIONS);
         return;
       }
@@ -517,11 +601,35 @@ function QuoteFlow() {
       return;
     }
     if (step === STEP_QUESTIONS) {
-      track("intake_questions_answered", {
-        answered: String(
-          form.intakeQuestions.filter((q) => (form.intakeAnswers[q.id] ?? "").trim()).length,
-        ),
-      });
+      const answeredCount = form.intakeQuestions.filter(
+        (q) => answerList(form.intakeAnswers[q.id]).length > 0 || (form.intakeOther[q.id] ?? "").trim(),
+      ).length;
+      track("intake_questions_answered", { answered: String(answeredCount) });
+
+      // Adaptive round 2: only when the advisor logic says another question
+      // could still add value, the customer engaged, and we stay under the cap.
+      if (
+        form.intakeMayContinue &&
+        form.intakeRound < 2 &&
+        answeredCount > 0 &&
+        form.intakeQuestions.length < MAX_INTAKE_QUESTIONS
+      ) {
+        const round = await loadIntakeRound(form.intakeRound + 1);
+        if (round.questions.length) {
+          patch({
+            intakeQuestions: [...form.intakeQuestions, ...round.questions],
+            intakeRound: form.intakeRound + 1,
+            intakeMayContinue: false,
+          });
+          track("intake_questions_shown", { count: round.questions.length });
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+        patch({ intakeMayContinue: false });
+      }
+
+      const summary = await loadIntakeSummary(form.intakeQuestions);
+      if (summary) patch({ intakeSummary: summary });
       track("contact_started");
       goTo(STEP_CONTACT);
       return;
@@ -621,7 +729,9 @@ function QuoteFlow() {
           {step === STEP_VEHICLE && <VehicleStep form={form} patch={patch} errors={errors} />}
           {step === STEP_SERVICE && <ServiceStep form={form} patch={patch} errors={errors} />}
           {step === STEP_DETAILS && <DetailsStep form={form} patch={patch} errors={errors} />}
-          {step === STEP_QUESTIONS && <FollowupsStep form={form} patch={patch} />}
+          {step === STEP_QUESTIONS && (
+            <FollowupsStep form={form} patch={patch} preparing={preparing} />
+          )}
           {step === STEP_CONTACT && <ContactStep form={form} patch={patch} errors={errors} />}
         </div>
       </main>
@@ -1364,14 +1474,27 @@ function DetailsStep({
 function FollowupsStep({
   form,
   patch,
+  preparing,
 }: {
   form: FormState;
   patch: (n: Partial<FormState>) => void;
+  preparing?: boolean;
 }) {
   const { t } = useI18n();
 
-  function setAnswer(id: string, value: string) {
-    patch({ intakeAnswers: { ...form.intakeAnswers, [id]: value } });
+  function setSelection(id: string, next: string[]) {
+    patch({ intakeAnswers: { ...form.intakeAnswers, [id]: next } });
+  }
+
+  function setOther(id: string, value: string) {
+    patch({ intakeOther: { ...form.intakeOther, [id]: value } });
+  }
+
+  function clearAnswer(id: string) {
+    patch({
+      intakeAnswers: { ...form.intakeAnswers, [id]: [] },
+      intakeOther: { ...form.intakeOther, [id]: "" },
+    });
   }
 
   return (
@@ -1385,34 +1508,68 @@ function FollowupsStep({
         <p className="text-sm text-muted-foreground">{t("quote.followups.unavailable")}</p>
       ) : (
         form.intakeQuestions.map((question) => {
-          const value = form.intakeAnswers[question.id] ?? "";
+          const selected = answerList(form.intakeAnswers[question.id]);
+          const otherText = form.intakeOther[question.id] ?? "";
           const id = `intake-${question.id}`;
+          const isFreeText = question.answerType === "text" || question.options.length === 0;
+          const multiple = question.answerType === "multi_choice";
+          // "Other"-style choices always reveal a free-text field underneath.
+          const otherOption = question.allowOther
+            ? question.options.find((o) => OTHER_OPTION_RE.test(o))
+            : undefined;
+          const otherChosen = !!otherOption && selected.includes(otherOption);
+
           return (
             <section key={question.id} className="surface-panel space-y-3 p-5">
+              {question.concernLabel && (
+                <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  {t("quote.followups.concernLabel", { concern: question.concernLabel })}
+                </p>
+              )}
               <h2 className="text-sm font-medium">{question.question}</h2>
+              {multiple && (
+                <p className="text-xs text-muted-foreground">{t("quote.followups.multiHint")}</p>
+              )}
 
-              {question.answerType === "text" || question.options.length === 0 ? (
+              {isFreeText ? (
                 <Textarea
                   id={id}
                   rows={3}
-                  value={value}
+                  value={selected[0] ?? ""}
                   placeholder={t("quote.followups.answerPlaceholder")}
                   aria-label={t("quote.followups.answerLabel")}
-                  onChange={(e) => setAnswer(question.id, e.target.value)}
+                  onChange={(e) => setSelection(question.id, e.target.value ? [e.target.value] : [])}
                 />
               ) : (
                 <OptionGroup
                   columns={1}
+                  multiple={multiple}
                   options={question.options.map((o) => ({ value: o, label: o }))}
-                  value={value ? [value] : []}
-                  onChange={(next) => setAnswer(question.id, next[0] ?? "")}
+                  value={selected}
+                  onChange={(next) => setSelection(question.id, next)}
                 />
               )}
 
-              {value && (
+              {otherChosen && (
+                <div className="space-y-2">
+                  <label htmlFor={`${id}-other`} className="block text-xs font-medium">
+                    {question.otherPrompt || t("quote.followups.otherLabel")}
+                  </label>
+                  <Textarea
+                    id={`${id}-other`}
+                    rows={2}
+                    autoFocus
+                    value={otherText}
+                    placeholder={t("quote.followups.otherPlaceholder")}
+                    onChange={(e) => setOther(question.id, e.target.value)}
+                  />
+                </div>
+              )}
+
+              {(selected.length > 0 || otherText) && (
                 <button
                   type="button"
-                  onClick={() => setAnswer(question.id, "")}
+                  onClick={() => clearAnswer(question.id)}
                   className="text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
                 >
                   {t("quote.followups.skipQuestion")}
@@ -1421,6 +1578,10 @@ function FollowupsStep({
             </section>
           );
         })
+      )}
+
+      {preparing && (
+        <p className="text-sm text-muted-foreground">{t("quote.followups.preparingMore")}</p>
       )}
     </div>
   );

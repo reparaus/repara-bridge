@@ -43,9 +43,13 @@ export const quoteRequestSchema = z.object({
         answer: z.string().trim().max(1000),
         category: z.string().trim().max(40).default("general"),
         skipped: z.boolean().default(false),
+        /** Complaint family (noise, warning_light, …) so concerns stay separated. */
+        concern: z.string().trim().max(40).optional(),
+        /** Free text typed after choosing an "Other" option. */
+        otherText: z.string().trim().max(1000).optional(),
       }),
     )
-    .max(6)
+    .max(14)
     .default([]),
   vehicle: z.object({
     /** How the customer identified the vehicle — kept for data quality. */

@@ -162,11 +162,16 @@ export const es: Dictionary = {
     },
     followups: {
       title: "Ayúdanos a entenderlo mejor",
-      sub: "Un par de preguntas rápidas sobre lo que describiste. Responde lo que sepas — puedes omitir lo que no estés seguro.",
+      sub: "Unas preguntas rápidas de asesor de servicio sobre lo que describiste. Responde lo que sepas — puedes omitir lo que no estés seguro.",
       answerPlaceholder: "Escribe tu respuesta…",
       skipQuestion: "Omitir esta pregunta",
       answerLabel: "Tu respuesta",
       unavailable: "Esta vez no hay preguntas adicionales — todo listo.",
+      multiHint: "Selecciona todas las que apliquen.",
+      otherLabel: "Cuéntanos más",
+      otherPlaceholder: "Descríbelo en tus propias palabras…",
+      preparingMore: "Un momento — estamos viendo si algo más ayudaría…",
+      concernLabel: "Sobre: {concern}",
     },
     contact: {
       title: "¿A dónde enviamos tu cotización?",

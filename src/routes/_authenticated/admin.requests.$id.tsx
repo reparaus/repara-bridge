@@ -177,6 +177,33 @@ function RequestDetail() {
   const request = detail.request as Record<string, any>;
   const customer = request.customers ?? {};
   const vehicle = request.vehicles ?? {};
+  // AI-assisted intake: the summary is stored alongside the answers, and the
+  // customer's original wording stays untouched in `notes`.
+  const intake = (() => {
+    type Followup = {
+      questionId: string;
+      question: string;
+      answer: string;
+      category: string;
+      skipped?: boolean;
+      concern?: string;
+      otherText?: string;
+    };
+    const all: Followup[] = Array.isArray(request.intake_followups)
+      ? (request.intake_followups as Followup[])
+      : [];
+    const summary = all.find((f) => f.category === "intake_summary")?.answer ?? "";
+    const followups = all.filter((f) => f.category !== "intake_summary");
+    const groups: { concern: string; items: Followup[] }[] = [];
+    for (const f of followups) {
+      const concern = f.concern || "general";
+      const group = groups.find((g) => g.concern === concern);
+      if (group) group.items.push(f);
+      else groups.push({ concern, items: [f] });
+    }
+    return { summary, followups, groups };
+  })();
+
   // Multi-service requests store the full selection; older rows have one category.
   const requestedServices: { key: string; label: string; detail: string }[] = Array.isArray(
     request.services,
@@ -340,6 +367,47 @@ function RequestDetail() {
               </div>
             )}
           </Panel>
+
+          {intake.followups.length > 0 && (
+            <Panel title="Repara intake">
+              {/* The customer's own words are never replaced by AI output. */}
+              {request.notes && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Original customer concern</p>
+                  <p className="pt-1 text-sm whitespace-pre-line">{request.notes}</p>
+                </div>
+              )}
+              {intake.summary && (
+                <div className="pt-3">
+                  <p className="text-xs text-muted-foreground">
+                    Repara intake summary (customer-reported, not a diagnosis)
+                  </p>
+                  <p className="pt-1 text-sm whitespace-pre-line">{intake.summary}</p>
+                </div>
+              )}
+              <div className="space-y-3 pt-3">
+                {intake.groups.map((group) => (
+                  <div key={group.concern}>
+                    <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      {group.concern.replace(/_/g, " ")}
+                    </p>
+                    <ul className="mt-1 space-y-1.5">
+                      {group.items.map((f) => (
+                        <li key={f.questionId}>
+                          <span className="block text-xs text-muted-foreground">{f.question}</span>
+                          <span className="text-sm">
+                            {f.skipped
+                              ? "Not answered"
+                              : [f.answer, f.otherText].filter(Boolean).join(" — ")}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
 
           <Panel title="Timeline">
             <Row label="Submitted" value={new Date(request.created_at).toLocaleString()} />
