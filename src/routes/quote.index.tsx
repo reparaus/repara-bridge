@@ -280,6 +280,7 @@ function QuoteFlow() {
   const submit = useServerFn(submitQuoteRequest);
   const discardPhotos = useServerFn(discardQuotePhotos);
   const askIntakeQuestions = useServerFn(requestIntakeQuestions);
+  const summarizeIntakeAnswers = useServerFn(requestIntakeSummary);
   const { service: preselectedService } = Route.useSearch();
 
   const [step, setStep] = useState(0);
@@ -490,16 +491,26 @@ function QuoteFlow() {
   }
 
   /**
-   * Asks the AI for 1–3 clarifying questions about what the customer described.
+   * Asks the AI for one round of service-advisor follow-up questions.
    * Any failure (or nothing worth asking) simply skips the step — AI is never
    * allowed to block a submission.
    */
-  async function loadIntakeQuestions() {
+  async function loadIntakeRound(round: number) {
     setPreparing(true);
     try {
+      const previousAnswers = form.intakeQuestions
+        .map((q) => {
+          const selected = answerList(form.intakeAnswers[q.id]);
+          const other = (form.intakeOther[q.id] ?? "").trim();
+          const answer = [selected.join(", "), other].filter(Boolean).join(" — ");
+          return { question: q.question, answer };
+        })
+        .filter((a) => a.answer.length > 0);
+
       const result = await askIntakeQuestions({
         data: {
           language: lang,
+          round,
           vehicle: {
             year: form.vehicleMode === "vin" ? form.decoded?.year : form.year,
             make: form.vehicleMode === "vin" ? form.decoded?.make : form.make,
@@ -510,6 +521,7 @@ function QuoteFlow() {
             hasVin: form.vehicleMode === "vin",
           },
           mileage: form.mileage,
+          serviceKeys: form.services,
           services: form.services.map((key) => ({
             label: serviceLabel(key),
             answers: Object.entries(form.answers[key] ?? {}).flatMap(([qid, v]) =>
@@ -519,13 +531,36 @@ function QuoteFlow() {
             ),
           })),
           notes: form.notes || undefined,
+          ...(previousAnswers.length ? { previousAnswers } : {}),
         },
       });
-      return result.questions;
+      return result;
     } catch {
-      return [] as IntakeQuestion[];
+      return { questions: [] as IntakeQuestion[], mayContinue: false, degraded: true };
     } finally {
       setPreparing(false);
+    }
+  }
+
+  /**
+   * Restates the customer's own answers as a service-advisor concern statement.
+   * Best-effort: the request is submitted with or without it.
+   */
+  async function loadIntakeSummary(questions: IntakeQuestion[]) {
+    const followups = collectFollowups({ ...form, intakeQuestions: questions, intakeSummary: "" });
+    if (followups.every((f) => f.skipped)) return "";
+    try {
+      const result = await summarizeIntakeAnswers({
+        data: {
+          language: lang,
+          notes: form.notes || undefined,
+          services: form.services.map((key) => serviceLabel(key)),
+          followups,
+        },
+      });
+      return result.summary;
+    } catch {
+      return "";
     }
   }
 
@@ -540,12 +575,18 @@ function QuoteFlow() {
       track("quote_form_completed");
       track("details_completed");
 
-      const questions = form.intakeQuestions.length
-        ? form.intakeQuestions
-        : await loadIntakeQuestions();
-      if (questions.length) {
-        patch({ intakeQuestions: questions });
-        track("intake_questions_shown", { count: questions.length });
+      if (form.intakeQuestions.length) {
+        goTo(STEP_QUESTIONS);
+        return;
+      }
+      const round = await loadIntakeRound(1);
+      if (round.questions.length) {
+        patch({
+          intakeQuestions: round.questions,
+          intakeRound: 1,
+          intakeMayContinue: round.mayContinue,
+        });
+        track("intake_questions_shown", { count: round.questions.length });
         goTo(STEP_QUESTIONS);
         return;
       }
@@ -554,11 +595,35 @@ function QuoteFlow() {
       return;
     }
     if (step === STEP_QUESTIONS) {
-      track("intake_questions_answered", {
-        answered: String(
-          form.intakeQuestions.filter((q) => (form.intakeAnswers[q.id] ?? "").trim()).length,
-        ),
-      });
+      const answeredCount = form.intakeQuestions.filter(
+        (q) => answerList(form.intakeAnswers[q.id]).length > 0 || (form.intakeOther[q.id] ?? "").trim(),
+      ).length;
+      track("intake_questions_answered", { answered: String(answeredCount) });
+
+      // Adaptive round 2: only when the advisor logic says another question
+      // could still add value, the customer engaged, and we stay under the cap.
+      if (
+        form.intakeMayContinue &&
+        form.intakeRound < 2 &&
+        answeredCount > 0 &&
+        form.intakeQuestions.length < MAX_INTAKE_QUESTIONS
+      ) {
+        const round = await loadIntakeRound(form.intakeRound + 1);
+        if (round.questions.length) {
+          patch({
+            intakeQuestions: [...form.intakeQuestions, ...round.questions],
+            intakeRound: form.intakeRound + 1,
+            intakeMayContinue: false,
+          });
+          track("intake_questions_shown", { count: round.questions.length });
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+        patch({ intakeMayContinue: false });
+      }
+
+      const summary = await loadIntakeSummary(form.intakeQuestions);
+      if (summary) patch({ intakeSummary: summary });
       track("contact_started");
       goTo(STEP_CONTACT);
       return;
