@@ -162,11 +162,16 @@ export const en = {
     },
     followups: {
       title: "Help us understand this better",
-      sub: "A couple of quick questions about what you described. Answer what you know — you can skip anything you're unsure about.",
+      sub: "A few quick service-advisor questions about what you described. Answer what you know — you can skip anything you're unsure about.",
       answerPlaceholder: "Type your answer…",
       skipQuestion: "Skip this question",
       answerLabel: "Your answer",
       unavailable: "No extra questions this time — you're all set.",
+      multiHint: "Select all that apply.",
+      otherLabel: "Tell us more",
+      otherPlaceholder: "Describe it in your own words…",
+      preparingMore: "One moment — checking if anything else would help…",
+      concernLabel: "About: {concern}",
     },
     contact: {
       title: "Where should we send your quote?",
