@@ -202,6 +202,12 @@ const EMPTY: FormState = {
   intakeSummary: "",
 };
 
+/** Ceiling on the whole AI interview — professional intake, not a survey. */
+const MAX_INTAKE_QUESTIONS = 6;
+
+/** Matches the "Other" style option that must reveal a free-text field. */
+const OTHER_OPTION_RE = /other|something else|otro|otra|algo m[aá]s/i;
+
 /** Draft-safe read: older drafts stored a single string per question. */
 function answerList(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((x) => String(x)).filter(Boolean);
@@ -723,7 +729,9 @@ function QuoteFlow() {
           {step === STEP_VEHICLE && <VehicleStep form={form} patch={patch} errors={errors} />}
           {step === STEP_SERVICE && <ServiceStep form={form} patch={patch} errors={errors} />}
           {step === STEP_DETAILS && <DetailsStep form={form} patch={patch} errors={errors} />}
-          {step === STEP_QUESTIONS && <FollowupsStep form={form} patch={patch} />}
+          {step === STEP_QUESTIONS && (
+            <FollowupsStep form={form} patch={patch} preparing={preparing} />
+          )}
           {step === STEP_CONTACT && <ContactStep form={form} patch={patch} errors={errors} />}
         </div>
       </main>
@@ -1466,14 +1474,27 @@ function DetailsStep({
 function FollowupsStep({
   form,
   patch,
+  preparing,
 }: {
   form: FormState;
   patch: (n: Partial<FormState>) => void;
+  preparing?: boolean;
 }) {
   const { t } = useI18n();
 
-  function setAnswer(id: string, value: string) {
-    patch({ intakeAnswers: { ...form.intakeAnswers, [id]: value } });
+  function setSelection(id: string, next: string[]) {
+    patch({ intakeAnswers: { ...form.intakeAnswers, [id]: next } });
+  }
+
+  function setOther(id: string, value: string) {
+    patch({ intakeOther: { ...form.intakeOther, [id]: value } });
+  }
+
+  function clearAnswer(id: string) {
+    patch({
+      intakeAnswers: { ...form.intakeAnswers, [id]: [] },
+      intakeOther: { ...form.intakeOther, [id]: "" },
+    });
   }
 
   return (
@@ -1487,34 +1508,68 @@ function FollowupsStep({
         <p className="text-sm text-muted-foreground">{t("quote.followups.unavailable")}</p>
       ) : (
         form.intakeQuestions.map((question) => {
-          const value = form.intakeAnswers[question.id] ?? "";
+          const selected = answerList(form.intakeAnswers[question.id]);
+          const otherText = form.intakeOther[question.id] ?? "";
           const id = `intake-${question.id}`;
+          const isFreeText = question.answerType === "text" || question.options.length === 0;
+          const multiple = question.answerType === "multi_choice";
+          // "Other"-style choices always reveal a free-text field underneath.
+          const otherOption = question.allowOther
+            ? question.options.find((o) => OTHER_OPTION_RE.test(o))
+            : undefined;
+          const otherChosen = !!otherOption && selected.includes(otherOption);
+
           return (
             <section key={question.id} className="surface-panel space-y-3 p-5">
+              {question.concernLabel && (
+                <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  {t("quote.followups.concernLabel", { concern: question.concernLabel })}
+                </p>
+              )}
               <h2 className="text-sm font-medium">{question.question}</h2>
+              {multiple && (
+                <p className="text-xs text-muted-foreground">{t("quote.followups.multiHint")}</p>
+              )}
 
-              {question.answerType === "text" || question.options.length === 0 ? (
+              {isFreeText ? (
                 <Textarea
                   id={id}
                   rows={3}
-                  value={value}
+                  value={selected[0] ?? ""}
                   placeholder={t("quote.followups.answerPlaceholder")}
                   aria-label={t("quote.followups.answerLabel")}
-                  onChange={(e) => setAnswer(question.id, e.target.value)}
+                  onChange={(e) => setSelection(question.id, e.target.value ? [e.target.value] : [])}
                 />
               ) : (
                 <OptionGroup
                   columns={1}
+                  multiple={multiple}
                   options={question.options.map((o) => ({ value: o, label: o }))}
-                  value={value ? [value] : []}
-                  onChange={(next) => setAnswer(question.id, next[0] ?? "")}
+                  value={selected}
+                  onChange={(next) => setSelection(question.id, next)}
                 />
               )}
 
-              {value && (
+              {otherChosen && (
+                <div className="space-y-2">
+                  <label htmlFor={`${id}-other`} className="block text-xs font-medium">
+                    {question.otherPrompt || t("quote.followups.otherLabel")}
+                  </label>
+                  <Textarea
+                    id={`${id}-other`}
+                    rows={2}
+                    autoFocus
+                    value={otherText}
+                    placeholder={t("quote.followups.otherPlaceholder")}
+                    onChange={(e) => setOther(question.id, e.target.value)}
+                  />
+                </div>
+              )}
+
+              {(selected.length > 0 || otherText) && (
                 <button
                   type="button"
-                  onClick={() => setAnswer(question.id, "")}
+                  onClick={() => clearAnswer(question.id)}
                   className="text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
                 >
                   {t("quote.followups.skipQuestion")}
@@ -1523,6 +1578,10 @@ function FollowupsStep({
             </section>
           );
         })
+      )}
+
+      {preparing && (
+        <p className="text-sm text-muted-foreground">{t("quote.followups.preparingMore")}</p>
       )}
     </div>
   );
