@@ -197,6 +197,19 @@ Deno.serve(async (req) => {
     .filter(Boolean)
     .join(" · ") || "—";
 
+  // Preferred channel for this request (per-request snapshot, falling back to
+  // the customer profile). SMS has no provider yet, so email is the carrier and
+  // the SMS intent is logged instead of being silently dropped.
+  const preferred = String(
+    (request as any).preferred_contact_method ?? customer.preferred_contact_method ?? "text",
+  );
+  const followups: any[] = Array.isArray((request as any).intake_followups)
+    ? ((request as any).intake_followups as any[])
+    : [];
+  const intakeSummary = String(
+    followups.find((f) => f?.category === "intake_summary")?.answer ?? "",
+  );
+
   const results: Record<string, string> = {};
   const errors: string[] = [];
 
@@ -210,6 +223,19 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
     });
     if (!res.ok) throw new Error(`resend ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
+
+  /** One shared conversation per request: confirmations live in it too. */
+  async function logComm(entry: Record<string, unknown>) {
+    try {
+      await supabase.from("request_communications").insert({
+        service_request_id: request.id,
+        direction: "outbound",
+        ...entry,
+      });
+    } catch (e) {
+      console.error("[emails] communication log failed", (e as Error).message);
+    }
   }
 
   // ------------------------------------------------------------- customer
@@ -231,19 +257,54 @@ Deno.serve(async (req) => {
     });
     try {
       await send(customerEmail, "Repara service request received", html);
+      const now = new Date().toISOString();
       await supabase
         .from("service_requests")
-        .update({ customer_email_sent_at: new Date().toISOString() })
+        .update({
+          customer_email_sent_at: now,
+          confirmation_channel: "email",
+          confirmation_sent_at: now,
+        })
         .eq("id", request.id);
       results.customer = "sent";
+      await logComm({
+        channel: "email",
+        category: "confirmation",
+        status: "sent",
+        message: `Request received — confirmation sent to ${customerEmail}.`,
+      });
     } catch (e) {
       results.customer = "failed";
       errors.push(`customer: ${(e as Error).message}`);
       console.error("[emails] customer send failed", (e as Error).message);
+      await logComm({
+        channel: "email",
+        category: "confirmation",
+        status: "failed",
+        message: "Request received — confirmation email could not be delivered.",
+        error: (e as Error).message.slice(0, 400),
+      });
     }
   } else {
     results.customer = validEmail ? "already_sent" : "skipped_no_email";
   }
+
+  // SMS architecture placeholder: the intent is recorded so a provider can
+  // later replay or take over these rows. Nothing is silently discarded.
+  if ((preferred === "text" || preferred === "call") && !request.customer_email_sent_at) {
+    const phone = String(customer.phone ?? "").trim();
+    if (phone) {
+      results.sms = "not_configured";
+      await logComm({
+        channel: "sms",
+        category: "confirmation",
+        status: "not_configured",
+        message: `Customer prefers ${preferred}. SMS provider is not connected yet — confirmation went out by email.`,
+        metadata: { to: phone, preferred },
+      });
+    }
+  }
+
 
   // ---------------------------------------------------------------- admin
   if (!request.admin_email_sent_at) {
