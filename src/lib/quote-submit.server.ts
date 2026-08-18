@@ -254,6 +254,8 @@ export async function persistQuoteRequest(data: QuoteInput) {
     city: area.city,
     preferred_language: data.preferredLanguage,
     intake_followups: data.intakeFollowups,
+    // Snapshot of the channel the customer chose for THIS request (0009).
+    preferred_contact_method: data.contact.preferredContactMethod,
     ...(submissionId ? { submission_id: submissionId } : {}),
   });
 
