@@ -434,7 +434,7 @@ export const saveQuote = createServerFn({ method: "POST" })
     const columnIssue = (message?: string | null) => /column|schema cache/i.test(message ?? "");
 
     if (quoteId) {
-      let { error } = await context.supabase.from("quotes").update(payload).eq("id", quoteId);
+      let { error } = await context.supabase.from("quotes").update(payload as never).eq("id", quoteId);
       if (error && columnIssue(error.message))
         ({ error } = await context.supabase.from("quotes").update(basePayload).eq("id", quoteId));
       if (error) throw new Error("Could not save the quote.");
@@ -443,7 +443,7 @@ export const saveQuote = createServerFn({ method: "POST" })
       let created: { id: string } | null = null;
       let { data: row, error } = await context.supabase
         .from("quotes")
-        .insert(payload)
+        .insert(payload as never)
         .select("id")
         .single();
       if (error && columnIssue(error.message)) {
