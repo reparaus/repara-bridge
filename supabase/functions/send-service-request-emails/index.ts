@@ -440,3 +440,41 @@ function clarificationHtml(d: {
     </p>
   `);
 }
+
+/**
+ * Admin-sent quote notification. Contains only the customer-facing amounts and
+ * message that the admin already reviewed; internal costs never reach here.
+ */
+function quoteHtml(d: {
+  firstName: string;
+  requestNumber: string;
+  vehicle: string;
+  total: string;
+  message: string;
+  expiresOn: string;
+  quoteUrl: string;
+}) {
+  return shell(`
+    <h1 style="margin:0 0 16px;font-size:20px;">Hi ${d.firstName},</h1>
+    <p style="margin:0 0 16px;line-height:1.6;">
+      Your Repara quote${d.requestNumber ? ` for request <strong>${d.requestNumber}</strong>` : ""}${
+        d.vehicle ? ` (${d.vehicle})` : ""
+      } is ready.
+    </p>
+    <table style="width:100%;border-collapse:collapse;">
+      ${row("Estimated total", `<strong>${d.total}</strong>`)}
+      ${d.expiresOn ? row("Valid through", d.expiresOn) : ""}
+    </table>
+    ${
+      d.message
+        ? `<p style="margin:18px 0 0;padding:14px 16px;background:#f4f4f5;border-radius:10px;line-height:1.6;">${d.message}</p>`
+        : ""
+    }
+    <p style="margin:24px 0 0;">
+      <a href="${d.quoteUrl}" style="display:inline-block;padding:12px 22px;background:#111111;color:#ffffff;border-radius:999px;text-decoration:none;font-size:13px;letter-spacing:.12em;text-transform:uppercase;">View your quote</a>
+    </p>
+    <p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:#666666;">
+      You can approve or decline the quote from that link. No account needed.
+    </p>
+  `);
+}
