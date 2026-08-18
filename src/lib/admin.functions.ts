@@ -10,11 +10,26 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const idSchema = z.object({ id: z.string().uuid() });
 
+const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
+
+/**
+ * One quote line. The parts fields are deliberately supplier-agnostic so a
+ * future catalog integration can populate them without a schema change.
+ * `internalUnitCost` is admin-only and never leaves the server for customers.
+ */
 const lineItemSchema = z.object({
   itemType: z.enum(["labor", "part", "fee", "discount"]),
   description: z.string().trim().min(1).max(200),
   quantity: z.coerce.number().min(0).max(9999),
   unitPrice: z.coerce.number().min(-100000).max(1000000),
+  groupLabel: optionalText(120),
+  partBrand: optionalText(80),
+  partNumber: optionalText(80),
+  supplier: optionalText(80),
+  supplierLocation: optionalText(120),
+  supplierProductId: optionalText(120),
+  availability: optionalText(60),
+  internalUnitCost: z.coerce.number().min(0).max(1000000).optional(),
 });
 
 export const getAdminContext = createServerFn({ method: "POST" })
