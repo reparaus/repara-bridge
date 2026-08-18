@@ -92,6 +92,48 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  // Admin-confirmed quote delivery. Same service-role gate as clarification:
+  // only Repara's own server code can reach it, and it never prices anything
+  // itself — the amounts are passed in from the saved quote.
+  if (body['mode'] === "quote") {
+    if (!RESEND_API_KEY) return json({ error: "email_not_configured" }, 500);
+    const bearer = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (bearer !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return json({ error: "forbidden" }, 403);
+
+    const to = String(body['to'] ?? "").trim();
+    const quoteUrl = String(body['quoteUrl'] ?? "").trim();
+    if (!to || !quoteUrl.startsWith("http")) return json({ error: "invalid_body" }, 400);
+
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${RESEND_API_KEY}` },
+        body: JSON.stringify({
+          from: FROM_EMAIL,
+          to: [to],
+          subject: `Your Repara quote ${String(body['requestNumber'] ?? "")}`.trim(),
+          html: quoteHtml({
+            firstName: esc(body['firstName'] || "there"),
+            requestNumber: esc(body['requestNumber']),
+            vehicle: esc(body['vehicle']),
+            total: esc(body['total']),
+            message: esc(body['message']),
+            expiresOn: esc(body['expiresOn']),
+            quoteUrl: esc(quoteUrl),
+          }),
+        }),
+      });
+      if (!res.ok) {
+        const detail = (await res.text()).slice(0, 300);
+        console.error("[emails] quote failed", res.status, detail);
+        return json({ ok: false, error: `resend ${res.status}: ${detail}` }, 200);
+      }
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message.slice(0, 200) }, 200);
+    }
+    return json({ ok: true });
+  }
+
   if (!UUID.test(requestId)) return json({ error: "invalid_request_id" }, 400);
 
   if (!RESEND_API_KEY) {
@@ -105,13 +147,24 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } },
   );
 
-  const { data: request, error } = await supabase
+  const BASE_COLUMNS =
+    "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, customers(first_name, last_name, phone, email, preferred_contact_method), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)";
+  const FULL_COLUMNS = `${BASE_COLUMNS}, preferred_contact_method, preferred_language, intake_followups`;
+
+  let { data: request, error } = await supabase
     .from("service_requests")
-    .select(
-      "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, customers(first_name, last_name, phone, email), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)",
-    )
+    .select(FULL_COLUMNS)
     .eq("id", requestId)
     .maybeSingle();
+
+  // Tolerate a database that has not run the newest migration yet.
+  if (error) {
+    ({ data: request, error } = await supabase
+      .from("service_requests")
+      .select(BASE_COLUMNS)
+      .eq("id", requestId)
+      .maybeSingle());
+  }
 
   if (error || !request) {
     console.error("[emails] request lookup failed", error?.message);
