@@ -362,7 +362,162 @@ export const resendRequestEmails = createServerFn({ method: "POST" })
   });
 
 
+/**
+ * Saves a quote draft, or saves AND sends it. All money maths happen here, on
+ * the server, so the stored quote is authoritative regardless of the frontend.
+ * Internal part costs are stored but never included in customer-facing output.
+ */
 export const saveQuote = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z
+      .object({
+        serviceRequestId: z.string().uuid(),
+        quoteId: z.string().uuid().nullable().optional(),
+        items: z.array(lineItemSchema).max(80),
+        customerNotes: z.string().trim().max(2000).optional().or(z.literal("")),
+        internalNotes: z.string().trim().max(2000).optional().or(z.literal("")),
+        expirationDate: z.string().trim().max(20).optional().or(z.literal("")),
+        taxTotal: z.coerce.number().min(0).max(100000).default(0),
+        send: z.boolean().default(false),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const lines = data.items.map((i) => ({ ...i, lineTotal: round2(i.quantity * i.unitPrice) }));
+    const sumOf = (type: string) =>
+      round2(lines.filter((l) => l.itemType === type).reduce((s, l) => s + l.lineTotal, 0));
+
+    const parts = sumOf("part");
+    const labor = sumOf("labor");
+    const fees = sumOf("fee");
+    const discounts = Math.abs(sumOf("discount"));
+    const total = round2(parts + labor + fees + data.taxTotal - discounts);
+    const internalCost = round2(
+      lines.reduce((s, l) => s + (Number(l.internalUnitCost) || 0) * (Number(l.quantity) || 0), 0),
+    );
+
+    const basePayload = {
+      service_request_id: data.serviceRequestId,
+      status: data.send ? ("sent" as const) : ("draft" as const),
+      parts_subtotal: parts,
+      labor_subtotal: labor,
+      fees_total: fees,
+      discount_total: discounts,
+      tax_total: data.taxTotal,
+      estimated_total: total,
+      customer_notes: data.customerNotes || null,
+      internal_notes: data.internalNotes || null,
+      expiration_date: data.expirationDate || null,
+      ...(data.send ? { sent_at: new Date().toISOString() } : {}),
+    };
+    // internal_cost_total arrives with migration 0009; tolerated when missing.
+    const payload = { ...basePayload, internal_cost_total: internalCost };
+
+    let quoteId = data.quoteId ?? null;
+
+    const columnIssue = (message?: string | null) => /column|schema cache/i.test(message ?? "");
+
+    if (quoteId) {
+      let { error } = await context.supabase.from("quotes").update(payload).eq("id", quoteId);
+      if (error && columnIssue(error.message))
+        ({ error } = await context.supabase.from("quotes").update(basePayload).eq("id", quoteId));
+      if (error) throw new Error("Could not save the quote.");
+      await context.supabase.from("quote_items").delete().eq("quote_id", quoteId);
+    } else {
+      let created: { id: string } | null = null;
+      let { data: row, error } = await context.supabase
+        .from("quotes")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error && columnIssue(error.message)) {
+        ({ data: row, error } = await context.supabase
+          .from("quotes")
+          .insert(basePayload)
+          .select("id")
+          .single());
+      }
+      created = row ?? null;
+      if (error || !created) throw new Error("Could not create the quote.");
+      quoteId = created.id;
+    }
+
+    if (lines.length > 0) {
+      const baseRows = lines.map((l, index) => ({
+        quote_id: quoteId!,
+        item_type: l.itemType,
+        description: l.description,
+        quantity: l.quantity,
+        unit_price: l.unitPrice,
+        line_total: l.lineTotal,
+        position: index,
+      }));
+      // Parts-supplier metadata (migration 0009). Kept optional so an older
+      // database still saves a working quote.
+      const fullRows = baseRows.map((r, index) => {
+        const l = lines[index]!;
+        return {
+          ...r,
+          group_label: l.groupLabel || null,
+          part_brand: l.partBrand || null,
+          part_number: l.partNumber || null,
+          supplier: l.supplier || null,
+          supplier_location: l.supplierLocation || null,
+          supplier_product_id: l.supplierProductId || null,
+          availability: l.availability || null,
+          internal_unit_cost: l.internalUnitCost ?? null,
+        };
+      });
+
+      let { error } = await context.supabase.from("quote_items").insert(fullRows as never);
+      if (error && columnIssue(error.message))
+        ({ error } = await context.supabase.from("quote_items").insert(baseRows));
+      if (error) throw new Error("Could not save the line items.");
+    }
+
+    const { data: saved } = await context.supabase
+      .from("quotes")
+      .select("id, public_token, status")
+      .eq("id", quoteId!)
+      .single();
+
+    let delivery: { ok: boolean; error: string | null; channel: string } | null = null;
+
+    if (data.send) {
+      await context.supabase
+        .from("service_requests")
+        .update({ status: "quoted" })
+        .eq("id", data.serviceRequestId);
+
+      // Delivery + conversation logging live server-side so the customer
+      // thread is complete no matter which client sent the quote.
+      const { deliverQuote } = await import("@/lib/quote-delivery.server");
+      delivery = await deliverQuote({
+        requestId: data.serviceRequestId,
+        quoteId: quoteId!,
+        publicToken: saved?.public_token ?? null,
+        total,
+        message: data.customerNotes || "",
+        expiresOn: data.expirationDate || "",
+        adminId: context.userId,
+      });
+    }
+
+    return {
+      quoteId: quoteId!,
+      publicToken: saved?.public_token ?? null,
+      status: saved?.status,
+      internalCostTotal: internalCost,
+      delivery,
+    };
+  });
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+const UNUSED_saveQuote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) =>
     z
