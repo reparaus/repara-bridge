@@ -313,6 +313,8 @@ Deno.serve(async (req) => {
       ["Submitted", new Date(String(request.created_at)).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })],
       ["Service area", areaText],
       ["Customer", [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "—"],
+      ["Preferred contact", preferred],
+      ["Language", String((request as any).preferred_language ?? "en") === "es" ? "Spanish" : "English"],
       ["Phone", customer.phone || "—"],
       ["Email", customerEmail || "—"],
       ["City / ZIP", location],
@@ -322,6 +324,8 @@ Deno.serve(async (req) => {
       ["Drivetrain", vehicle.drivetrain || "—"],
       ["Mileage", request.mileage ? Number(request.mileage).toLocaleString("en-US") : "—"],
       ["Services", serviceText],
+      // Customer concern first: it is what an admin actually reads on a phone.
+      ["Concern", intakeSummary || request.notes || "—"],
       ["Notes", request.notes || "—"],
     ];
     const subject = `New Repara Request — ${vehicleText} — ${request.zip_code ?? "—"}`;
