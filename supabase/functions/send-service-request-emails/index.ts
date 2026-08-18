@@ -92,6 +92,48 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  // Admin-confirmed quote delivery. Same service-role gate as clarification:
+  // only Repara's own server code can reach it, and it never prices anything
+  // itself — the amounts are passed in from the saved quote.
+  if (body['mode'] === "quote") {
+    if (!RESEND_API_KEY) return json({ error: "email_not_configured" }, 500);
+    const bearer = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (bearer !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return json({ error: "forbidden" }, 403);
+
+    const to = String(body['to'] ?? "").trim();
+    const quoteUrl = String(body['quoteUrl'] ?? "").trim();
+    if (!to || !quoteUrl.startsWith("http")) return json({ error: "invalid_body" }, 400);
+
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${RESEND_API_KEY}` },
+        body: JSON.stringify({
+          from: FROM_EMAIL,
+          to: [to],
+          subject: `Your Repara quote ${String(body['requestNumber'] ?? "")}`.trim(),
+          html: quoteHtml({
+            firstName: esc(body['firstName'] || "there"),
+            requestNumber: esc(body['requestNumber']),
+            vehicle: esc(body['vehicle']),
+            total: esc(body['total']),
+            message: esc(body['message']),
+            expiresOn: esc(body['expiresOn']),
+            quoteUrl: esc(quoteUrl),
+          }),
+        }),
+      });
+      if (!res.ok) {
+        const detail = (await res.text()).slice(0, 300);
+        console.error("[emails] quote failed", res.status, detail);
+        return json({ ok: false, error: `resend ${res.status}: ${detail}` }, 200);
+      }
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message.slice(0, 200) }, 200);
+    }
+    return json({ ok: true });
+  }
+
   if (!UUID.test(requestId)) return json({ error: "invalid_request_id" }, 400);
 
   if (!RESEND_API_KEY) {
@@ -105,13 +147,24 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } },
   );
 
-  const { data: request, error } = await supabase
+  const BASE_COLUMNS =
+    "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, customers(first_name, last_name, phone, email, preferred_contact_method), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)";
+  const FULL_COLUMNS = `${BASE_COLUMNS}, preferred_contact_method, preferred_language, intake_followups`;
+
+  let { data: request, error } = await supabase
     .from("service_requests")
-    .select(
-      "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, customers(first_name, last_name, phone, email), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)",
-    )
+    .select(FULL_COLUMNS)
     .eq("id", requestId)
     .maybeSingle();
+
+  // Tolerate a database that has not run the newest migration yet.
+  if (error) {
+    ({ data: request, error } = await supabase
+      .from("service_requests")
+      .select(BASE_COLUMNS)
+      .eq("id", requestId)
+      .maybeSingle());
+  }
 
   if (error || !request) {
     console.error("[emails] request lookup failed", error?.message);
@@ -144,6 +197,19 @@ Deno.serve(async (req) => {
     .filter(Boolean)
     .join(" · ") || "—";
 
+  // Preferred channel for this request (per-request snapshot, falling back to
+  // the customer profile). SMS has no provider yet, so email is the carrier and
+  // the SMS intent is logged instead of being silently dropped.
+  const preferred = String(
+    (request as any).preferred_contact_method ?? customer.preferred_contact_method ?? "text",
+  );
+  const followups: any[] = Array.isArray((request as any).intake_followups)
+    ? ((request as any).intake_followups as any[])
+    : [];
+  const intakeSummary = String(
+    followups.find((f) => f?.category === "intake_summary")?.answer ?? "",
+  );
+
   const results: Record<string, string> = {};
   const errors: string[] = [];
 
@@ -157,6 +223,19 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
     });
     if (!res.ok) throw new Error(`resend ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
+
+  /** One shared conversation per request: confirmations live in it too. */
+  async function logComm(entry: Record<string, unknown>) {
+    try {
+      await supabase.from("request_communications").insert({
+        service_request_id: request.id,
+        direction: "outbound",
+        ...entry,
+      });
+    } catch (e) {
+      console.error("[emails] communication log failed", (e as Error).message);
+    }
   }
 
   // ------------------------------------------------------------- customer
@@ -178,19 +257,54 @@ Deno.serve(async (req) => {
     });
     try {
       await send(customerEmail, "Repara service request received", html);
+      const now = new Date().toISOString();
       await supabase
         .from("service_requests")
-        .update({ customer_email_sent_at: new Date().toISOString() })
+        .update({
+          customer_email_sent_at: now,
+          confirmation_channel: "email",
+          confirmation_sent_at: now,
+        })
         .eq("id", request.id);
       results.customer = "sent";
+      await logComm({
+        channel: "email",
+        category: "confirmation",
+        status: "sent",
+        message: `Request received — confirmation sent to ${customerEmail}.`,
+      });
     } catch (e) {
       results.customer = "failed";
       errors.push(`customer: ${(e as Error).message}`);
       console.error("[emails] customer send failed", (e as Error).message);
+      await logComm({
+        channel: "email",
+        category: "confirmation",
+        status: "failed",
+        message: "Request received — confirmation email could not be delivered.",
+        error: (e as Error).message.slice(0, 400),
+      });
     }
   } else {
     results.customer = validEmail ? "already_sent" : "skipped_no_email";
   }
+
+  // SMS architecture placeholder: the intent is recorded so a provider can
+  // later replay or take over these rows. Nothing is silently discarded.
+  if ((preferred === "text" || preferred === "call") && !request.customer_email_sent_at) {
+    const phone = String(customer.phone ?? "").trim();
+    if (phone) {
+      results.sms = "not_configured";
+      await logComm({
+        channel: "sms",
+        category: "confirmation",
+        status: "not_configured",
+        message: `Customer prefers ${preferred}. SMS provider is not connected yet — confirmation went out by email.`,
+        metadata: { to: phone, preferred },
+      });
+    }
+  }
+
 
   // ---------------------------------------------------------------- admin
   if (!request.admin_email_sent_at) {
@@ -199,6 +313,8 @@ Deno.serve(async (req) => {
       ["Submitted", new Date(String(request.created_at)).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })],
       ["Service area", areaText],
       ["Customer", [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "—"],
+      ["Preferred contact", preferred],
+      ["Language", String((request as any).preferred_language ?? "en") === "es" ? "Spanish" : "English"],
       ["Phone", customer.phone || "—"],
       ["Email", customerEmail || "—"],
       ["City / ZIP", location],
@@ -208,6 +324,8 @@ Deno.serve(async (req) => {
       ["Drivetrain", vehicle.drivetrain || "—"],
       ["Mileage", request.mileage ? Number(request.mileage).toLocaleString("en-US") : "—"],
       ["Services", serviceText],
+      // Customer concern first: it is what an admin actually reads on a phone.
+      ["Concern", intakeSummary || request.notes || "—"],
       ["Notes", request.notes || "—"],
     ];
     const subject = `New Repara Request — ${vehicleText} — ${request.zip_code ?? "—"}`;
@@ -319,6 +437,44 @@ function clarificationHtml(d: {
     </p>
     <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6;">
       No account needed — the link opens a short form. You can also reply to this email.
+    </p>
+  `);
+}
+
+/**
+ * Admin-sent quote notification. Contains only the customer-facing amounts and
+ * message that the admin already reviewed; internal costs never reach here.
+ */
+function quoteHtml(d: {
+  firstName: string;
+  requestNumber: string;
+  vehicle: string;
+  total: string;
+  message: string;
+  expiresOn: string;
+  quoteUrl: string;
+}) {
+  return shell(`
+    <h1 style="margin:0 0 16px;font-size:20px;">Hi ${d.firstName},</h1>
+    <p style="margin:0 0 16px;line-height:1.6;">
+      Your Repara quote${d.requestNumber ? ` for request <strong>${d.requestNumber}</strong>` : ""}${
+        d.vehicle ? ` (${d.vehicle})` : ""
+      } is ready.
+    </p>
+    <table style="width:100%;border-collapse:collapse;">
+      ${row("Estimated total", `<strong>${d.total}</strong>`)}
+      ${d.expiresOn ? row("Valid through", d.expiresOn) : ""}
+    </table>
+    ${
+      d.message
+        ? `<p style="margin:18px 0 0;padding:14px 16px;background:#f4f4f5;border-radius:10px;line-height:1.6;">${d.message}</p>`
+        : ""
+    }
+    <p style="margin:24px 0 0;">
+      <a href="${d.quoteUrl}" style="display:inline-block;padding:12px 22px;background:#111111;color:#ffffff;border-radius:999px;text-decoration:none;font-size:13px;letter-spacing:.12em;text-transform:uppercase;">View your quote</a>
+    </p>
+    <p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:#666666;">
+      You can approve or decline the quote from that link. No account needed.
     </p>
   `);
 }
