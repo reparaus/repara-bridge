@@ -203,6 +203,8 @@ export const en = {
       miles: "miles",
       requested: "Requested services",
       preferredContact: "Preferred contact",
+      sentTo: "Confirmation sent to",
+      maskedNote: "We hide most of your contact details here for your privacy.",
       backHome: "BACK TO REPARA",
       another: "REQUEST ANOTHER QUOTE",
     },

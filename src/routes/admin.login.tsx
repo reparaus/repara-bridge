@@ -14,6 +14,8 @@ export const Route = createFileRoute("/admin/login")({
   validateSearch: z.object({
     denied: z.boolean().optional(),
     reset: z.boolean().optional(),
+    // Where to land after a successful sign-in, so deep links survive the gate.
+    next: z.string().optional(),
   }),
   head: () => ({
     meta: [
@@ -37,7 +39,9 @@ type Stage = "loading" | "password" | "enroll" | "verify";
 
 function AdminLoginPage() {
   const navigate = useNavigate();
-  const { denied, reset } = Route.useSearch();
+  const { denied, reset, next } = Route.useSearch();
+  // Only same-origin admin paths are ever honoured as a redirect target.
+  const destination = next && /^\/admin(\/|$)/.test(next) ? next : "/admin";
 
   const [stage, setStage] = useState<Stage>("loading");
   const [busy, setBusy] = useState(false);
@@ -59,7 +63,7 @@ function AdminLoginPage() {
 
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (aal?.currentLevel === "aal2") {
-      navigate({ to: "/admin", replace: true });
+      navigate({ to: destination, replace: true });
       return;
     }
 
@@ -167,7 +171,7 @@ function AdminLoginPage() {
       setCode("");
       return;
     }
-    navigate({ to: "/admin", replace: true });
+    navigate({ to: destination, replace: true });
   }
 
   async function startOver() {

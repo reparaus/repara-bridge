@@ -2,10 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Copy, Loader2, Mail, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Eye, Loader2, Mail, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { CopyValue } from "@/components/admin/CopyValue";
+import { ConversationPanel } from "@/components/admin/ConversationPanel";
 import { ReparaAiCard } from "@/components/admin/ReparaAiCard";
 
 import { Field } from "@/components/common/Field";
@@ -15,6 +16,13 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   getRequestDetail,
   markRequestViewed,
@@ -40,9 +48,34 @@ export const Route = createFileRoute("/_authenticated/admin/requests/$id")({
   component: RequestDetail,
 });
 
-type Line = { itemType: "labor" | "part" | "fee" | "discount"; description: string; quantity: string; unitPrice: string };
+/**
+ * One editable quote line. The parts fields are supplier-agnostic on purpose so a
+ * future parts-catalog integration can fill them in without a UI rewrite.
+ * `internalUnitCost` is admin-only and never shown to the customer.
+ */
+type Line = {
+  itemType: "labor" | "part" | "fee" | "discount";
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  groupLabel: string;
+  partBrand: string;
+  partNumber: string;
+  supplier: string;
+  internalUnitCost: string;
+};
 
-const EMPTY_LINE: Line = { itemType: "labor", description: "", quantity: "1", unitPrice: "0" };
+const EMPTY_LINE: Line = {
+  itemType: "labor",
+  description: "",
+  quantity: "1",
+  unitPrice: "0",
+  groupLabel: "",
+  partBrand: "",
+  partNumber: "",
+  supplier: "",
+  internalUnitCost: "",
+};
 
 function RequestDetail() {
   const { id } = Route.useParams();
@@ -70,6 +103,7 @@ function RequestDetail() {
   const [expirationDate, setExpirationDate] = useState("");
   const [tax, setTax] = useState("0");
   const [publicToken, setPublicToken] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const detail = query.data?.found ? query.data : null;
 
@@ -82,19 +116,22 @@ function RequestDetail() {
     setInternalNotes(existing.internal_notes ?? "");
     setExpirationDate(existing.expiration_date ?? "");
     setTax(String(existing.tax_total ?? 0));
-    const items = (existing.quote_items ?? []) as Array<{
-      item_type: Line["itemType"];
-      description: string;
-      quantity: number;
-      unit_price: number;
-    }>;
+    const items = (existing.quote_items ?? []) as Array<Record<string, any>>;
     if (items.length)
       setLines(
         items.map((i) => ({
-          itemType: i.item_type,
-          description: i.description,
-          quantity: String(i.quantity),
-          unitPrice: String(i.unit_price),
+          itemType: i['item_type'] as Line["itemType"],
+          description: String(i['description'] ?? ""),
+          quantity: String(i['quantity'] ?? 0),
+          unitPrice: String(i['unit_price'] ?? 0),
+          groupLabel: String(i['group_label'] ?? ""),
+          partBrand: String(i['part_brand'] ?? ""),
+          partNumber: String(i['part_number'] ?? ""),
+          supplier: String(i['supplier'] ?? ""),
+          internalUnitCost:
+            i['internal_unit_cost'] === null || i['internal_unit_cost'] === undefined
+              ? ""
+              : String(i['internal_unit_cost']),
         })),
       );
   }, [detail?.quotes]);
@@ -111,6 +148,12 @@ function RequestDetail() {
   const discounts = Math.abs(sum("discount"));
   const taxValue = Number(tax) || 0;
   const total = parts + labor + fees + taxValue - discounts;
+  // Margin view is admin-only: internal cost never reaches the customer quote.
+  const internalCost = numeric.reduce(
+    (s, l) => s + (Number(l.internalUnitCost) || 0) * (Number(l.quantity) || 0),
+    0,
+  );
+  const margin = total - taxValue - internalCost;
 
   const save = useMutation({
     mutationFn: (send: boolean) =>
@@ -125,6 +168,13 @@ function RequestDetail() {
               description: l.description,
               quantity: Number(l.quantity) || 0,
               unitPrice: Number(l.unitPrice) || 0,
+              groupLabel: l.groupLabel,
+              partBrand: l.partBrand,
+              partNumber: l.partNumber,
+              supplier: l.supplier,
+              ...(l.internalUnitCost.trim()
+                ? { internalUnitCost: Number(l.internalUnitCost) || 0 }
+                : {}),
             })),
           customerNotes,
           internalNotes,
@@ -137,7 +187,10 @@ function RequestDetail() {
       setQuoteId(res.quoteId);
       setPublicToken(res.publicToken);
       if (send) track("admin_quote_sent");
-      toast.success(send ? "Quote sent — copy the customer link." : "Draft saved.");
+      if (!send) toast.success("Draft saved.");
+      else if (res.delivery && !res.delivery.ok)
+        toast.error(res.delivery.error ?? "The quote was saved but not delivered.");
+      else toast.success("Quote sent to the customer.");
       void query.refetch();
     },
     onError: () => toast.error("We couldn't save this quote."),

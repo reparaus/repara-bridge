@@ -1678,6 +1678,24 @@ function ContactStep({
 
 /* ------------------------------- CONFIRMATION ------------------------------ */
 
+/** Masks an email so the confirmation screen never re-exposes full contact data. */
+function maskEmail(value: string) {
+  const email = (value ?? "").trim();
+  const at = email.indexOf("@");
+  if (at < 1) return "—";
+  const name = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const head = name.slice(0, 2);
+  return `${head}${"•".repeat(Math.max(name.length - 2, 2))}@${domain}`;
+}
+
+/** Masks a phone number down to its last two digits. */
+function maskPhone(value: string) {
+  const digits = (value ?? "").replace(/\D/g, "");
+  if (digits.length < 4) return "";
+  return `(•••) •••-••${digits.slice(-2)}`;
+}
+
 function Confirmation({
   requestNumber,
   snapshot,
@@ -1748,8 +1766,19 @@ function Confirmation({
             </ul>
           </div>
 
-          <div className="border-t border-border pt-4">
+          <div className="space-y-4 border-t border-border pt-4">
             <Row label={t("quote.confirm.preferredContact")} value={contactLabel} />
+            <Row
+              label={t("quote.confirm.sentTo")}
+              value={
+                snapshot.contactMethod === "email"
+                  ? maskEmail(snapshot.email)
+                  : maskPhone(snapshot.phone) || maskEmail(snapshot.email)
+              }
+            />
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {t("quote.confirm.maskedNote")}
+            </p>
           </div>
         </div>
 

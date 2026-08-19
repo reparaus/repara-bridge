@@ -5,13 +5,15 @@ import { getAdminContext } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
+    // Preserve the intended admin destination so email deep links survive login.
+    const next = location.href.startsWith("/admin") ? location.href : undefined;
     const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/admin/login" });
+    if (error || !data.user) throw redirect({ to: "/admin/login", search: { next } });
 
     // First factor only (aal1) → finish TOTP MFA on the login screen.
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aal?.currentLevel !== "aal2") throw redirect({ to: "/admin/login" });
+    if (aal?.currentLevel !== "aal2") throw redirect({ to: "/admin/login", search: { next } });
 
     // Signed in with MFA is still not enough: the account must be an approved
     // admin (public.admin_users). RLS enforces data access on top of this.
@@ -22,7 +24,7 @@ export const Route = createFileRoute("/_authenticated")({
     } catch {
       isAdmin = false;
     }
-    if (!isAdmin) throw redirect({ to: "/admin/login", search: { denied: true } });
+    if (!isAdmin) throw redirect({ to: "/admin/login", search: { denied: true, next } });
 
     return { user: data.user, isAdmin };
   },
