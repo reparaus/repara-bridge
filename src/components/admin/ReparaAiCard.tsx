@@ -1,16 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  AlertTriangle,
-  Check,
-  Loader2,
-  MessageSquare,
-  RefreshCw,
-  Send,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { AlertTriangle, Loader2, Plus, RefreshCw, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -52,7 +43,16 @@ type AiFields = {
  * customer-facing action is "Send question", and it always requires an explicit
  * confirmation of the exact (editable) text.
  */
-export function ReparaAiCard({ requestId, request }: { requestId: string; request: AiFields }) {
+export function ReparaAiCard({
+  requestId,
+  request,
+  onAddToQuote,
+}: {
+  requestId: string;
+  request: AiFields;
+  /** Adds an AI-suggested service straight into the quote builder as a labor line. */
+  onAddToQuote?: (service: string) => void;
+}) {
   const queryClient = useQueryClient();
   const analyze = useServerFn(analyzeRequestFn);
   const dismiss = useServerFn(dismissAnalysisFn);
@@ -131,8 +131,6 @@ export function ReparaAiCard({ requestId, request }: { requestId: string; reques
     mutationFn: () => clearReview({ data: { id: requestId } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-request", requestId] }),
   });
-
-  const thread = messages.data?.messages ?? [];
 
   return (
     <section className="surface-panel min-w-0 space-y-4 overflow-hidden p-5">
@@ -226,9 +224,21 @@ export function ReparaAiCard({ requestId, request }: { requestId: string; reques
               <p className="text-xs font-semibold text-muted-foreground">Suggested to verify</p>
               <ul className="space-y-1.5">
                 {analysis.recommended_services.map((s, i) => (
-                  <li key={i} className="text-sm">
-                    <span className="font-medium">{s.service}</span>
-                    {s.reason && <span className="text-muted-foreground"> — {s.reason}</span>}
+                  <li key={i} className="flex flex-wrap items-start justify-between gap-2 text-sm">
+                    <span className="min-w-0">
+                      <span className="font-medium">{s.service}</span>
+                      {s.reason && <span className="text-muted-foreground"> — {s.reason}</span>}
+                    </span>
+                    {onAddToQuote && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 shrink-0 border-border bg-transparent"
+                        onClick={() => onAddToQuote(s.service)}
+                      >
+                        <Plus className="mr-1 size-3.5" /> Add to quote
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -282,46 +292,6 @@ export function ReparaAiCard({ requestId, request }: { requestId: string; reques
         <p className="text-sm text-muted-foreground">
           AI analysis hidden for this request. Use Re-analyze to bring it back.
         </p>
-      )}
-
-      {thread.length > 0 && (
-        <div className="space-y-3 border-t border-border pt-4">
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-            <MessageSquare className="size-3.5" aria-hidden /> Conversation
-          </p>
-          {thread.map((m) => (
-            <div
-              key={m.id}
-              className={
-                m.direction === "inbound"
-                  ? "rounded-lg border border-primary/30 bg-primary/5 p-3"
-                  : "rounded-lg bg-muted/60 p-3"
-              }
-            >
-              <p className="text-[11px] text-muted-foreground">
-                {m.direction === "inbound" ? "Customer" : "Repara"} ·{" "}
-                {new Date(m.createdAt).toLocaleString()}
-                {m.direction === "outbound" && (
-                  <>
-                    {" · "}
-                    {m.status === "sent" ? (
-                      <span className="text-foreground">
-                        <Check className="inline size-3" aria-hidden /> sent
-                      </span>
-                    ) : m.status === "failed" ? (
-                      <span className="text-destructive">not delivered</span>
-                    ) : (
-                      m.status
-                    )}
-                    {m.aiGenerated ? " · AI drafted" : ""}
-                  </>
-                )}
-              </p>
-              <p className="mt-1 text-sm leading-relaxed break-words">{m.message}</p>
-              {m.error && <p className="mt-1 text-[11px] text-destructive">{m.error}</p>}
-            </div>
-          ))}
-        </div>
       )}
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
