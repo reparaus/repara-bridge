@@ -203,6 +203,8 @@ export const es: Dictionary = {
       miles: "millas",
       requested: "Servicios solicitados",
       preferredContact: "Contacto preferido",
+      sentTo: "Confirmación enviada a",
+      maskedNote: "Ocultamos la mayor parte de tus datos de contacto aquí por tu privacidad.",
       backHome: "VOLVER A REPARA",
       another: "SOLICITAR OTRA COTIZACIÓN",
     },
