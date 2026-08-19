@@ -96,3 +96,23 @@ export const clearAdminReviewFn = createServerFn({ method: "POST" })
     const { clearAdminReview } = await import("@/lib/repara-ai.server");
     return clearAdminReview(data.id);
   });
+
+/**
+ * Free-form admin message to the customer, delivered with a secure reply link so
+ * the answer lands back on the same request thread. Admin-initiated only.
+ */
+export const sendCustomerMessageFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema.extend({ message: z.string().trim().min(2).max(2000) }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const { sendCustomerMessage } = await import("@/lib/quote-delivery.server");
+    return sendCustomerMessage({
+      requestId: data.id,
+      message: data.message,
+      adminId: context.userId,
+      category: "message",
+    });
+  });
