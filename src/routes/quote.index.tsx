@@ -1748,8 +1748,19 @@ function Confirmation({
             </ul>
           </div>
 
-          <div className="border-t border-border pt-4">
+          <div className="space-y-4 border-t border-border pt-4">
             <Row label={t("quote.confirm.preferredContact")} value={contactLabel} />
+            <Row
+              label={t("quote.confirm.sentTo")}
+              value={
+                snapshot.contactMethod === "email"
+                  ? maskEmail(snapshot.email)
+                  : maskPhone(snapshot.phone) || maskEmail(snapshot.email)
+              }
+            />
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {t("quote.confirm.maskedNote")}
+            </p>
           </div>
         </div>
 
