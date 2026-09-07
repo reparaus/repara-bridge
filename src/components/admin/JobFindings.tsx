@@ -49,11 +49,13 @@ export function JobFindings({
   requestId,
   findings,
   recommendations,
+  concerns,
   onAddToQuote,
 }: {
   requestId: string;
   findings: JobFinding[];
   recommendations: JobRecommendation[];
+  concerns: JobConcern[];
   onAddToQuote: (recommendation: JobRecommendation) => void;
 }) {
   const queryClient = useQueryClient();
@@ -61,15 +63,21 @@ export function JobFindings({
   const removeFinding = useServerFn(deleteFinding);
   const persistRecommendation = useServerFn(saveRecommendation);
   const removeRecommendation = useServerFn(deleteRecommendation);
+  const runRecommendationDrafts = useServerFn(draftFindingRecommendations);
 
   const [title, setTitle] = useState("");
   const [measurement, setMeasurement] = useState("");
   const [severity, setSeverity] = useState<JobFinding["severity"]>("recommended");
   const [detail, setDetail] = useState("");
+  const [concernId, setConcernId] = useState("");
   const [converting, setConverting] = useState<JobFinding | null>(null);
   const [recTitle, setRecTitle] = useState("");
   const [recDescription, setRecDescription] = useState("");
+  const [recInternal, setRecInternal] = useState("");
   const [recPriority, setRecPriority] = useState("recommended");
+  const [recDrafts, setRecDrafts] = useState<
+    { title: string; customerDescription: string; internalNotes: string; priority: string }[]
+  >([]);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["job-workspace", requestId] });
 
