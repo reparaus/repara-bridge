@@ -11,6 +11,7 @@ import { ReparaAiCard } from "@/components/admin/ReparaAiCard";
 import { JobCopilot } from "@/components/admin/JobCopilot";
 import { JobDiagnosis } from "@/components/admin/JobDiagnosis";
 import { JobFindings } from "@/components/admin/JobFindings";
+import { JobConcerns } from "@/components/admin/JobConcerns";
 import { JobCloseout } from "@/components/admin/JobCloseout";
 import { QuotePreview } from "@/components/admin/QuotePreview";
 
