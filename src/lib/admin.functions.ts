@@ -157,6 +157,10 @@ export const listRequests = createServerFn({ method: "POST" })
         : "",
       viewed: Boolean(r.admin_viewed_at),
       emailStatus: r.email_status ?? null,
+      acceptedAt: r.accepted_at ?? null,
+      assignmentStatus: r.assignment_status ?? "unassigned",
+      assignedProvider: r.assigned_provider ?? "",
+      assignedTechnician: r.assigned_technician ?? "",
     }));
 
     let filtered = term
