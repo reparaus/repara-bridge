@@ -2,12 +2,17 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Copy, Eye, Loader2, Mail, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Bot, Copy, Eye, Loader2, Mail, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { CopyValue } from "@/components/admin/CopyValue";
 import { ConversationPanel } from "@/components/admin/ConversationPanel";
 import { ReparaAiCard } from "@/components/admin/ReparaAiCard";
+import { JobCopilot } from "@/components/admin/JobCopilot";
+import { JobDiagnosis } from "@/components/admin/JobDiagnosis";
+import { JobFindings } from "@/components/admin/JobFindings";
+import { JobCloseout } from "@/components/admin/JobCloseout";
+import { QuotePreview } from "@/components/admin/QuotePreview";
 
 import { Field } from "@/components/common/Field";
 import { LoadingState } from "@/components/common/LoadingState";
@@ -16,13 +21,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   getRequestDetail,
   markRequestViewed,
@@ -30,22 +29,28 @@ import {
   saveQuote,
   updateRequestStatus,
 } from "@/lib/admin.functions";
+import { getJobWorkspace, type JobRecommendation } from "@/lib/job.functions";
 import { answerLabel, serviceLabel, statusLabel, WORKFLOW_STATUSES } from "@/lib/services";
 import { DRIVETRAIN_LABELS, type Drivetrain } from "@/lib/vehicle-config";
 import { track } from "@/lib/analytics";
 
-
 export const Route = createFileRoute("/_authenticated/admin/requests/$id")({
   head: () => ({
     meta: [
-      { title: "Service Request — Repara Admin" },
-      { name: "description", content: "Review a customer request and build a quote." },
-      { property: "og:title", content: "Service Request — Repara Admin" },
-      { property: "og:description", content: "Review a customer request and build a quote." },
+      { title: "Job Workspace — Repara Admin" },
+      {
+        name: "description",
+        content: "Follow one repair end to end: concern, diagnosis, findings, quote and outcome.",
+      },
+      { property: "og:title", content: "Job Workspace — Repara Admin" },
+      {
+        property: "og:description",
+        content: "Follow one repair end to end: concern, diagnosis, findings, quote and outcome.",
+      },
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: RequestDetail,
+  component: JobWorkspace,
 });
 
 /**
@@ -63,6 +68,7 @@ type Line = {
   partNumber: string;
   supplier: string;
   internalUnitCost: string;
+  recommendationId: string | null;
 };
 
 const EMPTY_LINE: Line = {
@@ -75,11 +81,15 @@ const EMPTY_LINE: Line = {
   partNumber: "",
   supplier: "",
   internalUnitCost: "",
+  recommendationId: null,
 };
 
-function RequestDetail() {
+type TabKey = "overview" | "ai" | "diagnosis" | "findings" | "quote" | "messages" | "history";
+
+function JobWorkspace() {
   const { id } = Route.useParams();
   const fetchDetail = useServerFn(getRequestDetail);
+  const fetchJob = useServerFn(getJobWorkspace);
   const persistQuote = useServerFn(saveQuote);
   const setStatus = useServerFn(updateRequestStatus);
   const markViewed = useServerFn(markRequestViewed);
@@ -90,12 +100,18 @@ function RequestDetail() {
     queryFn: () => fetchDetail({ data: { id } }),
   });
 
+  // Job data (diagnostics, findings, recommendations, activity, outcome).
+  const job = useQuery({
+    queryKey: ["job-workspace", id],
+    queryFn: () => fetchJob({ data: { id } }),
+  });
+
   // Opening a request clears it from the "new requests" badge.
   useEffect(() => {
     void markViewed({ data: { id } }).catch(() => undefined);
   }, [id, markViewed]);
 
-
+  const [tab, setTab] = useState<TabKey>("overview");
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([{ ...EMPTY_LINE }]);
   const [customerNotes, setCustomerNotes] = useState("");
@@ -104,6 +120,7 @@ function RequestDetail() {
   const [tax, setTax] = useState("0");
   const [publicToken, setPublicToken] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [partsOpen, setPartsOpen] = useState<number | null>(null);
 
   const detail = query.data?.found ? query.data : null;
 
@@ -132,6 +149,7 @@ function RequestDetail() {
             i['internal_unit_cost'] === null || i['internal_unit_cost'] === undefined
               ? ""
               : String(i['internal_unit_cost']),
+          recommendationId: i['recommendation_id'] ? String(i['recommendation_id']) : null,
         })),
       );
   }, [detail?.quotes]);
@@ -172,6 +190,7 @@ function RequestDetail() {
               partBrand: l.partBrand,
               partNumber: l.partNumber,
               supplier: l.supplier,
+              recommendationId: l.recommendationId,
               ...(l.internalUnitCost.trim()
                 ? { internalUnitCost: Number(l.internalUnitCost) || 0 }
                 : {}),
@@ -192,18 +211,18 @@ function RequestDetail() {
         toast.error(res.delivery.error ?? "The quote was saved but not delivered.");
       else toast.success("Quote sent to the customer.");
       void query.refetch();
+      void job.refetch();
     },
     onError: () => toast.error("We couldn't save this quote."),
   });
 
   const statusMutation = useMutation({
-    mutationFn: (status: (typeof WORKFLOW_STATUSES)[number] | string) =>
-      setStatus({ data: { id, status: status as "new" } }),
+    mutationFn: (status: string) => setStatus({ data: { id, status: status as "new" } }),
     onSuccess: () => {
-      toast.success("Status updated.");
+      toast.success("Job stage updated.");
       void query.refetch();
     },
-    onError: () => toast.error("Could not update the status."),
+    onError: () => toast.error("Could not update the stage."),
   });
 
   const emailMutation = useMutation({
@@ -216,7 +235,7 @@ function RequestDetail() {
     onError: () => toast.error("The email could not be sent."),
   });
 
-  if (query.isPending) return <LoadingState label="Loading request" />;
+  if (query.isPending) return <LoadingState label="Loading job" />;
   if (query.isError || !detail)
     return (
       <div className="mx-auto max-w-2xl px-5 py-20 text-center">
@@ -230,6 +249,11 @@ function RequestDetail() {
   const request = detail.request as Record<string, any>;
   const customer = request.customers ?? {};
   const vehicle = request.vehicles ?? {};
+  const vehicleTitle =
+    [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ") || "Vehicle";
+  const mileage = request.mileage || vehicle.mileage;
+  const concern = String(request.details?.description ?? request.notes ?? "");
+
   // AI-assisted intake: the summary is stored alongside the answers, and the
   // customer's original wording stays untouched in `notes`.
   const intake = (() => {
@@ -249,10 +273,10 @@ function RequestDetail() {
     const followups = all.filter((f) => f.category !== "intake_summary");
     const groups: { concern: string; items: Followup[] }[] = [];
     for (const f of followups) {
-      const concern = f.concern || "general";
-      const group = groups.find((g) => g.concern === concern);
+      const key = f.concern || "general";
+      const group = groups.find((g) => g.concern === key);
       if (group) group.items.push(f);
-      else groups.push({ concern, items: [f] });
+      else groups.push({ concern: key, items: [f] });
     }
     return { summary, followups, groups };
   })();
@@ -281,215 +305,60 @@ function RequestDetail() {
   const quoteUrl = publicToken
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/quote/${publicToken}`
     : null;
+  const quoteRow = detail.quotes[0] as Record<string, any> | undefined;
+
+  /** Turns an approved recommendation into quote lines without retyping. */
+  function addRecommendationToQuote(rec: JobRecommendation) {
+    setLines((current) => {
+      const cleaned = current.filter((l) => l.description.trim() || l.recommendationId);
+      return [
+        ...cleaned,
+        {
+          ...EMPTY_LINE,
+          itemType: "labor",
+          description: rec.title,
+          groupLabel: rec.title.slice(0, 60),
+          recommendationId: rec.id,
+        },
+      ];
+    });
+    setTab("quote");
+    toast.success("Added to the quote — set labor and parts pricing.");
+  }
+
+  const findings = job.data?.findings ?? [];
+  const recommendations = job.data?.recommendations ?? [];
+  const diagnostics = job.data?.diagnostics ?? [];
+  const activity = job.data?.activity ?? [];
+  const openRecommendations = recommendations.filter((r) => r.status === "draft").length;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-24 lg:pb-0">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-5">
-          <Link
-            to="/admin"
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" /> Dashboard
-          </Link>
-          <StatusBadge status={request.status} />
-        </div>
-      </header>
-
-      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-5 sm:py-8 lg:grid-cols-[1fr_1.15fr]">
-        <div className="min-w-0 space-y-6">
-
-          <div>
-            <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">
-              Request #{request.request_number}
-            </p>
-            <h1 className="mt-1 font-display text-xl font-extrabold sm:text-2xl">
-              {serviceLabel(request.service_category)}
-            </h1>
+        <div className="mx-auto max-w-6xl px-4 sm:px-5">
+          <div className="flex h-14 items-center justify-between gap-3">
+            <Link
+              to="/admin"
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="size-4" /> <span className="hidden sm:inline">Dashboard</span>
+            </Link>
+            <div className="min-w-0 flex-1 text-center">
+              <p className="truncate font-display text-sm font-bold">{vehicleTitle}</p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                #{request.request_number}
+                {mileage ? ` · ${Number(mileage).toLocaleString()} mi` : ""}
+              </p>
+            </div>
+            <StatusBadge status={request.status} />
           </div>
-
-          <ReparaAiCard requestId={id} request={request as never} />
-
-
-
-          <Panel title="Customer">
-            <Row label="Name" value={`${customer.first_name ?? ""} ${customer.last_name ?? ""}`} />
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <span className="text-xs text-muted-foreground">Phone</span>
-              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                {customer.phone && (
-                  <a href={`tel:${customer.phone}`} className="text-sm font-medium underline-offset-4 hover:underline">
-                    {customer.phone}
-                  </a>
-                )}
-                <CopyValue value={customer.phone ?? ""} label="phone number" />
-              </div>
-            </div>
-
-            <Row label="Email" value={customer.email ?? "—"} />
-            <Row label="Preferred contact" value={customer.preferred_contact_method ?? "—"} />
-
-            <Row label="City" value={request.city || "—"} />
-            <Row label="ZIP" value={request.zip_code ?? "—"} />
-            <Row
-              label="Service area"
-              value={
-                request.service_area_status === "eligible"
-                  ? "In service area"
-                  : request.service_area_status === "outside_area"
-                    ? "Outside service area"
-                    : "Unknown"
-              }
-            />
-            <Row label="Submitted" value={new Date(request.created_at).toLocaleString()} />
-          </Panel>
-
-          <Panel title="Vehicle">
-            <Row label="Year" value={String(vehicle.year ?? "—")} />
-            <Row label="Make" value={vehicle.make ?? "—"} />
-            <Row label="Model" value={vehicle.model ?? "—"} />
-            <Row label="Trim" value={vehicle.trim ?? "—"} />
-            <Row
-              label="Engine"
-              value={
-                [
-                  vehicle.engine_displacement ? `${Number(vehicle.engine_displacement).toFixed(1)}L` : "",
-                  vehicle.cylinder_count ? `${vehicle.cylinder_count}-Cyl` : "",
-                  vehicle.is_hybrid ? "Hybrid" : "",
-                  vehicle.engine_code ? `(${vehicle.engine_code})` : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ") || "—"
-              }
-            />
-            <Row
-              label="Drivetrain"
-              value={vehicle.drivetrain && vehicle.drivetrain !== "unknown" ? DRIVETRAIN_LABELS[vehicle.drivetrain as Drivetrain] : "—"}
-            />
-            <Row label="Fuel" value={vehicle.fuel_type ?? "—"} />
-            <Row label="Body" value={vehicle.body_type ?? "—"} />
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <span className="text-xs text-muted-foreground">VIN</span>
-              <CopyValue value={vehicle.vin ?? ""} label="VIN" mono />
-            </div>
-
-            <Row
-              label="Mileage at request"
-              value={
-                request.mileage
-                  ? `${Number(request.mileage).toLocaleString()} mi`
-                  : vehicle.mileage
-                    ? `${Number(vehicle.mileage).toLocaleString()} mi`
-                    : "—"
-              }
-            />
-          </Panel>
-
-          <Panel title="Service request">
-            {requestedServices.length > 0 ? (
-              <ul className="space-y-2">
-                {requestedServices.map((s) => (
-                  <li key={s.key}>
-                    <span className="text-sm font-medium">{s.label || serviceLabel(s.key)}</span>
-                    {s.detail && (
-                      <span className="mt-0.5 block text-xs text-muted-foreground">{s.detail}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Row label="Category" value={serviceLabel(request.service_category)} />
-            )}
-            {request.details?.description && (
-              <p className="pt-2 text-sm whitespace-pre-line">{request.details.description}</p>
-            )}
-            {request.notes && <p className="pt-2 text-sm whitespace-pre-line">{request.notes}</p>}
-
-            {detail.photos.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 pt-3">
-                {detail.photos.map((p) => (
-                  <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
-                    <img
-                      src={p.url}
-                      alt="Customer upload"
-                      loading="lazy"
-                      className="aspect-square w-full rounded-lg object-cover"
-                    />
-                  </a>
-                ))}
-              </div>
-            )}
-          </Panel>
-
-          {intake.followups.length > 0 && (
-            <Panel title="Repara intake">
-              {/* The customer's own words are never replaced by AI output. */}
-              {request.notes && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Original customer concern</p>
-                  <p className="pt-1 text-sm whitespace-pre-line">{request.notes}</p>
-                </div>
-              )}
-              {intake.summary && (
-                <div className="pt-3">
-                  <p className="text-xs text-muted-foreground">
-                    Repara intake summary (customer-reported, not a diagnosis)
-                  </p>
-                  <p className="pt-1 text-sm whitespace-pre-line">{intake.summary}</p>
-                </div>
-              )}
-              <div className="space-y-3 pt-3">
-                {intake.groups.map((group) => (
-                  <div key={group.concern}>
-                    <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-                      {group.concern.replace(/_/g, " ")}
-                    </p>
-                    <ul className="mt-1 space-y-1.5">
-                      {group.items.map((f) => (
-                        <li key={f.questionId}>
-                          <span className="block text-xs text-muted-foreground">{f.question}</span>
-                          <span className="text-sm">
-                            {f.skipped
-                              ? "Not answered"
-                              : [f.answer, f.otherText].filter(Boolean).join(" — ")}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </Panel>
-          )}
-
-          <Panel title="Timeline">
-            <Row label="Submitted" value={new Date(request.created_at).toLocaleString()} />
-            <Row
-              label="Quote created"
-              value={detail.quotes[0] ? new Date(detail.quotes[0].created_at).toLocaleString() : "—"}
-            />
-            <Row
-              label="Quote sent"
-              value={detail.quotes[0]?.sent_at ? new Date(detail.quotes[0].sent_at).toLocaleString() : "—"}
-            />
-            <Row
-              label="Accepted"
-              value={
-                detail.quotes[0]?.accepted_at
-                  ? new Date(detail.quotes[0].accepted_at).toLocaleString()
-                  : "—"
-              }
-            />
-          </Panel>
-
-          <div className="surface-panel space-y-3 p-4">
-            <p className="text-[11px] tracking-[0.16em] text-muted-foreground uppercase">Status</p>
+          <div className="flex items-center gap-2 pb-2">
             <select
               value={request.status}
               disabled={statusMutation.isPending}
-              onChange={(e) => statusMutation.mutate(e.target.value as "new")}
-              className="h-12 w-full rounded-md border border-input bg-surface px-3 text-sm text-foreground"
-              aria-label="Request status"
+              onChange={(e) => statusMutation.mutate(e.target.value)}
+              className="h-10 min-w-0 flex-1 rounded-md border border-input bg-surface px-2 text-xs text-foreground"
+              aria-label="Job stage"
             >
               {WORKFLOW_STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -500,234 +369,624 @@ function RequestDetail() {
                 <option value={request.status}>{statusLabel(request.status)}</option>
               )}
             </select>
-            <p className="text-xs text-muted-foreground">
-              {statusMutation.isPending ? "Saving…" : "Changes save automatically."}
-            </p>
+            {statusMutation.isPending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
           </div>
+        </div>
+      </header>
 
-          <Panel title="Status history">
-            <ol className="space-y-2">
-              <li className="flex items-baseline justify-between gap-3">
-                <span className="text-sm">Submitted</span>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(request.created_at).toLocaleString()}
-                </span>
-              </li>
-              {(detail.statusEvents ?? []).map((e) => (
-                <li key={e.id} className="flex items-baseline justify-between gap-3">
-                  <span className="text-sm">
-                    {e.fromStatus ? `${statusLabel(e.fromStatus)} → ` : ""}
-                    {statusLabel(e.toStatus)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(e.createdAt).toLocaleString()}
-                  </span>
-                </li>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as TabKey)}>
+        <div className="sticky top-[102px] z-10 border-b border-border bg-background/95 backdrop-blur">
+          <div className="mx-auto max-w-6xl overflow-x-auto px-2 sm:px-5">
+            <TabsList className="h-12 w-max gap-1 bg-transparent p-0">
+              {(
+                [
+                  ["overview", "Overview"],
+                  ["ai", "Repara AI"],
+                  ["diagnosis", "Diagnosis"],
+                  ["findings", `Findings${openRecommendations ? ` (${openRecommendations})` : ""}`],
+                  ["quote", "Quote"],
+                  ["messages", "Messages"],
+                  ["history", "History"],
+                ] as [TabKey, string][]
+              ).map(([key, label]) => (
+                <TabsTrigger key={key} value={key} className="h-10 px-3 text-xs">
+                  {label}
+                </TabsTrigger>
               ))}
-              {(detail.statusEvents ?? []).length === 0 && (
-                <li className="text-xs text-muted-foreground">
-                  No status changes yet — updates appear here.
-                </li>
-              )}
-            </ol>
-          </Panel>
+            </TabsList>
+          </div>
+        </div>
 
-          <Panel title="Confirmation emails">
-            <Row
-              label="Customer"
-              value={
-                request.customer_email_sent_at
-                  ? `Sent ${new Date(request.customer_email_sent_at).toLocaleString()}`
-                  : "Not sent"
-              }
-            />
-            <Row
-              label="Repara admin"
-              value={
-                request.admin_email_sent_at
-                  ? `Sent ${new Date(request.admin_email_sent_at).toLocaleString()}`
-                  : "Not sent"
-              }
-            />
-            {request.email_last_error && (
-              <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-                Last email failure: {request.email_last_error}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-border bg-transparent"
-                disabled={emailMutation.isPending}
-                onClick={() => emailMutation.mutate("both")}
-              >
-                {emailMutation.isPending ? (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Mail className="mr-2 size-4" />
+        <main className="mx-auto max-w-6xl px-4 py-5 sm:px-5">
+          {/* ------------------------------------------------------- OVERVIEW */}
+          <TabsContent value="overview" className="mt-0 grid gap-5 lg:grid-cols-2">
+            <div className="min-w-0 space-y-5">
+              <Panel title="Customer concern">
+                <p className="text-sm whitespace-pre-line">{concern || "No description provided."}</p>
+                {intake.summary && (
+                  <div className="pt-2">
+                    <p className="text-xs text-muted-foreground">
+                      Repara intake summary (customer-reported, not a diagnosis)
+                    </p>
+                    <p className="pt-1 text-sm whitespace-pre-line">{intake.summary}</p>
+                  </div>
                 )}
-                {request.email_last_error ? "RETRY EMAILS" : "RESEND CONFIRMATION EMAIL"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                disabled={emailMutation.isPending}
-                onClick={() => emailMutation.mutate("customer")}
-              >
-                Customer only
-              </Button>
+                {requestedServices.length > 0 ? (
+                  <ul className="space-y-2 pt-2">
+                    {requestedServices.map((s) => (
+                      <li key={s.key}>
+                        <span className="text-sm font-medium">{s.label}</span>
+                        {s.detail && (
+                          <span className="mt-0.5 block text-xs text-muted-foreground">{s.detail}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <Row label="Category" value={serviceLabel(request.service_category)} />
+                )}
+                {detail.photos.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 pt-3">
+                    {detail.photos.map((p) => (
+                      <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
+                        <img
+                          src={p.url}
+                          alt="Customer upload"
+                          loading="lazy"
+                          className="aspect-square w-full rounded-lg object-cover"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </Panel>
+
+              <ReparaAiCard requestId={id} request={request as never} />
+
+              {intake.followups.length > 0 && (
+                <Panel title="Intake answers">
+                  <div className="space-y-3">
+                    {intake.groups.map((group) => (
+                      <div key={group.concern}>
+                        <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          {group.concern.replace(/_/g, " ")}
+                        </p>
+                        <ul className="mt-1 space-y-1.5">
+                          {group.items.map((f) => (
+                            <li key={f.questionId}>
+                              <span className="block text-xs text-muted-foreground">{f.question}</span>
+                              <span className="text-sm">
+                                {f.skipped
+                                  ? "Not answered"
+                                  : [f.answer, f.otherText].filter(Boolean).join(" — ")}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </Panel>
+              )}
             </div>
-          </Panel>
 
-        </div>
-
-
-        {/* QUOTE BUILDER */}
-        <div className="min-w-0 space-y-5">
-          <h2 className="font-display text-lg font-bold">Quote builder</h2>
-
-          <div className="surface-panel space-y-3 p-4">
-            {lines.map((line, i) => (
-              <div key={i} className="grid grid-cols-12 items-center gap-2">
-                <select
-                  value={line.itemType}
-                  onChange={(e) =>
-                    setLines((ls) =>
-                      ls.map((l, x) =>
-                        x === i ? { ...l, itemType: e.target.value as Line["itemType"] } : l,
-                      ),
-                    )
+            <div className="min-w-0 space-y-5">
+              <Panel title="Vehicle">
+                <Row label="Vehicle" value={vehicleTitle} />
+                <Row
+                  label="Engine"
+                  value={
+                    [
+                      vehicle.engine_displacement
+                        ? `${Number(vehicle.engine_displacement).toFixed(1)}L`
+                        : "",
+                      vehicle.cylinder_count ? `${vehicle.cylinder_count}-Cyl` : "",
+                      vehicle.is_hybrid ? "Hybrid" : "",
+                      vehicle.engine_code ? `(${vehicle.engine_code})` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || "—"
                   }
-                  className="col-span-3 h-11 rounded-md border border-input bg-surface px-2 text-xs"
-                >
-                  <option value="labor">Labor</option>
-                  <option value="part">Part</option>
-                  <option value="fee">Fee</option>
-                  <option value="discount">Discount</option>
-                </select>
-                <Input
-                  value={line.description}
-                  placeholder="Description"
-                  onChange={(e) =>
-                    setLines((ls) => ls.map((l, x) => (x === i ? { ...l, description: e.target.value } : l)))
-                  }
-                  className="col-span-4 h-11"
                 />
-                <Input
-                  value={line.quantity}
-                  inputMode="decimal"
-                  aria-label="Quantity"
-                  onChange={(e) =>
-                    setLines((ls) => ls.map((l, x) => (x === i ? { ...l, quantity: e.target.value } : l)))
+                <Row
+                  label="Drivetrain"
+                  value={
+                    vehicle.drivetrain && vehicle.drivetrain !== "unknown"
+                      ? DRIVETRAIN_LABELS[vehicle.drivetrain as Drivetrain]
+                      : "—"
                   }
-                  className="col-span-2 h-11"
                 />
-                <Input
-                  value={line.unitPrice}
-                  inputMode="decimal"
-                  aria-label="Unit price"
-                  onChange={(e) =>
-                    setLines((ls) => ls.map((l, x) => (x === i ? { ...l, unitPrice: e.target.value } : l)))
-                  }
-                  className="col-span-2 h-11"
+                <Row label="Fuel" value={vehicle.fuel_type ?? "—"} />
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <span className="text-xs text-muted-foreground">VIN</span>
+                  <CopyValue value={vehicle.vin ?? ""} label="VIN" mono />
+                </div>
+                <Row
+                  label="Mileage"
+                  value={mileage ? `${Number(mileage).toLocaleString()} mi` : "—"}
                 />
-                <button
-                  type="button"
-                  aria-label="Remove line"
-                  className="col-span-1 text-muted-foreground hover:text-destructive"
-                  onClick={() => setLines((ls) => ls.filter((_, x) => x !== i))}
-                >
-                  <Trash2 className="size-4" />
-                </button>
-                <p className="col-span-12 -mt-1 text-right text-xs text-muted-foreground tabular-nums">
-                  {formatCurrency(numeric[i]?.total ?? 0)}
-                </p>
-              </div>
-            ))}
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-border bg-transparent"
-              onClick={() => setLines((ls) => [...ls, { ...EMPTY_LINE }])}
-            >
-              <Plus className="mr-2 size-4" /> Add line item
-            </Button>
-          </div>
+              </Panel>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Tax" optional htmlFor="tax" hint="Enter a flat tax amount if applicable.">
-              <Input id="tax" inputMode="decimal" value={tax} onChange={(e) => setTax(e.target.value)} className="h-11" />
-            </Field>
-            <Field label="Expiration date" optional htmlFor="exp">
-              <Input
-                id="exp"
-                type="date"
-                value={expirationDate}
-                onChange={(e) => setExpirationDate(e.target.value)}
-                className="h-11"
+              <Panel title="Customer">
+                <Row
+                  label="Name"
+                  value={`${customer.first_name ?? ""} ${customer.last_name ?? ""}`}
+                />
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <span className="text-xs text-muted-foreground">Phone</span>
+                  <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                    {customer.phone && (
+                      <a
+                        href={`tel:${customer.phone}`}
+                        className="text-sm font-medium underline-offset-4 hover:underline"
+                      >
+                        {customer.phone}
+                      </a>
+                    )}
+                    <CopyValue value={customer.phone ?? ""} label="phone number" />
+                  </div>
+                </div>
+                <Row label="Email" value={customer.email ?? "—"} />
+                <Row label="Preferred contact" value={customer.preferred_contact_method ?? "—"} />
+                <Row
+                  label="Location"
+                  value={[request.city, request.zip_code].filter(Boolean).join(", ") || "—"}
+                />
+                <Row
+                  label="Service area"
+                  value={
+                    request.service_area_status === "eligible"
+                      ? "In service area"
+                      : request.service_area_status === "outside_area"
+                        ? "Outside service area"
+                        : "Unknown"
+                  }
+                />
+                <Row label="Submitted" value={new Date(request.created_at).toLocaleString()} />
+              </Panel>
+
+              <Panel title="Confirmation emails">
+                <Row
+                  label="Customer"
+                  value={
+                    request.customer_email_sent_at
+                      ? `Sent ${new Date(request.customer_email_sent_at).toLocaleString()}`
+                      : "Not sent"
+                  }
+                />
+                <Row
+                  label="Repara admin"
+                  value={
+                    request.admin_email_sent_at
+                      ? `Sent ${new Date(request.admin_email_sent_at).toLocaleString()}`
+                      : "Not sent"
+                  }
+                />
+                {request.email_last_error && (
+                  <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                    Last email failure: {request.email_last_error}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-11 border-border bg-transparent"
+                    disabled={emailMutation.isPending}
+                    onClick={() => emailMutation.mutate("both")}
+                  >
+                    {emailMutation.isPending ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <Mail className="mr-2 size-4" />
+                    )}
+                    {request.email_last_error ? "RETRY EMAILS" : "RESEND CONFIRMATION"}
+                  </Button>
+                </div>
+              </Panel>
+            </div>
+          </TabsContent>
+
+          {/* ------------------------------------------------------ REPARA AI */}
+          <TabsContent value="ai" className="mt-0">
+            <div className="mx-auto max-w-3xl">
+              <JobCopilot requestId={id} />
+            </div>
+          </TabsContent>
+
+          {/* ------------------------------------------------------ DIAGNOSIS */}
+          <TabsContent value="diagnosis" className="mt-0">
+            <div className="mx-auto max-w-3xl">
+              {job.isPending ? (
+                <LoadingState label="Loading diagnosis" />
+              ) : (
+                <JobDiagnosis requestId={id} entries={diagnostics} />
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ------------------------------------------------------- FINDINGS */}
+          <TabsContent value="findings" className="mt-0">
+            <div className="mx-auto max-w-3xl space-y-5">
+              {job.isPending ? (
+                <LoadingState label="Loading findings" />
+              ) : (
+                <JobFindings
+                  requestId={id}
+                  findings={findings}
+                  recommendations={recommendations}
+                  onAddToQuote={addRecommendationToQuote}
+                />
+              )}
+              <JobCloseout
+                requestId={id}
+                originalConcern={concern}
+                outcome={job.data?.outcome ?? null}
               />
-            </Field>
-          </div>
+            </div>
+          </TabsContent>
 
-          <PriceSummary
-            parts={parts}
-            labor={labor}
-            fees={fees}
-            discounts={discounts}
-            tax={taxValue}
-            total={total}
-          />
+          {/* ---------------------------------------------------------- QUOTE */}
+          <TabsContent value="quote" className="mt-0">
+            <div className="mx-auto max-w-3xl space-y-5">
+              {recommendations.filter((r) => r.status === "approved").length > 0 && (
+                <div className="surface-panel space-y-2 p-4">
+                  <p className="text-xs tracking-[0.18em] text-muted-foreground uppercase">
+                    Approved recommendations
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {recommendations
+                      .filter((r) => r.status === "approved")
+                      .map((rec) => (
+                        <Button
+                          key={rec.id}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-10 border-border bg-transparent text-xs"
+                          onClick={() => addRecommendationToQuote(rec)}
+                        >
+                          <Plus className="mr-1.5 size-3.5" /> {rec.title}
+                        </Button>
+                      ))}
+                  </div>
+                </div>
+              )}
 
-          <Field label="Customer-facing notes" optional htmlFor="cnotes">
-            <Textarea
-              id="cnotes"
-              rows={3}
-              value={customerNotes}
-              onChange={(e) => setCustomerNotes(e.target.value)}
-            />
-          </Field>
-          <Field label="Technician notes (internal)" optional htmlFor="inotes">
-            <Textarea
-              id="inotes"
-              rows={3}
-              value={internalNotes}
-              onChange={(e) => setInternalNotes(e.target.value)}
-            />
-          </Field>
+              <div className="surface-panel space-y-4 p-4">
+                {lines.map((line, i) => (
+                  <div key={i} className="space-y-2 rounded-lg border border-border p-3">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={line.itemType}
+                        aria-label="Line type"
+                        onChange={(e) =>
+                          setLines((ls) =>
+                            ls.map((l, x) =>
+                              x === i ? { ...l, itemType: e.target.value as Line["itemType"] } : l,
+                            ),
+                          )
+                        }
+                        className="h-11 flex-1 rounded-md border border-input bg-surface px-2 text-xs"
+                      >
+                        <option value="labor">Labor</option>
+                        <option value="part">Part</option>
+                        <option value="fee">Fee</option>
+                        <option value="discount">Discount</option>
+                      </select>
+                      <p className="text-sm font-medium tabular-nums">
+                        {formatCurrency(numeric[i]?.total ?? 0)}
+                      </p>
+                      <button
+                        type="button"
+                        aria-label="Remove line"
+                        className="p-2 text-muted-foreground hover:text-destructive"
+                        onClick={() => setLines((ls) => ls.filter((_, x) => x !== i))}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Button
-              variant="outline"
-              className="border-border bg-transparent"
-              disabled={save.isPending}
-              onClick={() => save.mutate(false)}
-            >
-              SAVE DRAFT
-            </Button>
-            <Button disabled={save.isPending} onClick={() => save.mutate(true)}>
-              {save.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} SEND QUOTE
-            </Button>
-            {quoteUrl && detail.quotes[0]?.status !== "draft" && (
-              <Button
-                variant="outline"
-                className="border-border bg-transparent"
-                onClick={() => {
-                  void navigator.clipboard.writeText(quoteUrl);
-                  toast.success("Customer link copied.");
-                }}
-              >
-                <Copy className="mr-2 size-4" /> COPY CUSTOMER LINK
-              </Button>
-            )}
-          </div>
-          {quoteUrl && detail.quotes[0]?.status !== "draft" && (
-            <p className="text-xs break-all text-muted-foreground">{quoteUrl}</p>
-          )}
-          {/* SMS/email delivery (Twilio, email provider) plugs in here later. */}
-        </div>
-      </main>
+                    <Input
+                      value={line.description}
+                      placeholder="Description"
+                      className="h-11"
+                      onChange={(e) =>
+                        setLines((ls) =>
+                          ls.map((l, x) => (x === i ? { ...l, description: e.target.value } : l)),
+                        )
+                      }
+                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <Input
+                        value={line.quantity}
+                        inputMode="decimal"
+                        aria-label="Quantity"
+                        placeholder="Qty"
+                        className="h-11"
+                        onChange={(e) =>
+                          setLines((ls) =>
+                            ls.map((l, x) => (x === i ? { ...l, quantity: e.target.value } : l)),
+                          )
+                        }
+                      />
+                      <Input
+                        value={line.unitPrice}
+                        inputMode="decimal"
+                        aria-label="Customer price"
+                        placeholder="Price"
+                        className="h-11"
+                        onChange={(e) =>
+                          setLines((ls) =>
+                            ls.map((l, x) => (x === i ? { ...l, unitPrice: e.target.value } : l)),
+                          )
+                        }
+                      />
+                      <Input
+                        value={line.internalUnitCost}
+                        inputMode="decimal"
+                        aria-label="Internal unit cost"
+                        placeholder="Cost"
+                        className="h-11"
+                        onChange={(e) =>
+                          setLines((ls) =>
+                            ls.map((l, x) =>
+                              x === i ? { ...l, internalUnitCost: e.target.value } : l,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground underline underline-offset-4"
+                      onClick={() => setPartsOpen(partsOpen === i ? null : i)}
+                    >
+                      {partsOpen === i ? "Hide service & part details" : "Service & part details"}
+                    </button>
+                    {partsOpen === i && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Input
+                          value={line.groupLabel}
+                          placeholder="Service card (e.g. Front brakes)"
+                          className="h-11"
+                          onChange={(e) =>
+                            setLines((ls) =>
+                              ls.map((l, x) => (x === i ? { ...l, groupLabel: e.target.value } : l)),
+                            )
+                          }
+                        />
+                        <Input
+                          value={line.partBrand}
+                          placeholder="Part brand"
+                          className="h-11"
+                          onChange={(e) =>
+                            setLines((ls) =>
+                              ls.map((l, x) => (x === i ? { ...l, partBrand: e.target.value } : l)),
+                            )
+                          }
+                        />
+                        <Input
+                          value={line.partNumber}
+                          placeholder="Part number"
+                          className="h-11"
+                          onChange={(e) =>
+                            setLines((ls) =>
+                              ls.map((l, x) => (x === i ? { ...l, partNumber: e.target.value } : l)),
+                            )
+                          }
+                        />
+                        <Input
+                          value={line.supplier}
+                          placeholder="Supplier"
+                          className="h-11"
+                          onChange={(e) =>
+                            setLines((ls) =>
+                              ls.map((l, x) => (x === i ? { ...l, supplier: e.target.value } : l)),
+                            )
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-11 border-border bg-transparent"
+                  onClick={() => setLines((ls) => [...ls, { ...EMPTY_LINE }])}
+                >
+                  <Plus className="mr-2 size-4" /> Add line item
+                </Button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Tax" optional htmlFor="tax" hint="Enter a flat tax amount if applicable.">
+                  <Input
+                    id="tax"
+                    inputMode="decimal"
+                    value={tax}
+                    onChange={(e) => setTax(e.target.value)}
+                    className="h-11"
+                  />
+                </Field>
+                <Field label="Expiration date" optional htmlFor="exp">
+                  <Input
+                    id="exp"
+                    type="date"
+                    value={expirationDate}
+                    onChange={(e) => setExpirationDate(e.target.value)}
+                    className="h-11"
+                  />
+                </Field>
+              </div>
+
+              <PriceSummary
+                parts={parts}
+                labor={labor}
+                fees={fees}
+                discounts={discounts}
+                tax={taxValue}
+                total={total}
+              />
+              <p className="text-xs text-muted-foreground">
+                Internal only — part cost {formatCurrency(internalCost)} · estimated margin{" "}
+                {formatCurrency(margin)}
+              </p>
+
+              <Field label="Customer-facing notes" optional htmlFor="cnotes">
+                <Textarea
+                  id="cnotes"
+                  rows={3}
+                  value={customerNotes}
+                  onChange={(e) => setCustomerNotes(e.target.value)}
+                />
+              </Field>
+              <Field label="Technician notes (internal)" optional htmlFor="inotes">
+                <Textarea
+                  id="inotes"
+                  rows={3}
+                  value={internalNotes}
+                  onChange={(e) => setInternalNotes(e.target.value)}
+                />
+              </Field>
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="outline"
+                  className="h-12 border-border bg-transparent"
+                  onClick={() => setPreviewOpen(true)}
+                >
+                  <Eye className="mr-2 size-4" /> PREVIEW QUOTE
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-12 border-border bg-transparent"
+                  disabled={save.isPending}
+                  onClick={() => save.mutate(false)}
+                >
+                  SAVE DRAFT
+                </Button>
+                <Button className="h-12" disabled={save.isPending} onClick={() => save.mutate(true)}>
+                  {save.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} SEND QUOTE
+                </Button>
+                {quoteUrl && quoteRow?.status !== "draft" && (
+                  <Button
+                    variant="outline"
+                    className="h-12 border-border bg-transparent"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(quoteUrl);
+                      toast.success("Customer link copied.");
+                    }}
+                  >
+                    <Copy className="mr-2 size-4" /> COPY LINK
+                  </Button>
+                )}
+              </div>
+
+              <Panel title="Approval status">
+                <Row label="Quote status" value={quoteRow ? statusLabel(String(quoteRow.status)) : "Not created"} />
+                <Row
+                  label="Sent"
+                  value={quoteRow?.sent_at ? new Date(quoteRow.sent_at).toLocaleString() : "—"}
+                />
+                <Row
+                  label="Customer approved"
+                  value={
+                    quoteRow?.accepted_at ? new Date(quoteRow.accepted_at).toLocaleString() : "—"
+                  }
+                />
+                {quoteUrl && quoteRow?.status !== "draft" && (
+                  <p className="text-xs break-all text-muted-foreground">{quoteUrl}</p>
+                )}
+              </Panel>
+            </div>
+          </TabsContent>
+
+          {/* ------------------------------------------------------- MESSAGES */}
+          <TabsContent value="messages" className="mt-0">
+            <div className="mx-auto max-w-3xl">
+              <ConversationPanel requestId={id} />
+            </div>
+          </TabsContent>
+
+          {/* -------------------------------------------------------- HISTORY */}
+          <TabsContent value="history" className="mt-0">
+            <div className="mx-auto max-w-3xl space-y-5">
+              <Panel title="Job activity">
+                <ol className="space-y-2">
+                  <li className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm">Request submitted</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(request.created_at).toLocaleString()}
+                    </span>
+                  </li>
+                  {(detail.statusEvents ?? []).map((e) => (
+                    <li key={e.id} className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm">
+                        {e.fromStatus ? `${statusLabel(e.fromStatus)} → ` : ""}
+                        {statusLabel(e.toStatus)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(e.createdAt).toLocaleString()}
+                      </span>
+                    </li>
+                  ))}
+                  {activity.map((e) => (
+                    <li key={e.id} className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm">{e.summary}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(e.createdAt).toLocaleString()}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </Panel>
+            </div>
+          </TabsContent>
+        </main>
+      </Tabs>
+
+      {/* Sticky mobile entry point into the copilot — a technician's most used action. */}
+      {tab !== "ai" && (
+        <button
+          type="button"
+          onClick={() => setTab("ai")}
+          className="fixed right-4 bottom-5 z-30 flex h-14 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground shadow-lg lg:hidden"
+        >
+          <Bot className="size-5" /> Repara AI
+        </button>
+      )}
+
+      <QuotePreview
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        requestNumber={String(request.request_number ?? "")}
+        vehicle={vehicleTitle}
+        lines={numeric
+          .filter((l) => l.description.trim())
+          .map((l) => ({
+            itemType: l.itemType,
+            description: l.description,
+            quantity: Number(l.quantity) || 0,
+            unitPrice: Number(l.unitPrice) || 0,
+            total: l.total,
+            groupLabel: l.groupLabel,
+            partBrand: l.partBrand,
+            partNumber: l.partNumber,
+          }))}
+        parts={parts}
+        labor={labor}
+        fees={fees}
+        discounts={discounts}
+        tax={taxValue}
+        total={total}
+        customerNotes={customerNotes}
+        expirationDate={expirationDate}
+        internalCost={internalCost}
+        margin={margin}
+      />
     </div>
   );
 }
@@ -749,4 +1008,3 @@ function Row({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
