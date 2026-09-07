@@ -164,7 +164,13 @@ export function JobCopilot({ requestId }: { requestId: string }) {
     onError: () => toast.error("Could not save this recommendation."),
   });
 
-  const messages = log.data?.messages ?? [];
+  const stored = log.data?.messages ?? [];
+  // Session answers that never made it into the saved history are appended.
+  const storedContent = new Set(stored.map((m) => m.content));
+  const messages = [
+    ...stored,
+    ...local.filter((m) => !storedContent.has(m.content)),
+  ] as typeof stored;
 
   return (
     <section className="surface-panel space-y-4 p-4">
