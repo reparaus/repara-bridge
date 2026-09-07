@@ -662,11 +662,18 @@ function JobWorkspace() {
 
           {/* ------------------------------------------------------ DIAGNOSIS */}
           <TabsContent value="diagnosis" className="mt-0">
-            <div className="mx-auto max-w-3xl">
+            <div className="mx-auto max-w-3xl space-y-5">
               {job.isPending ? (
                 <LoadingState label="Loading diagnosis" />
               ) : (
-                <JobDiagnosis requestId={id} entries={diagnostics} />
+                <>
+                  <JobConcerns
+                    requestId={id}
+                    concerns={concerns}
+                    onFindingsDrafted={() => setTab("findings")}
+                  />
+                  <JobDiagnosis requestId={id} entries={diagnostics} />
+                </>
               )}
             </div>
           </TabsContent>
@@ -681,6 +688,7 @@ function JobWorkspace() {
                   requestId={id}
                   findings={findings}
                   recommendations={recommendations}
+                  concerns={concerns}
                   onAddToQuote={addRecommendationToQuote}
                 />
               )}
@@ -688,6 +696,7 @@ function JobWorkspace() {
                 requestId={id}
                 originalConcern={concern}
                 outcome={job.data?.outcome ?? null}
+                concerns={concerns}
               />
             </div>
           </TabsContent>
