@@ -403,6 +403,13 @@ export function JobFindings({
             placeholder="Plain-language explanation the customer will read"
             onChange={(e) => setRecDescription(e.target.value)}
           />
+          {/* Internal wording stays internal — it never reaches the customer. */}
+          <Textarea
+            rows={2}
+            value={recInternal}
+            placeholder="Internal notes (technical wording, parts, cautions) — customer never sees this"
+            onChange={(e) => setRecInternal(e.target.value)}
+          />
           <select
             value={recPriority}
             onChange={(e) => setRecPriority(e.target.value)}
