@@ -41,11 +41,25 @@ const FILTERS = [
 
 type FilterKey = (typeof FILTERS)[number]["key"];
 
+/**
+ * Work that has not been taken on yet vs work in progress. Incoming requests
+ * need a decision (take it, assign it, decline it); jobs need to be finished.
+ */
+const INCOMING_STATUSES = new Set(["new", "contacted", "reviewing", "quoted", "declined"]);
+
+const ASSIGNMENT_LABEL: Record<string, string> = {
+  unassigned: "Unassigned",
+  self: "Doing it myself",
+  assigned: "Assigned to a provider",
+  declined: "Declined",
+};
+
 function RequestsDashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fetchRequests = useServerFn(listRequests);
 
+  const [view, setView] = useState<"incoming" | "jobs">("incoming");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
 
@@ -59,6 +73,10 @@ function RequestsDashboard() {
 
   const counts = query.data?.counts ?? {};
   const areaCounts = query.data?.areaCounts ?? {};
+  const all = query.data?.requests ?? [];
+  const isIncoming = (r: (typeof all)[number]) =>
+    INCOMING_STATUSES.has(r.status) && !r.acceptedAt;
+  const visible = all.filter((r) => (view === "incoming" ? isIncoming(r) : !isIncoming(r)));
 
   function countFor(f: (typeof FILTERS)[number]) {
     if (f.key === "all") return Object.values(counts).reduce((s, n) => s + n, 0);
