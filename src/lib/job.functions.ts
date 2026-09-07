@@ -326,19 +326,25 @@ export const saveFinding = createServerFn({ method: "POST" })
     idSchema
       .extend({
         findingId: z.string().uuid().nullable().optional(),
+        concernId: z.string().uuid().nullable().optional(),
         title: z.string().trim().min(2).max(200),
         detail: optionalText(2000),
         measurement: optionalText(120),
+        evidence: optionalText(1000),
+        confidence: z.enum(["confirmed", "suspected"]).optional(),
         severity: z.enum(["urgent", "recommended", "monitor", "informational"]).default("recommended"),
         source: z.enum(["technician", "ai"]).default("technician"),
         status: z.enum(["open", "converted", "resolved", "dismissed"]).optional(),
+        aiDrafted: z.boolean().optional(),
+        /** True when a human is confirming an AI-drafted finding. */
+        approve: z.boolean().optional(),
       })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
     await assertVerifiedAdmin(context);
     const client = context.supabase as unknown as Client;
-    const payload = {
+    const payload: Record<string, unknown> = {
       title: data.title,
       detail: data.detail || null,
       measurement: data.measurement || null,
@@ -346,24 +352,43 @@ export const saveFinding = createServerFn({ method: "POST" })
       source: data.source,
       ...(data.status ? { status: data.status } : {}),
     };
+    // 0011 columns are optional so this keeps working before the migration runs.
+    const extended: Record<string, unknown> = {
+      ...payload,
+      ...(data.concernId ? { concern_id: data.concernId } : {}),
+      ...(data.evidence ? { evidence: data.evidence } : {}),
+      ...(data.confidence ? { confidence: data.confidence } : {}),
+      ...(data.aiDrafted === undefined ? {} : { ai_drafted: data.aiDrafted }),
+      ...(data.approve
+        ? { approved_at: new Date().toISOString(), approved_by: context.userId }
+        : {}),
+    };
 
     if (data.findingId) {
-      const { error } = await client.from("job_findings").update(payload).eq("id", data.findingId);
+      let { error } = await client.from("job_findings").update(extended).eq("id", data.findingId);
+      if (error) ({ error } = await client.from("job_findings").update(payload).eq("id", data.findingId));
       if (error) throw new Error("Could not update this finding.");
+      if (data.approve)
+        await logActivity(
+          client,
+          data.id,
+          "finding_approved",
+          `Finding confirmed: ${data.title}`,
+          context.userId,
+        );
       return { ok: true, id: data.findingId };
     }
 
-    const { data: row, error } = await client
-      .from("job_findings")
-      .insert({ ...payload, service_request_id: data.id, created_by: context.userId })
-      .select("id")
-      .single();
-    if (error) throw new Error("Could not save this finding.");
+    const base = { service_request_id: data.id, created_by: context.userId };
+    let insert = await client.from("job_findings").insert({ ...extended, ...base }).select("id").single();
+    if (insert.error)
+      insert = await client.from("job_findings").insert({ ...payload, ...base }).select("id").single();
+    if (insert.error) throw new Error("Could not save this finding.");
     await logActivity(client, data.id, "finding_added", `Finding: ${data.title}`, context.userId, {
       severity: data.severity,
       source: data.source,
     });
-    return { ok: true, id: String(row?.id ?? "") };
+    return { ok: true, id: String(insert.data?.id ?? "") };
   });
 
 export const deleteFinding = createServerFn({ method: "POST" })
