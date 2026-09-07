@@ -242,6 +242,12 @@ export function JobCopilot({ requestId }: { requestId: string }) {
         </div>
       )}
 
+      {saveWarning && (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-600 dark:text-amber-400">
+          {saveWarning}
+        </p>
+      )}
+
       <div className="space-y-3">
         {messages.length === 0 && !turn.isPending && (
           <p className="text-xs text-muted-foreground">
