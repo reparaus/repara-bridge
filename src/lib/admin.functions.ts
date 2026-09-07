@@ -201,6 +201,10 @@ type AdminRequestRow = {
   service_area_status: string | null;
   admin_viewed_at: string | null;
   email_status: string | null;
+  accepted_at?: string | null;
+  assignment_status?: string | null;
+  assigned_provider?: string | null;
+  assigned_technician?: string | null;
   customers: { first_name?: string; last_name?: string; phone?: string; email?: string } | null;
   vehicles: { year?: number; make?: string; model?: string; vin?: string } | null;
 };
