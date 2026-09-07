@@ -115,12 +115,40 @@ function RequestsDashboard() {
 
       <main className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-5 sm:py-8">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="font-display text-xl font-extrabold sm:text-2xl">Service Requests</h1>
+          <h1 className="font-display text-xl font-extrabold sm:text-2xl">
+            {view === "incoming" ? "Incoming Requests" : "Jobs"}
+          </h1>
           <p className="text-xs text-muted-foreground">
             {(query.data?.unviewedCount ?? 0) > 0
               ? `${query.data?.unviewedCount} not yet viewed`
               : "All requests viewed"}
           </p>
+        </div>
+
+        <div className="flex gap-2">
+          {(
+            [
+              { key: "incoming", label: "Incoming Requests" },
+              { key: "jobs", label: "Jobs" },
+            ] as const
+          ).map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => setView(v.key)}
+              aria-pressed={view === v.key}
+              className={`rounded-full border px-4 py-2 text-xs font-semibold transition-colors ${
+                view === v.key
+                  ? "border-chrome/60 bg-chrome/15 text-foreground"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {v.label}
+              <span className="ml-1.5 tabular-nums opacity-70">
+                {all.filter((r) => (v.key === "incoming" ? isIncoming(r) : !isIncoming(r))).length}
+              </span>
+            </button>
+          ))}
         </div>
 
         <div className="relative">
