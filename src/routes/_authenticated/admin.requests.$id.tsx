@@ -468,6 +468,15 @@ function JobWorkspace() {
                   </ul>
                 )}
               </Panel>
+              <Panel title="Who is doing this work">
+                <AssignmentControl
+                  requestId={id}
+                  initialStatus={String(request.assignment_status ?? "unassigned")}
+                  initialProvider={String(request.assigned_provider ?? "")}
+                  initialTechnician={String(request.assigned_technician ?? "")}
+                  onSaved={() => void query.refetch()}
+                />
+              </Panel>
               <Panel title="Customer concern">
                 <p className="text-sm whitespace-pre-line">{concern || "No description provided."}</p>
                 {intake.summary && (
