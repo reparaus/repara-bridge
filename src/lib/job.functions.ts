@@ -194,15 +194,37 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
     }));
 
 
-    let outcome: Record<string, unknown> | null = null;
+    let outcome: {
+      originalConcern: string | null;
+      confirmedCause: string | null;
+      repairPerformed: string | null;
+      resolved: boolean | null;
+      verification: string | null;
+      technicianNotes: string | null;
+      remainingRecommendations: string | null;
+      completedAt: string | null;
+    } | null = null;
     try {
       const { data: row } = await client
         .from("job_outcomes")
         .select("*")
         .eq("service_request_id", data.id)
         .maybeSingle();
-      outcome = (row ?? null) as Record<string, unknown> | null;
+      const o = (row ?? null) as Row | null;
+      outcome = o
+        ? {
+            originalConcern: s(o['original_concern']),
+            confirmedCause: s(o['confirmed_cause']),
+            repairPerformed: s(o['repair_performed']),
+            resolved: o['resolved'] === null || o['resolved'] === undefined ? null : Boolean(o['resolved']),
+            verification: s(o['verification']),
+            technicianNotes: s(o['technician_notes']),
+            remainingRecommendations: s(o['remaining_recommendations']),
+            completedAt: s(o['completed_at']),
+          }
+        : null;
     } catch {
+
       outcome = null;
     }
 
