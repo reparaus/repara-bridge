@@ -30,7 +30,7 @@ import {
   saveQuote,
   updateRequestStatus,
 } from "@/lib/admin.functions";
-import { getJobWorkspace, type JobRecommendation } from "@/lib/job.functions";
+import { getJobWorkspace, setRequestAssignment, type JobRecommendation } from "@/lib/job.functions";
 import { answerLabel, serviceLabel, statusLabel, WORKFLOW_STATUSES } from "@/lib/services";
 import { DRIVETRAIN_LABELS, type Drivetrain } from "@/lib/vehicle-config";
 import { track } from "@/lib/analytics";
@@ -1101,6 +1101,86 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="min-w-0 break-words text-right text-sm font-medium">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Lightweight assignment: Repara does the work itself, or a participating
+ * provider does. No matching, bidding or dispatch — just a recorded decision so
+ * the platform is ready for other providers later.
+ */
+function AssignmentControl({
+  requestId,
+  initialStatus,
+  initialProvider,
+  initialTechnician,
+  onSaved,
+}: {
+  requestId: string;
+  initialStatus: string;
+  initialProvider: string;
+  initialTechnician: string;
+  onSaved: () => void;
+}) {
+  const persist = useServerFn(setRequestAssignment);
+  const [status, setStatusValue] = useState(initialStatus);
+  const [provider, setProvider] = useState(initialProvider);
+  const [technician, setTechnician] = useState(initialTechnician);
+
+  const save = useMutation({
+    mutationFn: () =>
+      persist({
+        data: {
+          id: requestId,
+          assignmentStatus: status as "unassigned",
+          provider,
+          technician,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Assignment updated.");
+      onSaved();
+    },
+    onError: () => toast.error("Could not update the assignment."),
+  });
+
+  return (
+    <div className="space-y-2">
+      <select
+        value={status}
+        aria-label="Assignment"
+        onChange={(e) => setStatusValue(e.target.value)}
+        className="h-11 w-full rounded-md border border-input bg-surface px-3 text-sm"
+      >
+        <option value="unassigned">Not decided yet</option>
+        <option value="self">Repara is doing it</option>
+        <option value="assigned">A participating provider is doing it</option>
+        <option value="declined">Declined</option>
+      </select>
+      {status === "assigned" && (
+        <Input
+          value={provider}
+          placeholder="Provider or shop name"
+          className="h-11"
+          onChange={(e) => setProvider(e.target.value)}
+        />
+      )}
+      <Input
+        value={technician}
+        placeholder="Technician (optional)"
+        className="h-11"
+        onChange={(e) => setTechnician(e.target.value)}
+      />
+      <Button
+        type="button"
+        size="sm"
+        className="h-10 text-xs"
+        disabled={save.isPending}
+        onClick={() => save.mutate()}
+      >
+        {save.isPending && <Loader2 className="mr-1.5 size-3.5 animate-spin" />} Save
+      </Button>
     </div>
   );
 }
