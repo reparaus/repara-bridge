@@ -1,23 +1,43 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { saveJobOutcome } from "@/lib/job.functions";
+import {
+  draftConcernCloseout,
+  saveConcern,
+  saveJobOutcome,
+  type JobConcern,
+} from "@/lib/job.functions";
+
+const OUTCOME_OPTIONS: { value: NonNullable<JobConcern["outcome"]>; label: string }[] = [
+  { value: "resolved", label: "Resolved" },
+  { value: "not_resolved", label: "Not resolved" },
+  { value: "not_yet_known", label: "Not yet known" },
+  { value: "unable_to_verify", label: "Unable to verify" },
+  { value: "deferred", label: "Deferred" },
+  { value: "further_diagnosis", label: "Needs more diagnosis" },
+  { value: "monitor", label: "Monitor" },
+  { value: "inspection_only", label: "Inspection only" },
+];
 
 /**
  * Structured repair outcome captured at closeout. Kept deliberately short so it
  * actually gets filled in, and structured so de-identified outcomes can support
  * diagnostic pattern analysis later instead of being lost in free-text notes.
  * Closing the job is always an explicit human action.
+ *
+ * Each concern is closed out on its own — a job can resolve one complaint while
+ * another is deferred, and the customer should be told exactly that.
  */
 export function JobCloseout({
   requestId,
   originalConcern,
   outcome,
+  concerns,
 }: {
   requestId: string;
   originalConcern: string;
@@ -30,6 +50,7 @@ export function JobCloseout({
     remainingRecommendations: string | null;
     completedAt: string | null;
   } | null;
+  concerns: JobConcern[];
 }) {
   const queryClient = useQueryClient();
   const persist = useServerFn(saveJobOutcome);
@@ -65,6 +86,19 @@ export function JobCloseout({
       toast.error(error instanceof Error ? error.message : "Could not save the outcome."),
   });
 
+  /** Rolls up the per-concern work so the job summary is not retyped. */
+  function prefillFromConcerns() {
+    const join = (pick: (c: JobConcern) => string | null) =>
+      concerns
+        .map((c) => (pick(c) ? `${c.title}: ${pick(c)}` : ""))
+        .filter(Boolean)
+        .join("\n");
+    setConfirmedCause((v) => v || join((c) => c.confirmedCause));
+    setRepairPerformed((v) => v || join((c) => c.repairPerformed));
+    setVerification((v) => v || join((c) => c.verification));
+    if (concerns.length && concerns.every((c) => c.outcome === "resolved")) setResolved(true);
+  }
+
   return (
     <section className="surface-panel space-y-3 p-4">
       <h2 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">Repair outcome</h2>
@@ -74,10 +108,28 @@ export function JobCloseout({
         </p>
       )}
 
+      {concerns.length > 0 && (
+        <div className="space-y-3">
+          {concerns.map((c) => (
+            <ConcernCloseout key={c.id} requestId={requestId} concern={c} />
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 border-border bg-transparent text-xs"
+            onClick={prefillFromConcerns}
+          >
+            Fill the job summary from these
+          </Button>
+        </div>
+      )}
+
       <div>
         <p className="text-xs text-muted-foreground">Original concern</p>
         <p className="text-sm whitespace-pre-line">{originalConcern || "—"}</p>
       </div>
+
 
       <Field label="Confirmed cause">
         <Textarea rows={2} value={confirmedCause} onChange={(e) => setConfirmedCause(e.target.value)} />
