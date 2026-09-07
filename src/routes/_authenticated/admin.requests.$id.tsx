@@ -713,18 +713,29 @@ function JobWorkspace() {
                   <div className="flex flex-wrap gap-2">
                     {recommendations
                       .filter((r) => r.status === "approved")
-                      .map((rec) => (
-                        <Button
-                          key={rec.id}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-10 border-border bg-transparent text-xs"
-                          onClick={() => addRecommendationToQuote(rec)}
-                        >
-                          <Plus className="mr-1.5 size-3.5" /> {rec.title}
-                        </Button>
-                      ))}
+                      .map((rec) => {
+                        // Already-quoted items stay visible but can't be added twice.
+                        const onQuote = lines.some((l) => l.recommendationId === rec.id);
+                        return (
+                          <Button
+                            key={rec.id}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={onQuote}
+                            className="h-10 border-border bg-transparent text-xs"
+                            onClick={() => addRecommendationToQuote(rec)}
+                          >
+                            {onQuote ? (
+                              <Check className="mr-1.5 size-3.5" />
+                            ) : (
+                              <Plus className="mr-1.5 size-3.5" />
+                            )}
+                            {rec.title}
+                            {onQuote ? " · on quote" : ""}
+                          </Button>
+                        );
+                      })}
                   </div>
                 </div>
               )}
