@@ -85,6 +85,9 @@ export type JobDiagnostic = {
   createdAt: string;
 };
 
+/** Type-only re-export: the server module itself never reaches the browser. */
+export type { ConcernRow as JobConcern } from "@/lib/job/concerns.server";
+
 export type JobFinding = {
   id: string;
   concernId: string | null;
