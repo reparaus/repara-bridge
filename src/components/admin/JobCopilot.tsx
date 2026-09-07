@@ -72,6 +72,15 @@ export function JobCopilot({ requestId }: { requestId: string }) {
   const [question, setQuestion] = useState("");
   const [pending, setPending] = useState<QuickAction | null>(null);
   const [pendingInput, setPendingInput] = useState("");
+  /**
+   * Answers from this session, kept in the browser as well. Saving the
+   * transcript can fail (that was the disappearing-answer bug); the technician
+   * should still see what they just asked for.
+   */
+  const [local, setLocal] = useState<
+    { id: string; role: "technician" | "assistant"; content: string; payload: AssistantPayload }[]
+  >([]);
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
 
   const log = useQuery({
     queryKey: ["job-copilot", requestId],
@@ -81,10 +90,26 @@ export function JobCopilot({ requestId }: { requestId: string }) {
   const turn = useMutation({
     mutationFn: (input: { action: QuickAction["action"] | "ask"; question: string }) =>
       ask({ data: { id: requestId, action: input.action, question: input.question } }),
-    onSuccess: () => {
+    onSuccess: (res, input) => {
       setQuestion("");
       setPending(null);
       setPendingInput("");
+      const stamp = Date.now();
+      setLocal((all) => [
+        ...all,
+        { id: `q-${stamp}`, role: "technician", content: input.question, payload: {} },
+        {
+          id: `a-${stamp}`,
+          role: "assistant",
+          content: res.answer.answer,
+          payload: res.answer as AssistantPayload,
+        },
+      ]);
+      setSaveWarning(
+        res.persisted
+          ? null
+          : "This answer could not be saved to the job history — copy anything you need to keep.",
+      );
       void log.refetch();
     },
     onError: (error) =>
