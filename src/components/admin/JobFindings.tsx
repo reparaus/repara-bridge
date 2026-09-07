@@ -442,6 +442,46 @@ export function JobFindings({
         </div>
       )}
 
+      {recDrafts.length > 0 && (
+        <div className="surface-panel space-y-3 p-4">
+          <h3 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">
+            AI-drafted recommendations — keep what fits
+          </h3>
+          {recDrafts.map((d, i) => (
+            <div key={i} className="space-y-1 rounded-lg border border-border p-3">
+              <p className="text-sm font-medium">{d.title}</p>
+              <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                {d.priority}
+              </p>
+              {d.customerDescription && <p className="text-sm">{d.customerDescription}</p>}
+              {d.internalNotes && (
+                <p className="text-xs text-muted-foreground">Internal: {d.internalNotes}</p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-10 text-xs"
+                  disabled={keepRecDraft.isPending}
+                  onClick={() => keepRecDraft.mutate(d)}
+                >
+                  Keep as draft
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-10 text-xs"
+                  onClick={() => setRecDrafts((all) => all.filter((_, x) => x !== i))}
+                >
+                  Discard
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="surface-panel space-y-3 p-4">
         <h3 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">
           Recommendations
