@@ -60,16 +60,54 @@ async function logActivity(
   }
 }
 
-async function safeSelect<T>(run: () => Promise<{ data: T | null }>): Promise<T[]> {
+type Row = Record<string, any>;
+
+async function safeSelect(run: () => Promise<{ data: unknown }>): Promise<Row[]> {
   try {
     const { data } = await run();
-    return (data ?? []) as unknown as T[];
+    return (data ?? []) as Row[];
   } catch {
     return [];
   }
 }
 
+const s = (v: unknown) => (v === null || v === undefined ? null : String(v));
+
 /* ------------------------------------------------------------------ read */
+
+export type JobDiagnostic = {
+  id: string;
+  entryType: string;
+  code: string | null;
+  title: string;
+  detail: string | null;
+  result: string | null;
+  createdAt: string;
+};
+
+export type JobFinding = {
+  id: string;
+  title: string;
+  detail: string | null;
+  measurement: string | null;
+  severity: string;
+  source: string;
+  status: string;
+  createdAt: string;
+};
+
+export type JobRecommendation = {
+  id: string;
+  findingId: string | null;
+  title: string;
+  customerDescription: string | null;
+  internalNotes: string | null;
+  priority: string;
+  status: string;
+  aiDrafted: boolean;
+  approvedAt: string | null;
+  createdAt: string;
+};
 
 /** Everything the Job Workspace needs beyond the existing request detail. */
 export const getJobWorkspace = createServerFn({ method: "POST" })
@@ -79,37 +117,82 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
     await assertVerifiedAdmin(context);
     const client = context.supabase as unknown as Client;
 
-    const diagnostics = await safeSelect(() =>
-      client
-        .from("job_diagnostics")
-        .select("id, entry_type, code, title, detail, result, created_at")
-        .eq("service_request_id", data.id)
-        .order("created_at", { ascending: false }),
-    );
-    const findings = await safeSelect(() =>
-      client
-        .from("job_findings")
-        .select("id, title, detail, measurement, severity, source, status, created_at")
-        .eq("service_request_id", data.id)
-        .order("created_at", { ascending: false }),
-    );
-    const recommendations = await safeSelect(() =>
-      client
-        .from("job_recommendations")
-        .select(
-          "id, finding_id, title, customer_description, internal_notes, priority, status, ai_drafted, approved_at, created_at",
-        )
-        .eq("service_request_id", data.id)
-        .order("created_at", { ascending: false }),
-    );
-    const activity = await safeSelect(() =>
-      client
-        .from("job_activity")
-        .select("id, event_type, summary, created_at")
-        .eq("service_request_id", data.id)
-        .order("created_at", { ascending: false })
-        .limit(80),
-    );
+    const diagnostics: JobDiagnostic[] = (
+      await safeSelect(() =>
+        client
+          .from("job_diagnostics")
+          .select("id, entry_type, code, title, detail, result, created_at")
+          .eq("service_request_id", data.id)
+          .order("created_at", { ascending: false }),
+      )
+    ).map((d) => ({
+      id: String(d['id']),
+      entryType: String(d['entry_type']),
+      code: s(d['code']),
+      title: String(d['title'] ?? ""),
+      detail: s(d['detail']),
+      result: s(d['result']),
+      createdAt: String(d['created_at']),
+    }));
+
+    const findings: JobFinding[] = (
+      await safeSelect(() =>
+        client
+          .from("job_findings")
+          .select("id, title, detail, measurement, severity, source, status, created_at")
+          .eq("service_request_id", data.id)
+          .order("created_at", { ascending: false }),
+      )
+    ).map((f) => ({
+      id: String(f['id']),
+      title: String(f['title'] ?? ""),
+      detail: s(f['detail']),
+      measurement: s(f['measurement']),
+      severity: String(f['severity'] ?? "recommended"),
+      source: String(f['source'] ?? "technician"),
+      status: String(f['status'] ?? "open"),
+      createdAt: String(f['created_at']),
+    }));
+
+    const recommendations: JobRecommendation[] = (
+      await safeSelect(() =>
+        client
+          .from("job_recommendations")
+          .select(
+            "id, finding_id, title, customer_description, internal_notes, priority, status, ai_drafted, approved_at, created_at",
+          )
+          .eq("service_request_id", data.id)
+          .order("created_at", { ascending: false }),
+      )
+    ).map((x) => ({
+      id: String(x['id']),
+      findingId: s(x['finding_id']),
+      title: String(x['title'] ?? ""),
+      customerDescription: s(x['customer_description']),
+      internalNotes: s(x['internal_notes']),
+      priority: String(x['priority'] ?? "recommended"),
+      status: String(x['status'] ?? "draft"),
+      aiDrafted: Boolean(x['ai_drafted']),
+      approvedAt: s(x['approved_at']),
+      createdAt: String(x['created_at']),
+    }));
+
+    const activity = (
+      await safeSelect(() =>
+        client
+          .from("job_activity")
+          .select("id, event_type, summary, created_at")
+          .eq("service_request_id", data.id)
+          .order("created_at", { ascending: false })
+          .limit(80),
+      )
+    ).map((a) => ({
+      id: String(a['id']),
+      eventType: String(a['event_type'] ?? ""),
+      summary: String(a['summary'] ?? ""),
+      createdAt: String(a['created_at']),
+    }));
+
 
     let outcome: Record<string, unknown> | null = null;
     try {
