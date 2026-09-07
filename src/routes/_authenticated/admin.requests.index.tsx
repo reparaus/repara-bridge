@@ -191,17 +191,17 @@ function RequestsDashboard() {
           />
         )}
 
-        {query.data && query.data.requests.length === 0 && (
+        {query.data && visible.length === 0 && (
           <EmptyState
             icon={<Inbox className="size-5" />}
-            title="No requests match"
+            title={view === "incoming" ? "No incoming requests" : "No active jobs"}
             description="Adjust your filters, or wait for new customer requests to arrive."
           />
         )}
 
-        {query.data && query.data.requests.length > 0 && (
+        {query.data && visible.length > 0 && (
           <ul className="grid gap-3 lg:grid-cols-2">
-            {query.data.requests.map((r) => {
+            {visible.map((r) => {
               const outside = r.serviceAreaStatus === "outside_area";
               return (
                 <li key={r.id}>
