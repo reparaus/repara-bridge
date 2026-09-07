@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Bot, Copy, Eye, Loader2, Mail, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Bot, Check, Copy, Eye, Loader2, Mail, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { CopyValue } from "@/components/admin/CopyValue";
