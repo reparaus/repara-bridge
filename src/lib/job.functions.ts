@@ -410,12 +410,16 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       .extend({
         recommendationId: z.string().uuid().nullable().optional(),
         findingId: z.string().uuid().nullable().optional(),
+        concernId: z.string().uuid().nullable().optional(),
         title: z.string().trim().min(2).max(200),
         customerDescription: optionalText(2000),
         internalNotes: optionalText(2000),
         priority: z.enum(["urgent", "recommended", "monitor"]).default("recommended"),
         status: z
           .enum(["draft", "approved", "quoted", "customer_approved", "customer_declined", "deferred"])
+          .optional(),
+        performedStatus: z
+          .enum(["pending", "performed", "not_performed", "deferred", "declined"])
           .optional(),
         aiDrafted: z.boolean().default(false),
       })
@@ -438,12 +442,22 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       ...(data.status ? { status: data.status } : {}),
       ...(approving ? { approved_by: context.userId, approved_at: new Date().toISOString() } : {}),
     };
+    const extended = {
+      ...payload,
+      ...(data.concernId ? { concern_id: data.concernId } : {}),
+      ...(data.performedStatus ? { performed_status: data.performedStatus } : {}),
+    };
 
     if (data.recommendationId) {
-      const { error } = await client
+      let { error } = await client
         .from("job_recommendations")
-        .update(payload)
+        .update(extended)
         .eq("id", data.recommendationId);
+      if (error)
+        ({ error } = await client
+          .from("job_recommendations")
+          .update(payload)
+          .eq("id", data.recommendationId));
       if (error) throw new Error("Could not update this recommendation.");
       if (approving)
         await logActivity(
@@ -456,12 +470,20 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       return { ok: true, id: data.recommendationId };
     }
 
-    const { data: row, error } = await client
+    const base = { service_request_id: data.id, created_by: context.userId };
+    let insert = await client
       .from("job_recommendations")
-      .insert({ ...payload, service_request_id: data.id, created_by: context.userId })
+      .insert({ ...extended, ...base })
       .select("id")
       .single();
-    if (error) throw new Error("Could not save this recommendation.");
+    if (insert.error)
+      insert = await client
+        .from("job_recommendations")
+        .insert({ ...payload, ...base })
+        .select("id")
+        .single();
+    if (insert.error) throw new Error("Could not save this recommendation.");
+    const row = insert.data;
 
     // A finding that became a recommendation is marked converted, not deleted.
     if (data.findingId) {
