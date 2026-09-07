@@ -308,8 +308,19 @@ export function JobFindings({
                     >
                       {finding.severity}
                     </span>
-                    {finding.source === "ai" && (
-                      <span className="text-[10px] text-muted-foreground">AI-drafted, you saved it</span>
+                    {finding.aiDrafted && !finding.approvedAt && (
+                      <span className="text-[10px] text-warning">AI-drafted — confirm it</span>
+                    )}
+                    {finding.approvedAt && (
+                      <span className="text-[10px] text-muted-foreground">Confirmed</span>
+                    )}
+                    {finding.confidence === "suspected" && (
+                      <span className="text-[10px] text-muted-foreground">suspected</span>
+                    )}
+                    {concernTitle(finding.concernId) && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {concernTitle(finding.concernId)}
+                      </span>
                     )}
                     {finding.status === "converted" && (
                       <span className="text-[10px] text-muted-foreground">→ recommended</span>
@@ -319,6 +330,9 @@ export function JobFindings({
                   {finding.measurement && <p className="text-xs">{finding.measurement}</p>}
                   {finding.detail && (
                     <p className="text-xs whitespace-pre-line text-muted-foreground">{finding.detail}</p>
+                  )}
+                  {finding.evidence && (
+                    <p className="text-xs text-muted-foreground">Evidence: {finding.evidence}</p>
                   )}
                 </div>
                 <button
@@ -330,15 +344,43 @@ export function JobFindings({
                   <Trash2 className="size-4" />
                 </button>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-10 border-border bg-transparent text-xs"
-                onClick={() => startConvert(finding)}
-              >
-                Make recommendation <ArrowRight className="ml-1.5 size-3.5" />
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {finding.aiDrafted && !finding.approvedAt && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-10 text-xs"
+                    disabled={confirmFinding.isPending}
+                    onClick={() => confirmFinding.mutate(finding)}
+                  >
+                    <Check className="mr-1.5 size-3.5" /> Confirm
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-10 border-border bg-transparent text-xs"
+                  onClick={() => startConvert(finding)}
+                >
+                  Make recommendation <ArrowRight className="ml-1.5 size-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-10 border-border bg-transparent text-xs"
+                  disabled={draftRecs.isPending}
+                  onClick={() => draftRecs.mutate(finding)}
+                >
+                  {draftRecs.isPending ? (
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-1.5 size-3.5" />
+                  )}
+                  Draft with AI
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
