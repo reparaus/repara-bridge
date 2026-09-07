@@ -30,7 +30,10 @@ const lineItemSchema = z.object({
   supplierProductId: optionalText(120),
   availability: optionalText(60),
   internalUnitCost: z.coerce.number().min(0).max(1000000).optional(),
+  /** Recommendation this line came from (migration 0010), so nothing is retyped. */
+  recommendationId: z.string().uuid().nullable().optional(),
 });
+
 
 export const getAdminContext = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -287,14 +290,20 @@ export const updateRequestStatus = createServerFn({ method: "POST" })
           "new",
           "contacted",
           "reviewing",
+          "ready_to_quote",
           "quoted",
           "accepted",
           "declined",
           "scheduled",
+          "diagnosing",
           "in_progress",
+          "awaiting_approval",
+          "repairing",
           "completed",
+          "closed",
           "cancelled",
         ]),
+
       })
       .parse(data),
   )
@@ -482,8 +491,10 @@ export const saveQuote = createServerFn({ method: "POST" })
           supplier_product_id: l.supplierProductId || null,
           availability: l.availability || null,
           internal_unit_cost: l.internalUnitCost ?? null,
+          recommendation_id: l.recommendationId ?? null,
         };
       });
+
 
       let { error } = await context.supabase.from("quote_items").insert(fullRows as never);
       if (error && columnIssue(error.message))
