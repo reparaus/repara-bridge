@@ -256,6 +256,21 @@ export function JobFindings({
             ))}
           </select>
         </div>
+        {concerns.length > 0 && (
+          <select
+            value={concernId}
+            aria-label="Related concern"
+            onChange={(e) => setConcernId(e.target.value)}
+            className="h-12 w-full rounded-md border border-input bg-surface px-3 text-sm"
+          >
+            <option value="">Not tied to a specific concern</option>
+            {concerns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        )}
         <Textarea
           rows={2}
           value={detail}
