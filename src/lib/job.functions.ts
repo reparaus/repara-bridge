@@ -637,3 +637,312 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
     }
     return { ok: true };
   });
+
+/* --------------------------------------------------------------- concerns */
+
+/**
+ * Saves technician-side concern fields. Customer-reported wording is NOT
+ * accepted here — it is never editable by the technician, by design.
+ */
+export const saveConcern = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema
+      .extend({
+        concernId: z.string().uuid(),
+        concernStatus: z
+          .enum(["not_inspected", "verified", "not_verified", "unable_to_duplicate", "deferred"])
+          .optional(),
+        testsPerformed: optionalText(2000),
+        technicianObserved: optionalText(4000),
+        confirmedCause: optionalText(2000),
+        shorthand: optionalText(4000),
+        story: optionalText(6000),
+        approveStory: z.boolean().optional(),
+        repairPerformed: optionalText(4000),
+        verification: optionalText(2000),
+        outcome: z
+          .enum([
+            "resolved",
+            "not_resolved",
+            "not_yet_known",
+            "unable_to_verify",
+            "deferred",
+            "further_diagnosis",
+            "monitor",
+            "inspection_only",
+          ])
+          .nullable()
+          .optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+
+    const set = (key: string, value: string | undefined) =>
+      value === undefined ? {} : { [key]: value || null };
+
+    const payload = {
+      ...(data.concernStatus ? { concern_status: data.concernStatus } : {}),
+      ...set("tests_performed", data.testsPerformed),
+      ...set("technician_observed", data.technicianObserved),
+      ...set("confirmed_cause", data.confirmedCause),
+      ...set("shorthand", data.shorthand),
+      ...set("story", data.story),
+      ...set("repair_performed", data.repairPerformed),
+      ...set("verification", data.verification),
+      ...(data.outcome === undefined ? {} : { outcome: data.outcome }),
+      // An AI-cleaned account is only official once the technician approves it.
+      ...(data.approveStory ? { story_approved_at: new Date().toISOString() } : {}),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await client.from("job_concerns").update(payload).eq("id", data.concernId);
+    if (error) throw new Error("Could not save this concern.");
+
+    if (data.approveStory)
+      await logActivity(
+        client,
+        data.id,
+        "diagnosis_approved",
+        "Diagnosis account approved",
+        context.userId,
+        { concernId: data.concernId },
+      );
+    else
+      await logActivity(client, data.id, "concern_updated", "Concern updated", context.userId, {
+        concernId: data.concernId,
+        status: data.concernStatus ?? null,
+      });
+    return { ok: true };
+  });
+
+/** Adds a concern the customer never mentioned (found during inspection). */
+export const addConcern = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema.extend({ title: z.string().trim().min(2).max(160) }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { data: row, error } = await client
+      .from("job_concerns")
+      .insert({
+        service_request_id: data.id,
+        title: data.title,
+        category: "general",
+        origin: "technician",
+        sort_order: 90,
+        created_by: context.userId,
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error("Could not add this concern.");
+    await logActivity(
+      client,
+      data.id,
+      "concern_added",
+      `Technician-found concern: ${data.title}`,
+      context.userId,
+    );
+    return { ok: true, id: String(row?.id ?? "") };
+  });
+
+/* ---------------------------------------------------- AI drafting (drafts) */
+
+async function loadConcern(client: Client, concernId: string) {
+  const { listConcerns } = await import("@/lib/job/concerns.server");
+  const { data: row } = await client
+    .from("job_concerns")
+    .select("service_request_id")
+    .eq("id", concernId)
+    .maybeSingle();
+  const requestId = String((row as Row | null)?.['service_request_id'] ?? "");
+  if (!requestId) throw new Error("This concern could not be found.");
+  const concern = (await listConcerns(client, requestId)).find((c) => c.id === concernId);
+  if (!concern) throw new Error("This concern could not be found.");
+  return { requestId, concern };
+}
+
+/**
+ * Technician shorthand → professional account. Returns a DRAFT only; nothing is
+ * written to the concern until the technician approves it.
+ */
+export const draftConcernStory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z.object({ concernId: z.string().uuid(), shorthand: z.string().trim().min(3).max(4000) }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { requestId, concern } = await loadConcern(client, data.concernId);
+    const { draftStoryFromShorthand } = await import("@/lib/job/authoring.server");
+    const draft = await draftStoryFromShorthand({
+      client,
+      requestId,
+      concern,
+      shorthand: data.shorthand,
+    });
+    return { ok: true as const, draft };
+  });
+
+/** Approved diagnosis → candidate findings. Drafts only. */
+export const draftConcernFindings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ concernId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { requestId, concern } = await loadConcern(client, data.concernId);
+
+    const entries = await safeSelect(() =>
+      client
+        .from("job_diagnostics")
+        .select("entry_type, code, title, detail, result")
+        .eq("service_request_id", requestId)
+        .order("created_at", { ascending: true }),
+    );
+    const documented = [
+      concern.story || concern.technicianObserved || concern.shorthand || "",
+      concern.confirmedCause ? `Confirmed cause: ${concern.confirmedCause}` : "",
+      ...entries.map((e) =>
+        [e['entry_type'], e['code'], e['title'], e['detail'], e['result']]
+          .filter(Boolean)
+          .join(" — "),
+      ),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (!documented.trim())
+      throw new Error("Document the diagnosis first — there is nothing to draft from.");
+
+    const { draftFindings } = await import("@/lib/job/authoring.server");
+    return { ok: true as const, drafts: await draftFindings({ client, requestId, concern, source: documented }) };
+  });
+
+/** Findings → candidate recommendations. Drafts only. */
+export const draftFindingRecommendations = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema
+      .extend({
+        findingIds: z.array(z.string().uuid()).min(1).max(8),
+        concernId: z.string().uuid().nullable().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+
+    const rows = await safeSelect(() =>
+      client
+        .from("job_findings")
+        .select("id, title, detail, measurement, severity")
+        .eq("service_request_id", data.id),
+    );
+    const selected = rows.filter((r) => data.findingIds.includes(String(r['id'])));
+    if (!selected.length) throw new Error("Those findings could not be found.");
+
+    const { listConcerns } = await import("@/lib/job/concerns.server");
+    const concern = data.concernId
+      ? ((await listConcerns(client, data.id)).find((c) => c.id === data.concernId) ?? null)
+      : null;
+
+    const { draftRecommendations } = await import("@/lib/job/authoring.server");
+    const drafts = await draftRecommendations({
+      client,
+      requestId: data.id,
+      concern,
+      findings: selected
+        .map((f) =>
+          [f['severity'], f['title'], f['measurement'], f['detail']].filter(Boolean).join(" — "),
+        )
+        .join("\n"),
+    });
+    return { ok: true as const, drafts };
+  });
+
+/** Everything documented on a concern → closeout draft. Drafts only. */
+export const draftConcernCloseout = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ concernId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { requestId, concern } = await loadConcern(client, data.concernId);
+
+    const recs = await safeSelect(() =>
+      client
+        .from("job_recommendations")
+        .select("title, status, priority, internal_notes")
+        .eq("service_request_id", requestId),
+    );
+    const documented = [
+      concern.story || concern.technicianObserved || "",
+      concern.confirmedCause ? `Confirmed cause: ${concern.confirmedCause}` : "",
+      concern.repairPerformed ? `Repair performed: ${concern.repairPerformed}` : "",
+      concern.verification ? `Verification: ${concern.verification}` : "",
+      ...recs.map((r) =>
+        `Recommendation (${r['status']}, ${r['priority']}): ${r['title']}${
+          r['internal_notes'] ? ` — ${r['internal_notes']}` : ""
+        }`,
+      ),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const { draftCloseout } = await import("@/lib/job/authoring.server");
+    return { ok: true as const, draft: await draftCloseout({ client, requestId, concern, documented }) };
+  });
+
+/* ------------------------------------------------------------- assignment */
+
+/**
+ * Records who is fulfilling this request. Repara always owns the customer
+ * relationship; today the only automatic option is "I'll do it myself", and a
+ * provider name can be typed in for work fulfilled by someone else.
+ */
+export const setRequestAssignment = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema
+      .extend({
+        assignmentStatus: z.enum(["unassigned", "self", "assigned", "declined"]),
+        provider: optionalText(120),
+        technician: optionalText(120),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const accepting = data.assignmentStatus === "self" || data.assignmentStatus === "assigned";
+    const { error } = await client
+      .from("service_requests")
+      .update({
+        assignment_status: data.assignmentStatus,
+        assigned_provider: data.provider || null,
+        assigned_technician: data.technician || null,
+        ...(accepting ? { accepted_at: new Date().toISOString(), accepted_by: context.userId } : {}),
+      })
+      .eq("id", data.id);
+    if (error) throw new Error("Could not update the assignment.");
+    await logActivity(
+      client,
+      data.id,
+      "assignment_changed",
+      data.assignmentStatus === "self"
+        ? "Accepted by Repara"
+        : data.assignmentStatus === "assigned"
+          ? `Assigned to ${data.provider || "a provider"}`
+          : `Assignment set to ${data.assignmentStatus}`,
+      context.userId,
+    );
+    return { ok: true };
+  });
