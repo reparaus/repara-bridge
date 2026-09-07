@@ -250,7 +250,12 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
       outcome = null;
     }
 
-    return { diagnostics, findings, recommendations, activity, outcome };
+    // Concerns are derived from the customer's own submission the first time the
+    // job is opened, so nothing from intake has to be retyped.
+    const { ensureConcerns } = await import("@/lib/job/concerns.server");
+    const concerns = await ensureConcerns(client, data.id, context.userId);
+
+    return { concerns, diagnostics, findings, recommendations, activity, outcome };
   });
 
 /* ----------------------------------------------------------- diagnostics */
