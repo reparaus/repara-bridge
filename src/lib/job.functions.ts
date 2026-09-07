@@ -87,23 +87,30 @@ export type JobDiagnostic = {
 
 export type JobFinding = {
   id: string;
+  concernId: string | null;
   title: string;
   detail: string | null;
   measurement: string | null;
+  evidence: string | null;
+  confidence: string;
   severity: string;
   source: string;
   status: string;
+  aiDrafted: boolean;
+  approvedAt: string | null;
   createdAt: string;
 };
 
 export type JobRecommendation = {
   id: string;
   findingId: string | null;
+  concernId: string | null;
   title: string;
   customerDescription: string | null;
   internalNotes: string | null;
   priority: string;
   status: string;
+  performedStatus: string;
   aiDrafted: boolean;
   approvedAt: string | null;
   createdAt: string;
