@@ -309,6 +309,13 @@ function JobWorkspace() {
 
   /** Turns an approved recommendation into quote lines without retyping. */
   function addRecommendationToQuote(rec: JobRecommendation) {
+    // Adding the same recommendation twice is the easiest way to double-bill a
+    // customer, so the same source item can only ever appear once.
+    if (lines.some((l) => l.recommendationId === rec.id)) {
+      setTab("quote");
+      toast.info("That recommendation is already on this quote.");
+      return;
+    }
     setLines((current) => {
       const cleaned = current.filter((l) => l.description.trim() || l.recommendationId);
       return [
@@ -330,7 +337,32 @@ function JobWorkspace() {
   const recommendations = job.data?.recommendations ?? [];
   const diagnostics = job.data?.diagnostics ?? [];
   const activity = job.data?.activity ?? [];
+  const concerns = job.data?.concerns ?? [];
   const openRecommendations = recommendations.filter((r) => r.status === "draft").length;
+
+  /**
+   * Next best action — one sentence telling the technician where the job
+   * actually stands, derived from what is already documented.
+   */
+  const nextBestAction = (() => {
+    if (!concerns.length) return "Review the request, then start the diagnosis.";
+    const uninspected = concerns.filter((c) => c.concernStatus === "not_inspected");
+    if (uninspected.length)
+      return `Inspect and verify: ${uninspected.map((c) => c.title).join(", ")}.`;
+    const unapproved = concerns.filter((c) => c.story && !c.storyApprovedAt);
+    if (unapproved.length) return "Approve the diagnosis account so findings can be drafted.";
+    const draftFindings = findings.filter((f) => f.aiDrafted && !f.approvedAt);
+    if (draftFindings.length) return `Confirm ${draftFindings.length} drafted finding(s).`;
+    if (openRecommendations) return `Approve ${openRecommendations} drafted recommendation(s).`;
+    const approvedUnquoted = recommendations.filter(
+      (r) => r.status === "approved" && !lines.some((l) => l.recommendationId === r.id),
+    );
+    if (approvedUnquoted.length)
+      return `Add ${approvedUnquoted.length} approved recommendation(s) to the quote.`;
+    const openRepair = concerns.filter((c) => !c.outcome);
+    if (openRepair.length) return "Record what was performed and verified, then close the job out.";
+    return "Everything documented — send the quote or close the job out.";
+  })();
 
   return (
     <div className="min-h-screen bg-background pb-24 lg:pb-0">
@@ -401,6 +433,40 @@ function JobWorkspace() {
           {/* ------------------------------------------------------- OVERVIEW */}
           <TabsContent value="overview" className="mt-0 grid gap-5 lg:grid-cols-2">
             <div className="min-w-0 space-y-5">
+              {/* Pre-arrival brief: what this job is, and what to do next. */}
+              <Panel title="Job brief">
+                <p className="text-sm">{nextBestAction}</p>
+                {concerns.length > 0 && (
+                  <ul className="space-y-2 pt-2">
+                    {concerns.map((c) => {
+                      const related = findings.filter((f) => f.concernId === c.id);
+                      return (
+                        <li key={c.id} className="rounded-lg border border-border p-3">
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <span className="text-sm font-medium">{c.title}</span>
+                            <span className="text-[11px] tracking-wide text-muted-foreground uppercase">
+                              {c.concernStatus.replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          {c.customerReport && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Customer reported: {c.customerReport}
+                            </p>
+                          )}
+                          {c.confirmedCause && (
+                            <p className="mt-1 text-xs">Confirmed cause: {c.confirmedCause}</p>
+                          )}
+                          {related.length > 0 && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {related.length} finding(s) recorded
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </Panel>
               <Panel title="Customer concern">
                 <p className="text-sm whitespace-pre-line">{concern || "No description provided."}</p>
                 {intake.summary && (
@@ -596,11 +662,18 @@ function JobWorkspace() {
 
           {/* ------------------------------------------------------ DIAGNOSIS */}
           <TabsContent value="diagnosis" className="mt-0">
-            <div className="mx-auto max-w-3xl">
+            <div className="mx-auto max-w-3xl space-y-5">
               {job.isPending ? (
                 <LoadingState label="Loading diagnosis" />
               ) : (
-                <JobDiagnosis requestId={id} entries={diagnostics} />
+                <>
+                  <JobConcerns
+                    requestId={id}
+                    concerns={concerns}
+                    onFindingsDrafted={() => setTab("findings")}
+                  />
+                  <JobDiagnosis requestId={id} entries={diagnostics} />
+                </>
               )}
             </div>
           </TabsContent>
@@ -615,6 +688,7 @@ function JobWorkspace() {
                   requestId={id}
                   findings={findings}
                   recommendations={recommendations}
+                  concerns={concerns}
                   onAddToQuote={addRecommendationToQuote}
                 />
               )}
@@ -622,6 +696,7 @@ function JobWorkspace() {
                 requestId={id}
                 originalConcern={concern}
                 outcome={job.data?.outcome ?? null}
+                concerns={concerns}
               />
             </div>
           </TabsContent>

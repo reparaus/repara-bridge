@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Check, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   deleteFinding,
   deleteRecommendation,
+  draftFindingRecommendations,
   saveFinding,
   saveRecommendation,
+  type JobConcern,
   type JobFinding,
   type JobRecommendation,
 } from "@/lib/job.functions";

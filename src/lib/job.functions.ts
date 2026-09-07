@@ -85,25 +85,35 @@ export type JobDiagnostic = {
   createdAt: string;
 };
 
+/** Type-only re-export: the server module itself never reaches the browser. */
+export type { ConcernRow as JobConcern } from "@/lib/job/concerns.server";
+
 export type JobFinding = {
   id: string;
+  concernId: string | null;
   title: string;
   detail: string | null;
   measurement: string | null;
+  evidence: string | null;
+  confidence: string;
   severity: string;
   source: string;
   status: string;
+  aiDrafted: boolean;
+  approvedAt: string | null;
   createdAt: string;
 };
 
 export type JobRecommendation = {
   id: string;
   findingId: string | null;
+  concernId: string | null;
   title: string;
   customerDescription: string | null;
   internalNotes: string | null;
   priority: string;
   status: string;
+  performedStatus: string;
   aiDrafted: boolean;
   approvedAt: string | null;
   createdAt: string;
@@ -135,43 +145,58 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
       createdAt: String(d['created_at']),
     }));
 
-    const findings: JobFinding[] = (
-      await safeSelect(() =>
+    // Newer columns first, legacy column list as a fallback, so a database that
+    // has not run 0011 yet still shows its findings instead of an empty tab.
+    const readTable = async (table: string, columns: string, legacy: string) => {
+      const run = (cols: string) =>
         client
-          .from("job_findings")
-          .select("id, title, detail, measurement, severity, source, status, created_at")
+          .from(table)
+          .select(cols)
           .eq("service_request_id", data.id)
-          .order("created_at", { ascending: false }),
+          .order("created_at", { ascending: false });
+      let rows = await safeSelect(() => run(columns));
+      if (!rows.length) rows = await safeSelect(() => run(legacy));
+      return rows;
+    };
+
+    const findings: JobFinding[] = (
+      await readTable(
+        "job_findings",
+        "id, concern_id, title, detail, measurement, evidence, confidence, severity, source, status, ai_drafted, approved_at, created_at",
+        "id, title, detail, measurement, severity, source, status, created_at",
       )
     ).map((f) => ({
       id: String(f['id']),
+      concernId: s(f['concern_id']),
       title: String(f['title'] ?? ""),
       detail: s(f['detail']),
       measurement: s(f['measurement']),
+      evidence: s(f['evidence']),
+      confidence: String(f['confidence'] ?? "confirmed"),
       severity: String(f['severity'] ?? "recommended"),
       source: String(f['source'] ?? "technician"),
       status: String(f['status'] ?? "open"),
+      aiDrafted: Boolean(f['ai_drafted']),
+      approvedAt: s(f['approved_at']),
       createdAt: String(f['created_at']),
     }));
 
     const recommendations: JobRecommendation[] = (
-      await safeSelect(() =>
-        client
-          .from("job_recommendations")
-          .select(
-            "id, finding_id, title, customer_description, internal_notes, priority, status, ai_drafted, approved_at, created_at",
-          )
-          .eq("service_request_id", data.id)
-          .order("created_at", { ascending: false }),
+      await readTable(
+        "job_recommendations",
+        "id, finding_id, concern_id, title, customer_description, internal_notes, priority, status, performed_status, ai_drafted, approved_at, created_at",
+        "id, finding_id, title, customer_description, internal_notes, priority, status, ai_drafted, approved_at, created_at",
       )
     ).map((x) => ({
       id: String(x['id']),
       findingId: s(x['finding_id']),
+      concernId: s(x['concern_id']),
       title: String(x['title'] ?? ""),
       customerDescription: s(x['customer_description']),
       internalNotes: s(x['internal_notes']),
       priority: String(x['priority'] ?? "recommended"),
       status: String(x['status'] ?? "draft"),
+      performedStatus: String(x['performed_status'] ?? "pending"),
       aiDrafted: Boolean(x['ai_drafted']),
       approvedAt: s(x['approved_at']),
       createdAt: String(x['created_at']),
@@ -228,7 +253,12 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
       outcome = null;
     }
 
-    return { diagnostics, findings, recommendations, activity, outcome };
+    // Concerns are derived from the customer's own submission the first time the
+    // job is opened, so nothing from intake has to be retyped.
+    const { ensureConcerns } = await import("@/lib/job/concerns.server");
+    const concerns = await ensureConcerns(client, data.id, context.userId);
+
+    return { concerns, diagnostics, findings, recommendations, activity, outcome };
   });
 
 /* ----------------------------------------------------------- diagnostics */
@@ -299,19 +329,25 @@ export const saveFinding = createServerFn({ method: "POST" })
     idSchema
       .extend({
         findingId: z.string().uuid().nullable().optional(),
+        concernId: z.string().uuid().nullable().optional(),
         title: z.string().trim().min(2).max(200),
         detail: optionalText(2000),
         measurement: optionalText(120),
+        evidence: optionalText(1000),
+        confidence: z.enum(["confirmed", "suspected"]).optional(),
         severity: z.enum(["urgent", "recommended", "monitor", "informational"]).default("recommended"),
         source: z.enum(["technician", "ai"]).default("technician"),
         status: z.enum(["open", "converted", "resolved", "dismissed"]).optional(),
+        aiDrafted: z.boolean().optional(),
+        /** True when a human is confirming an AI-drafted finding. */
+        approve: z.boolean().optional(),
       })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
     await assertVerifiedAdmin(context);
     const client = context.supabase as unknown as Client;
-    const payload = {
+    const payload: Record<string, unknown> = {
       title: data.title,
       detail: data.detail || null,
       measurement: data.measurement || null,
@@ -319,24 +355,43 @@ export const saveFinding = createServerFn({ method: "POST" })
       source: data.source,
       ...(data.status ? { status: data.status } : {}),
     };
+    // 0011 columns are optional so this keeps working before the migration runs.
+    const extended: Record<string, unknown> = {
+      ...payload,
+      ...(data.concernId ? { concern_id: data.concernId } : {}),
+      ...(data.evidence ? { evidence: data.evidence } : {}),
+      ...(data.confidence ? { confidence: data.confidence } : {}),
+      ...(data.aiDrafted === undefined ? {} : { ai_drafted: data.aiDrafted }),
+      ...(data.approve
+        ? { approved_at: new Date().toISOString(), approved_by: context.userId }
+        : {}),
+    };
 
     if (data.findingId) {
-      const { error } = await client.from("job_findings").update(payload).eq("id", data.findingId);
+      let { error } = await client.from("job_findings").update(extended).eq("id", data.findingId);
+      if (error) ({ error } = await client.from("job_findings").update(payload).eq("id", data.findingId));
       if (error) throw new Error("Could not update this finding.");
+      if (data.approve)
+        await logActivity(
+          client,
+          data.id,
+          "finding_approved",
+          `Finding confirmed: ${data.title}`,
+          context.userId,
+        );
       return { ok: true, id: data.findingId };
     }
 
-    const { data: row, error } = await client
-      .from("job_findings")
-      .insert({ ...payload, service_request_id: data.id, created_by: context.userId })
-      .select("id")
-      .single();
-    if (error) throw new Error("Could not save this finding.");
+    const base = { service_request_id: data.id, created_by: context.userId };
+    let insert = await client.from("job_findings").insert({ ...extended, ...base }).select("id").single();
+    if (insert.error)
+      insert = await client.from("job_findings").insert({ ...payload, ...base }).select("id").single();
+    if (insert.error) throw new Error("Could not save this finding.");
     await logActivity(client, data.id, "finding_added", `Finding: ${data.title}`, context.userId, {
       severity: data.severity,
       source: data.source,
     });
-    return { ok: true, id: String(row?.id ?? "") };
+    return { ok: true, id: String(insert.data?.id ?? "") };
   });
 
 export const deleteFinding = createServerFn({ method: "POST" })
@@ -358,12 +413,16 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       .extend({
         recommendationId: z.string().uuid().nullable().optional(),
         findingId: z.string().uuid().nullable().optional(),
+        concernId: z.string().uuid().nullable().optional(),
         title: z.string().trim().min(2).max(200),
         customerDescription: optionalText(2000),
         internalNotes: optionalText(2000),
         priority: z.enum(["urgent", "recommended", "monitor"]).default("recommended"),
         status: z
           .enum(["draft", "approved", "quoted", "customer_approved", "customer_declined", "deferred"])
+          .optional(),
+        performedStatus: z
+          .enum(["pending", "performed", "not_performed", "deferred", "declined"])
           .optional(),
         aiDrafted: z.boolean().default(false),
       })
@@ -386,12 +445,22 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       ...(data.status ? { status: data.status } : {}),
       ...(approving ? { approved_by: context.userId, approved_at: new Date().toISOString() } : {}),
     };
+    const extended = {
+      ...payload,
+      ...(data.concernId ? { concern_id: data.concernId } : {}),
+      ...(data.performedStatus ? { performed_status: data.performedStatus } : {}),
+    };
 
     if (data.recommendationId) {
-      const { error } = await client
+      let { error } = await client
         .from("job_recommendations")
-        .update(payload)
+        .update(extended)
         .eq("id", data.recommendationId);
+      if (error)
+        ({ error } = await client
+          .from("job_recommendations")
+          .update(payload)
+          .eq("id", data.recommendationId));
       if (error) throw new Error("Could not update this recommendation.");
       if (approving)
         await logActivity(
@@ -404,12 +473,20 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       return { ok: true, id: data.recommendationId };
     }
 
-    const { data: row, error } = await client
+    const base = { service_request_id: data.id, created_by: context.userId };
+    let insert = await client
       .from("job_recommendations")
-      .insert({ ...payload, service_request_id: data.id, created_by: context.userId })
+      .insert({ ...extended, ...base })
       .select("id")
       .single();
-    if (error) throw new Error("Could not save this recommendation.");
+    if (insert.error)
+      insert = await client
+        .from("job_recommendations")
+        .insert({ ...payload, ...base })
+        .select("id")
+        .single();
+    if (insert.error) throw new Error("Could not save this recommendation.");
+    const row = insert.data;
 
     // A finding that became a recommendation is marked converted, not deleted.
     if (data.findingId) {
@@ -561,5 +638,314 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
     } else {
       await logActivity(client, data.id, "outcome_updated", "Repair outcome updated", context.userId);
     }
+    return { ok: true };
+  });
+
+/* --------------------------------------------------------------- concerns */
+
+/**
+ * Saves technician-side concern fields. Customer-reported wording is NOT
+ * accepted here — it is never editable by the technician, by design.
+ */
+export const saveConcern = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema
+      .extend({
+        concernId: z.string().uuid(),
+        concernStatus: z
+          .enum(["not_inspected", "verified", "not_verified", "unable_to_duplicate", "deferred"])
+          .optional(),
+        testsPerformed: optionalText(2000),
+        technicianObserved: optionalText(4000),
+        confirmedCause: optionalText(2000),
+        shorthand: optionalText(4000),
+        story: optionalText(6000),
+        approveStory: z.boolean().optional(),
+        repairPerformed: optionalText(4000),
+        verification: optionalText(2000),
+        outcome: z
+          .enum([
+            "resolved",
+            "not_resolved",
+            "not_yet_known",
+            "unable_to_verify",
+            "deferred",
+            "further_diagnosis",
+            "monitor",
+            "inspection_only",
+          ])
+          .nullable()
+          .optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+
+    const set = (key: string, value: string | undefined) =>
+      value === undefined ? {} : { [key]: value || null };
+
+    const payload = {
+      ...(data.concernStatus ? { concern_status: data.concernStatus } : {}),
+      ...set("tests_performed", data.testsPerformed),
+      ...set("technician_observed", data.technicianObserved),
+      ...set("confirmed_cause", data.confirmedCause),
+      ...set("shorthand", data.shorthand),
+      ...set("story", data.story),
+      ...set("repair_performed", data.repairPerformed),
+      ...set("verification", data.verification),
+      ...(data.outcome === undefined ? {} : { outcome: data.outcome }),
+      // An AI-cleaned account is only official once the technician approves it.
+      ...(data.approveStory ? { story_approved_at: new Date().toISOString() } : {}),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await client.from("job_concerns").update(payload).eq("id", data.concernId);
+    if (error) throw new Error("Could not save this concern.");
+
+    if (data.approveStory)
+      await logActivity(
+        client,
+        data.id,
+        "diagnosis_approved",
+        "Diagnosis account approved",
+        context.userId,
+        { concernId: data.concernId },
+      );
+    else
+      await logActivity(client, data.id, "concern_updated", "Concern updated", context.userId, {
+        concernId: data.concernId,
+        status: data.concernStatus ?? null,
+      });
+    return { ok: true };
+  });
+
+/** Adds a concern the customer never mentioned (found during inspection). */
+export const addConcern = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema.extend({ title: z.string().trim().min(2).max(160) }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { data: row, error } = await client
+      .from("job_concerns")
+      .insert({
+        service_request_id: data.id,
+        title: data.title,
+        category: "general",
+        origin: "technician",
+        sort_order: 90,
+        created_by: context.userId,
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error("Could not add this concern.");
+    await logActivity(
+      client,
+      data.id,
+      "concern_added",
+      `Technician-found concern: ${data.title}`,
+      context.userId,
+    );
+    return { ok: true, id: String(row?.id ?? "") };
+  });
+
+/* ---------------------------------------------------- AI drafting (drafts) */
+
+async function loadConcern(client: Client, concernId: string) {
+  const { listConcerns } = await import("@/lib/job/concerns.server");
+  const { data: row } = await client
+    .from("job_concerns")
+    .select("service_request_id")
+    .eq("id", concernId)
+    .maybeSingle();
+  const requestId = String((row as Row | null)?.['service_request_id'] ?? "");
+  if (!requestId) throw new Error("This concern could not be found.");
+  const concern = (await listConcerns(client, requestId)).find((c) => c.id === concernId);
+  if (!concern) throw new Error("This concern could not be found.");
+  return { requestId, concern };
+}
+
+/**
+ * Technician shorthand → professional account. Returns a DRAFT only; nothing is
+ * written to the concern until the technician approves it.
+ */
+export const draftConcernStory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z.object({ concernId: z.string().uuid(), shorthand: z.string().trim().min(3).max(4000) }).parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { requestId, concern } = await loadConcern(client, data.concernId);
+    const { draftStoryFromShorthand } = await import("@/lib/job/authoring.server");
+    const draft = await draftStoryFromShorthand({
+      client,
+      requestId,
+      concern,
+      shorthand: data.shorthand,
+    });
+    return { ok: true as const, draft };
+  });
+
+/** Approved diagnosis → candidate findings. Drafts only. */
+export const draftConcernFindings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ concernId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { requestId, concern } = await loadConcern(client, data.concernId);
+
+    const entries = await safeSelect(() =>
+      client
+        .from("job_diagnostics")
+        .select("entry_type, code, title, detail, result")
+        .eq("service_request_id", requestId)
+        .order("created_at", { ascending: true }),
+    );
+    const documented = [
+      concern.story || concern.technicianObserved || concern.shorthand || "",
+      concern.confirmedCause ? `Confirmed cause: ${concern.confirmedCause}` : "",
+      ...entries.map((e) =>
+        [e['entry_type'], e['code'], e['title'], e['detail'], e['result']]
+          .filter(Boolean)
+          .join(" — "),
+      ),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (!documented.trim())
+      throw new Error("Document the diagnosis first — there is nothing to draft from.");
+
+    const { draftFindings } = await import("@/lib/job/authoring.server");
+    return { ok: true as const, drafts: await draftFindings({ client, requestId, concern, source: documented }) };
+  });
+
+/** Findings → candidate recommendations. Drafts only. */
+export const draftFindingRecommendations = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema
+      .extend({
+        findingIds: z.array(z.string().uuid()).min(1).max(8),
+        concernId: z.string().uuid().nullable().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+
+    const rows = await safeSelect(() =>
+      client
+        .from("job_findings")
+        .select("id, title, detail, measurement, severity")
+        .eq("service_request_id", data.id),
+    );
+    const selected = rows.filter((r) => data.findingIds.includes(String(r['id'])));
+    if (!selected.length) throw new Error("Those findings could not be found.");
+
+    const { listConcerns } = await import("@/lib/job/concerns.server");
+    const concern = data.concernId
+      ? ((await listConcerns(client, data.id)).find((c) => c.id === data.concernId) ?? null)
+      : null;
+
+    const { draftRecommendations } = await import("@/lib/job/authoring.server");
+    const drafts = await draftRecommendations({
+      client,
+      requestId: data.id,
+      concern,
+      findings: selected
+        .map((f) =>
+          [f['severity'], f['title'], f['measurement'], f['detail']].filter(Boolean).join(" — "),
+        )
+        .join("\n"),
+    });
+    return { ok: true as const, drafts };
+  });
+
+/** Everything documented on a concern → closeout draft. Drafts only. */
+export const draftConcernCloseout = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ concernId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { requestId, concern } = await loadConcern(client, data.concernId);
+
+    const recs = await safeSelect(() =>
+      client
+        .from("job_recommendations")
+        .select("title, status, priority, internal_notes")
+        .eq("service_request_id", requestId),
+    );
+    const documented = [
+      concern.story || concern.technicianObserved || "",
+      concern.confirmedCause ? `Confirmed cause: ${concern.confirmedCause}` : "",
+      concern.repairPerformed ? `Repair performed: ${concern.repairPerformed}` : "",
+      concern.verification ? `Verification: ${concern.verification}` : "",
+      ...recs.map((r) =>
+        `Recommendation (${r['status']}, ${r['priority']}): ${r['title']}${
+          r['internal_notes'] ? ` — ${r['internal_notes']}` : ""
+        }`,
+      ),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const { draftCloseout } = await import("@/lib/job/authoring.server");
+    return { ok: true as const, draft: await draftCloseout({ client, requestId, concern, documented }) };
+  });
+
+/* ------------------------------------------------------------- assignment */
+
+/**
+ * Records who is fulfilling this request. Repara always owns the customer
+ * relationship; today the only automatic option is "I'll do it myself", and a
+ * provider name can be typed in for work fulfilled by someone else.
+ */
+export const setRequestAssignment = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema
+      .extend({
+        assignmentStatus: z.enum(["unassigned", "self", "assigned", "declined"]),
+        provider: optionalText(120),
+        technician: optionalText(120),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const accepting = data.assignmentStatus === "self" || data.assignmentStatus === "assigned";
+    const { error } = await client
+      .from("service_requests")
+      .update({
+        assignment_status: data.assignmentStatus,
+        assigned_provider: data.provider || null,
+        assigned_technician: data.technician || null,
+        ...(accepting ? { accepted_at: new Date().toISOString(), accepted_by: context.userId } : {}),
+      })
+      .eq("id", data.id);
+    if (error) throw new Error("Could not update the assignment.");
+    await logActivity(
+      client,
+      data.id,
+      "assignment_changed",
+      data.assignmentStatus === "self"
+        ? "Accepted by Repara"
+        : data.assignmentStatus === "assigned"
+          ? `Assigned to ${data.provider || "a provider"}`
+          : `Assignment set to ${data.assignmentStatus}`,
+      context.userId,
+    );
     return { ok: true };
   });
