@@ -219,8 +219,12 @@ export function JobFindings({
     setConverting(finding);
     setRecTitle(finding.title);
     setRecDescription(finding.detail ?? "");
+    setRecInternal(finding.evidence ?? "");
     setRecPriority(finding.severity === "informational" ? "monitor" : finding.severity);
   }
+
+  const concernTitle = (id: string | null) =>
+    concerns.find((c) => c.id === id)?.title ?? "";
 
   return (
     <section className="space-y-4">
