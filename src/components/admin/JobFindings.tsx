@@ -86,6 +86,7 @@ export function JobFindings({
       persistFinding({
         data: {
           id: requestId,
+          concernId: concernId || null,
           title: title.trim(),
           measurement: measurement.trim(),
           detail: detail.trim(),
@@ -104,24 +105,85 @@ export function JobFindings({
       toast.error(error instanceof Error ? error.message : "Could not save this finding."),
   });
 
+  /** Confirms an AI-drafted finding — the human gate before it counts as fact. */
+  const confirmFinding = useMutation({
+    mutationFn: (finding: JobFinding) =>
+      persistFinding({
+        data: {
+          id: requestId,
+          findingId: finding.id,
+          concernId: finding.concernId,
+          title: finding.title,
+          detail: finding.detail ?? "",
+          measurement: finding.measurement ?? "",
+          severity: finding.severity,
+          source: finding.source,
+          approve: true,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Finding confirmed.");
+      void refresh();
+    },
+    onError: () => toast.error("Could not confirm this finding."),
+  });
+
   const createRecommendation = useMutation({
     mutationFn: () =>
       persistRecommendation({
         data: {
           id: requestId,
           findingId: converting?.id ?? null,
+          concernId: converting?.concernId ?? null,
           title: recTitle.trim(),
           customerDescription: recDescription.trim(),
+          internalNotes: recInternal.trim(),
           priority: recPriority as "recommended",
           status: "draft",
         },
       }),
     onSuccess: () => {
       setConverting(null);
+      setRecInternal("");
       toast.success("Recommendation created as a draft.");
       void refresh();
     },
     onError: () => toast.error("Could not create this recommendation."),
+  });
+
+  /** Repara AI drafts recommendation wording from a confirmed finding. */
+  const draftRecs = useMutation({
+    mutationFn: (finding: JobFinding) =>
+      runRecommendationDrafts({
+        data: { id: requestId, findingIds: [finding.id], concernId: finding.concernId },
+      }),
+    onSuccess: (res) => {
+      setRecDrafts(res.drafts);
+      if (!res.drafts.length) toast.info("Nothing to recommend from that finding.");
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Repara AI could not draft this."),
+  });
+
+  const keepRecDraft = useMutation({
+    mutationFn: (d: (typeof recDrafts)[number]) =>
+      persistRecommendation({
+        data: {
+          id: requestId,
+          title: d.title,
+          customerDescription: d.customerDescription,
+          internalNotes: d.internalNotes,
+          priority: d.priority as "recommended",
+          status: "draft",
+          aiDrafted: true,
+        },
+      }),
+    onSuccess: (_res, d) => {
+      setRecDrafts((all) => all.filter((x) => x.title !== d.title));
+      toast.success("Saved as a draft — approve it when the wording is right.");
+      void refresh();
+    },
+    onError: () => toast.error("Could not save this recommendation."),
   });
 
   const approve = useMutation({
