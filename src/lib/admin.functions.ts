@@ -90,9 +90,14 @@ export const listRequests = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const LEGACY_COLUMNS =
       "id, request_number, service_category, service_subcategory, services, status, created_at, zip_code, customers(first_name, last_name, phone, email), vehicles(year, make, model, vin)";
-    const COLUMNS = LEGACY_COLUMNS.replace(
+    const AREA_COLUMNS = LEGACY_COLUMNS.replace(
       "zip_code,",
       "zip_code, city, service_area_status, admin_viewed_at, email_status,",
+    );
+    // Assignment fields arrive with migration 0011; the list degrades without them.
+    const COLUMNS = AREA_COLUMNS.replace(
+      "email_status,",
+      "email_status, accepted_at, assignment_status, assigned_provider, assigned_technician,",
     );
 
     const run = async (columns: string, withArea: boolean) => {
