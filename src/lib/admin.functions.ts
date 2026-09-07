@@ -122,7 +122,10 @@ export const listRequests = createServerFn({ method: "POST" })
     };
 
     let { data: rows, error } = await run(COLUMNS, true);
-    // Tolerate a database that has not run migration 0002 yet.
+    // Tolerate a database that has not run migration 0011 / 0002 yet.
+    if (error && /column|schema cache/i.test(error.message ?? "")) {
+      ({ data: rows, error } = await run(AREA_COLUMNS, true));
+    }
     if (error && /column|schema cache/i.test(error.message ?? "")) {
       ({ data: rows, error } = await run(LEGACY_COLUMNS, false));
     }
