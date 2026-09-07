@@ -124,18 +124,49 @@ export function VinScanner({
     let timer: number | undefined;
     let hintTimer: number | undefined;
 
-    async function start() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          // High resolution matters: a VIN barcode is thin and wide.
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 2560 },
-            height: { ideal: 1440 },
-            frameRate: { ideal: 30 },
-          },
+    /**
+     * Android phones often expose several rear cameras and hand `environment`
+     * to a low-quality ultra-wide, which cannot resolve a VIN barcode. Pick the
+     * plain rear camera by label when labels are available, and fall back to
+     * `facingMode` everywhere else (iPhone works that way today).
+     */
+    async function openCamera(): Promise<MediaStream> {
+      const size = {
+        width: { ideal: 2560 },
+        height: { ideal: 1440 },
+        frameRate: { ideal: 30 },
+      };
+      const byFacing = () =>
+        navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, ...size },
           audio: false,
         });
+
+      try {
+        const stream = await byFacing();
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const rear = devices.filter(
+          (d) => d.kind === "videoinput" && /back|rear|environment/i.test(d.label),
+        );
+        // A single rear camera, or unlabeled devices: keep what we have.
+        if (rear.length < 2) return stream;
+        const main =
+          rear.find((d) => !/wide|ultra|tele|macro|depth|zoom|0\.5/i.test(d.label)) ?? rear[0]!;
+        const active = stream.getVideoTracks()[0]?.getSettings().deviceId;
+        if (active === main.deviceId) return stream;
+        stream.getTracks().forEach((track) => track.stop());
+        return await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: { exact: main.deviceId }, ...size },
+          audio: false,
+        });
+      } catch {
+        return byFacing();
+      }
+    }
+
+    async function start() {
+      try {
+        const stream = await openCamera();
         if (stoppedRef.current) {
           stream.getTracks().forEach((t) => t.stop());
           return;

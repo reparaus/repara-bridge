@@ -49,11 +49,13 @@ export function JobFindings({
   requestId,
   findings,
   recommendations,
+  concerns,
   onAddToQuote,
 }: {
   requestId: string;
   findings: JobFinding[];
   recommendations: JobRecommendation[];
+  concerns: JobConcern[];
   onAddToQuote: (recommendation: JobRecommendation) => void;
 }) {
   const queryClient = useQueryClient();
@@ -61,15 +63,21 @@ export function JobFindings({
   const removeFinding = useServerFn(deleteFinding);
   const persistRecommendation = useServerFn(saveRecommendation);
   const removeRecommendation = useServerFn(deleteRecommendation);
+  const runRecommendationDrafts = useServerFn(draftFindingRecommendations);
 
   const [title, setTitle] = useState("");
   const [measurement, setMeasurement] = useState("");
   const [severity, setSeverity] = useState<JobFinding["severity"]>("recommended");
   const [detail, setDetail] = useState("");
+  const [concernId, setConcernId] = useState("");
   const [converting, setConverting] = useState<JobFinding | null>(null);
   const [recTitle, setRecTitle] = useState("");
   const [recDescription, setRecDescription] = useState("");
+  const [recInternal, setRecInternal] = useState("");
   const [recPriority, setRecPriority] = useState("recommended");
+  const [recDrafts, setRecDrafts] = useState<
+    { title: string; customerDescription: string; internalNotes: string; priority: string }[]
+  >([]);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["job-workspace", requestId] });
 
@@ -78,6 +86,7 @@ export function JobFindings({
       persistFinding({
         data: {
           id: requestId,
+          concernId: concernId || null,
           title: title.trim(),
           measurement: measurement.trim(),
           detail: detail.trim(),
@@ -96,24 +105,85 @@ export function JobFindings({
       toast.error(error instanceof Error ? error.message : "Could not save this finding."),
   });
 
+  /** Confirms an AI-drafted finding — the human gate before it counts as fact. */
+  const confirmFinding = useMutation({
+    mutationFn: (finding: JobFinding) =>
+      persistFinding({
+        data: {
+          id: requestId,
+          findingId: finding.id,
+          concernId: finding.concernId,
+          title: finding.title,
+          detail: finding.detail ?? "",
+          measurement: finding.measurement ?? "",
+          severity: finding.severity,
+          source: finding.source,
+          approve: true,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Finding confirmed.");
+      void refresh();
+    },
+    onError: () => toast.error("Could not confirm this finding."),
+  });
+
   const createRecommendation = useMutation({
     mutationFn: () =>
       persistRecommendation({
         data: {
           id: requestId,
           findingId: converting?.id ?? null,
+          concernId: converting?.concernId ?? null,
           title: recTitle.trim(),
           customerDescription: recDescription.trim(),
+          internalNotes: recInternal.trim(),
           priority: recPriority as "recommended",
           status: "draft",
         },
       }),
     onSuccess: () => {
       setConverting(null);
+      setRecInternal("");
       toast.success("Recommendation created as a draft.");
       void refresh();
     },
     onError: () => toast.error("Could not create this recommendation."),
+  });
+
+  /** Repara AI drafts recommendation wording from a confirmed finding. */
+  const draftRecs = useMutation({
+    mutationFn: (finding: JobFinding) =>
+      runRecommendationDrafts({
+        data: { id: requestId, findingIds: [finding.id], concernId: finding.concernId },
+      }),
+    onSuccess: (res) => {
+      setRecDrafts(res.drafts);
+      if (!res.drafts.length) toast.info("Nothing to recommend from that finding.");
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Repara AI could not draft this."),
+  });
+
+  const keepRecDraft = useMutation({
+    mutationFn: (d: (typeof recDrafts)[number]) =>
+      persistRecommendation({
+        data: {
+          id: requestId,
+          title: d.title,
+          customerDescription: d.customerDescription,
+          internalNotes: d.internalNotes,
+          priority: d.priority as "recommended",
+          status: "draft",
+          aiDrafted: true,
+        },
+      }),
+    onSuccess: (_res, d) => {
+      setRecDrafts((all) => all.filter((x) => x.title !== d.title));
+      toast.success("Saved as a draft — approve it when the wording is right.");
+      void refresh();
+    },
+    onError: () => toast.error("Could not save this recommendation."),
   });
 
   const approve = useMutation({
@@ -149,8 +219,12 @@ export function JobFindings({
     setConverting(finding);
     setRecTitle(finding.title);
     setRecDescription(finding.detail ?? "");
+    setRecInternal(finding.evidence ?? "");
     setRecPriority(finding.severity === "informational" ? "monitor" : finding.severity);
   }
+
+  const concernTitle = (id: string | null) =>
+    concerns.find((c) => c.id === id)?.title ?? "";
 
   return (
     <section className="space-y-4">
@@ -182,6 +256,21 @@ export function JobFindings({
             ))}
           </select>
         </div>
+        {concerns.length > 0 && (
+          <select
+            value={concernId}
+            aria-label="Related concern"
+            onChange={(e) => setConcernId(e.target.value)}
+            className="h-12 w-full rounded-md border border-input bg-surface px-3 text-sm"
+          >
+            <option value="">Not tied to a specific concern</option>
+            {concerns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        )}
         <Textarea
           rows={2}
           value={detail}
@@ -219,8 +308,19 @@ export function JobFindings({
                     >
                       {finding.severity}
                     </span>
-                    {finding.source === "ai" && (
-                      <span className="text-[10px] text-muted-foreground">AI-drafted, you saved it</span>
+                    {finding.aiDrafted && !finding.approvedAt && (
+                      <span className="text-[10px] text-warning">AI-drafted — confirm it</span>
+                    )}
+                    {finding.approvedAt && (
+                      <span className="text-[10px] text-muted-foreground">Confirmed</span>
+                    )}
+                    {finding.confidence === "suspected" && (
+                      <span className="text-[10px] text-muted-foreground">suspected</span>
+                    )}
+                    {concernTitle(finding.concernId) && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {concernTitle(finding.concernId)}
+                      </span>
                     )}
                     {finding.status === "converted" && (
                       <span className="text-[10px] text-muted-foreground">→ recommended</span>
@@ -230,6 +330,9 @@ export function JobFindings({
                   {finding.measurement && <p className="text-xs">{finding.measurement}</p>}
                   {finding.detail && (
                     <p className="text-xs whitespace-pre-line text-muted-foreground">{finding.detail}</p>
+                  )}
+                  {finding.evidence && (
+                    <p className="text-xs text-muted-foreground">Evidence: {finding.evidence}</p>
                   )}
                 </div>
                 <button
@@ -241,15 +344,43 @@ export function JobFindings({
                   <Trash2 className="size-4" />
                 </button>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-10 border-border bg-transparent text-xs"
-                onClick={() => startConvert(finding)}
-              >
-                Make recommendation <ArrowRight className="ml-1.5 size-3.5" />
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {finding.aiDrafted && !finding.approvedAt && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-10 text-xs"
+                    disabled={confirmFinding.isPending}
+                    onClick={() => confirmFinding.mutate(finding)}
+                  >
+                    <Check className="mr-1.5 size-3.5" /> Confirm
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-10 border-border bg-transparent text-xs"
+                  onClick={() => startConvert(finding)}
+                >
+                  Make recommendation <ArrowRight className="ml-1.5 size-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-10 border-border bg-transparent text-xs"
+                  disabled={draftRecs.isPending}
+                  onClick={() => draftRecs.mutate(finding)}
+                >
+                  {draftRecs.isPending ? (
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-1.5 size-3.5" />
+                  )}
+                  Draft with AI
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
@@ -271,6 +402,13 @@ export function JobFindings({
             value={recDescription}
             placeholder="Plain-language explanation the customer will read"
             onChange={(e) => setRecDescription(e.target.value)}
+          />
+          {/* Internal wording stays internal — it never reaches the customer. */}
+          <Textarea
+            rows={2}
+            value={recInternal}
+            placeholder="Internal notes (technical wording, parts, cautions) — customer never sees this"
+            onChange={(e) => setRecInternal(e.target.value)}
           />
           <select
             value={recPriority}
@@ -301,6 +439,46 @@ export function JobFindings({
               Cancel
             </Button>
           </div>
+        </div>
+      )}
+
+      {recDrafts.length > 0 && (
+        <div className="surface-panel space-y-3 p-4">
+          <h3 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">
+            AI-drafted recommendations — keep what fits
+          </h3>
+          {recDrafts.map((d, i) => (
+            <div key={i} className="space-y-1 rounded-lg border border-border p-3">
+              <p className="text-sm font-medium">{d.title}</p>
+              <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                {d.priority}
+              </p>
+              {d.customerDescription && <p className="text-sm">{d.customerDescription}</p>}
+              {d.internalNotes && (
+                <p className="text-xs text-muted-foreground">Internal: {d.internalNotes}</p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-10 text-xs"
+                  disabled={keepRecDraft.isPending}
+                  onClick={() => keepRecDraft.mutate(d)}
+                >
+                  Keep as draft
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-10 text-xs"
+                  onClick={() => setRecDrafts((all) => all.filter((_, x) => x !== i))}
+                >
+                  Discard
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

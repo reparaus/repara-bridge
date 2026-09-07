@@ -41,11 +41,25 @@ const FILTERS = [
 
 type FilterKey = (typeof FILTERS)[number]["key"];
 
+/**
+ * Work that has not been taken on yet vs work in progress. Incoming requests
+ * need a decision (take it, assign it, decline it); jobs need to be finished.
+ */
+const INCOMING_STATUSES = new Set(["new", "contacted", "reviewing", "quoted", "declined"]);
+
+const ASSIGNMENT_LABEL: Record<string, string> = {
+  unassigned: "Unassigned",
+  self: "Doing it myself",
+  assigned: "Assigned to a provider",
+  declined: "Declined",
+};
+
 function RequestsDashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fetchRequests = useServerFn(listRequests);
 
+  const [view, setView] = useState<"incoming" | "jobs">("incoming");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
 
@@ -59,6 +73,10 @@ function RequestsDashboard() {
 
   const counts = query.data?.counts ?? {};
   const areaCounts = query.data?.areaCounts ?? {};
+  const all = query.data?.requests ?? [];
+  const isIncoming = (r: (typeof all)[number]) =>
+    INCOMING_STATUSES.has(r.status) && !r.acceptedAt;
+  const visible = all.filter((r) => (view === "incoming" ? isIncoming(r) : !isIncoming(r)));
 
   function countFor(f: (typeof FILTERS)[number]) {
     if (f.key === "all") return Object.values(counts).reduce((s, n) => s + n, 0);
@@ -97,12 +115,40 @@ function RequestsDashboard() {
 
       <main className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-5 sm:py-8">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="font-display text-xl font-extrabold sm:text-2xl">Service Requests</h1>
+          <h1 className="font-display text-xl font-extrabold sm:text-2xl">
+            {view === "incoming" ? "Incoming Requests" : "Jobs"}
+          </h1>
           <p className="text-xs text-muted-foreground">
             {(query.data?.unviewedCount ?? 0) > 0
               ? `${query.data?.unviewedCount} not yet viewed`
               : "All requests viewed"}
           </p>
+        </div>
+
+        <div className="flex gap-2">
+          {(
+            [
+              { key: "incoming", label: "Incoming Requests" },
+              { key: "jobs", label: "Jobs" },
+            ] as const
+          ).map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => setView(v.key)}
+              aria-pressed={view === v.key}
+              className={`rounded-full border px-4 py-2 text-xs font-semibold transition-colors ${
+                view === v.key
+                  ? "border-chrome/60 bg-chrome/15 text-foreground"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {v.label}
+              <span className="ml-1.5 tabular-nums opacity-70">
+                {all.filter((r) => (v.key === "incoming" ? isIncoming(r) : !isIncoming(r))).length}
+              </span>
+            </button>
+          ))}
         </div>
 
         <div className="relative">
@@ -145,17 +191,17 @@ function RequestsDashboard() {
           />
         )}
 
-        {query.data && query.data.requests.length === 0 && (
+        {query.data && visible.length === 0 && (
           <EmptyState
             icon={<Inbox className="size-5" />}
-            title="No requests match"
+            title={view === "incoming" ? "No incoming requests" : "No active jobs"}
             description="Adjust your filters, or wait for new customer requests to arrive."
           />
         )}
 
-        {query.data && query.data.requests.length > 0 && (
+        {query.data && visible.length > 0 && (
           <ul className="grid gap-3 lg:grid-cols-2">
-            {query.data.requests.map((r) => {
+            {visible.map((r) => {
               const outside = r.serviceAreaStatus === "outside_area";
               return (
                 <li key={r.id}>
@@ -214,6 +260,12 @@ function RequestsDashboard() {
                     <div className="flex flex-wrap items-center gap-2">
                       <CopyValue value={r.phone} label="phone number" />
                       {r.vin && <CopyValue value={r.vin} label="VIN" mono />}
+                      <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                        {r.assignedProvider ||
+                          r.assignedTechnician ||
+                          ASSIGNMENT_LABEL[r.assignmentStatus] ||
+                          "Unassigned"}
+                      </span>
                       {outside && (
                         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-warning">
                           <MapPinOff className="size-3" /> Outside area

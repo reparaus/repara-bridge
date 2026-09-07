@@ -90,9 +90,14 @@ export const listRequests = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const LEGACY_COLUMNS =
       "id, request_number, service_category, service_subcategory, services, status, created_at, zip_code, customers(first_name, last_name, phone, email), vehicles(year, make, model, vin)";
-    const COLUMNS = LEGACY_COLUMNS.replace(
+    const AREA_COLUMNS = LEGACY_COLUMNS.replace(
       "zip_code,",
       "zip_code, city, service_area_status, admin_viewed_at, email_status,",
+    );
+    // Assignment fields arrive with migration 0011; the list degrades without them.
+    const COLUMNS = AREA_COLUMNS.replace(
+      "email_status,",
+      "email_status, accepted_at, assignment_status, assigned_provider, assigned_technician,",
     );
 
     const run = async (columns: string, withArea: boolean) => {
@@ -117,7 +122,10 @@ export const listRequests = createServerFn({ method: "POST" })
     };
 
     let { data: rows, error } = await run(COLUMNS, true);
-    // Tolerate a database that has not run migration 0002 yet.
+    // Tolerate a database that has not run migration 0011 / 0002 yet.
+    if (error && /column|schema cache/i.test(error.message ?? "")) {
+      ({ data: rows, error } = await run(AREA_COLUMNS, true));
+    }
     if (error && /column|schema cache/i.test(error.message ?? "")) {
       ({ data: rows, error } = await run(LEGACY_COLUMNS, false));
     }
@@ -149,6 +157,10 @@ export const listRequests = createServerFn({ method: "POST" })
         : "",
       viewed: Boolean(r.admin_viewed_at),
       emailStatus: r.email_status ?? null,
+      acceptedAt: r.accepted_at ?? null,
+      assignmentStatus: r.assignment_status ?? "unassigned",
+      assignedProvider: r.assigned_provider ?? "",
+      assignedTechnician: r.assigned_technician ?? "",
     }));
 
     let filtered = term
@@ -189,6 +201,10 @@ type AdminRequestRow = {
   service_area_status: string | null;
   admin_viewed_at: string | null;
   email_status: string | null;
+  accepted_at?: string | null;
+  assignment_status?: string | null;
+  assigned_provider?: string | null;
+  assigned_technician?: string | null;
   customers: { first_name?: string; last_name?: string; phone?: string; email?: string } | null;
   vehicles: { year?: number; make?: string; model?: string; vin?: string } | null;
 };

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Bot, Copy, Eye, Loader2, Mail, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Bot, Check, Copy, Eye, Loader2, Mail, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { CopyValue } from "@/components/admin/CopyValue";
@@ -11,6 +11,7 @@ import { ReparaAiCard } from "@/components/admin/ReparaAiCard";
 import { JobCopilot } from "@/components/admin/JobCopilot";
 import { JobDiagnosis } from "@/components/admin/JobDiagnosis";
 import { JobFindings } from "@/components/admin/JobFindings";
+import { JobConcerns } from "@/components/admin/JobConcerns";
 import { JobCloseout } from "@/components/admin/JobCloseout";
 import { QuotePreview } from "@/components/admin/QuotePreview";
 
@@ -29,7 +30,7 @@ import {
   saveQuote,
   updateRequestStatus,
 } from "@/lib/admin.functions";
-import { getJobWorkspace, type JobRecommendation } from "@/lib/job.functions";
+import { getJobWorkspace, setRequestAssignment, type JobRecommendation } from "@/lib/job.functions";
 import { answerLabel, serviceLabel, statusLabel, WORKFLOW_STATUSES } from "@/lib/services";
 import { DRIVETRAIN_LABELS, type Drivetrain } from "@/lib/vehicle-config";
 import { track } from "@/lib/analytics";
@@ -467,6 +468,15 @@ function JobWorkspace() {
                   </ul>
                 )}
               </Panel>
+              <Panel title="Who is doing this work">
+                <AssignmentControl
+                  requestId={id}
+                  initialStatus={String(request.assignment_status ?? "unassigned")}
+                  initialProvider={String(request.assigned_provider ?? "")}
+                  initialTechnician={String(request.assigned_technician ?? "")}
+                  onSaved={() => void query.refetch()}
+                />
+              </Panel>
               <Panel title="Customer concern">
                 <p className="text-sm whitespace-pre-line">{concern || "No description provided."}</p>
                 {intake.summary && (
@@ -712,18 +722,29 @@ function JobWorkspace() {
                   <div className="flex flex-wrap gap-2">
                     {recommendations
                       .filter((r) => r.status === "approved")
-                      .map((rec) => (
-                        <Button
-                          key={rec.id}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-10 border-border bg-transparent text-xs"
-                          onClick={() => addRecommendationToQuote(rec)}
-                        >
-                          <Plus className="mr-1.5 size-3.5" /> {rec.title}
-                        </Button>
-                      ))}
+                      .map((rec) => {
+                        // Already-quoted items stay visible but can't be added twice.
+                        const onQuote = lines.some((l) => l.recommendationId === rec.id);
+                        return (
+                          <Button
+                            key={rec.id}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={onQuote}
+                            className="h-10 border-border bg-transparent text-xs"
+                            onClick={() => addRecommendationToQuote(rec)}
+                          >
+                            {onQuote ? (
+                              <Check className="mr-1.5 size-3.5" />
+                            ) : (
+                              <Plus className="mr-1.5 size-3.5" />
+                            )}
+                            {rec.title}
+                            {onQuote ? " · on quote" : ""}
+                          </Button>
+                        );
+                      })}
                   </div>
                 </div>
               )}
@@ -1080,6 +1101,86 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="min-w-0 break-words text-right text-sm font-medium">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Lightweight assignment: Repara does the work itself, or a participating
+ * provider does. No matching, bidding or dispatch — just a recorded decision so
+ * the platform is ready for other providers later.
+ */
+function AssignmentControl({
+  requestId,
+  initialStatus,
+  initialProvider,
+  initialTechnician,
+  onSaved,
+}: {
+  requestId: string;
+  initialStatus: string;
+  initialProvider: string;
+  initialTechnician: string;
+  onSaved: () => void;
+}) {
+  const persist = useServerFn(setRequestAssignment);
+  const [status, setStatusValue] = useState(initialStatus);
+  const [provider, setProvider] = useState(initialProvider);
+  const [technician, setTechnician] = useState(initialTechnician);
+
+  const save = useMutation({
+    mutationFn: () =>
+      persist({
+        data: {
+          id: requestId,
+          assignmentStatus: status as "unassigned",
+          provider,
+          technician,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Assignment updated.");
+      onSaved();
+    },
+    onError: () => toast.error("Could not update the assignment."),
+  });
+
+  return (
+    <div className="space-y-2">
+      <select
+        value={status}
+        aria-label="Assignment"
+        onChange={(e) => setStatusValue(e.target.value)}
+        className="h-11 w-full rounded-md border border-input bg-surface px-3 text-sm"
+      >
+        <option value="unassigned">Not decided yet</option>
+        <option value="self">Repara is doing it</option>
+        <option value="assigned">A participating provider is doing it</option>
+        <option value="declined">Declined</option>
+      </select>
+      {status === "assigned" && (
+        <Input
+          value={provider}
+          placeholder="Provider or shop name"
+          className="h-11"
+          onChange={(e) => setProvider(e.target.value)}
+        />
+      )}
+      <Input
+        value={technician}
+        placeholder="Technician (optional)"
+        className="h-11"
+        onChange={(e) => setTechnician(e.target.value)}
+      />
+      <Button
+        type="button"
+        size="sm"
+        className="h-10 text-xs"
+        disabled={save.isPending}
+        onClick={() => save.mutate()}
+      >
+        {save.isPending && <Loader2 className="mr-1.5 size-3.5 animate-spin" />} Save
+      </Button>
     </div>
   );
 }
