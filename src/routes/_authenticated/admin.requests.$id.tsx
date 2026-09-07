@@ -309,6 +309,13 @@ function JobWorkspace() {
 
   /** Turns an approved recommendation into quote lines without retyping. */
   function addRecommendationToQuote(rec: JobRecommendation) {
+    // Adding the same recommendation twice is the easiest way to double-bill a
+    // customer, so the same source item can only ever appear once.
+    if (lines.some((l) => l.recommendationId === rec.id)) {
+      setTab("quote");
+      toast.info("That recommendation is already on this quote.");
+      return;
+    }
     setLines((current) => {
       const cleaned = current.filter((l) => l.description.trim() || l.recommendationId);
       return [
@@ -330,7 +337,32 @@ function JobWorkspace() {
   const recommendations = job.data?.recommendations ?? [];
   const diagnostics = job.data?.diagnostics ?? [];
   const activity = job.data?.activity ?? [];
+  const concerns = job.data?.concerns ?? [];
   const openRecommendations = recommendations.filter((r) => r.status === "draft").length;
+
+  /**
+   * Next best action — one sentence telling the technician where the job
+   * actually stands, derived from what is already documented.
+   */
+  const nextBestAction = (() => {
+    if (!concerns.length) return "Review the request, then start the diagnosis.";
+    const uninspected = concerns.filter((c) => c.concernStatus === "not_inspected");
+    if (uninspected.length)
+      return `Inspect and verify: ${uninspected.map((c) => c.title).join(", ")}.`;
+    const unapproved = concerns.filter((c) => c.story && !c.storyApprovedAt);
+    if (unapproved.length) return "Approve the diagnosis account so findings can be drafted.";
+    const draftFindings = findings.filter((f) => f.aiDrafted && !f.approvedAt);
+    if (draftFindings.length) return `Confirm ${draftFindings.length} drafted finding(s).`;
+    if (openRecommendations) return `Approve ${openRecommendations} drafted recommendation(s).`;
+    const approvedUnquoted = recommendations.filter(
+      (r) => r.status === "approved" && !lines.some((l) => l.recommendationId === r.id),
+    );
+    if (approvedUnquoted.length)
+      return `Add ${approvedUnquoted.length} approved recommendation(s) to the quote.`;
+    const openRepair = concerns.filter((c) => !c.outcome);
+    if (openRepair.length) return "Record what was performed and verified, then close the job out.";
+    return "Everything documented — send the quote or close the job out.";
+  })();
 
   return (
     <div className="min-h-screen bg-background pb-24 lg:pb-0">
