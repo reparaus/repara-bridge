@@ -221,25 +221,42 @@ export const REQUEST_STATUSES = [
   "new",
   "contacted",
   "reviewing",
+  "ready_to_quote",
   "quoted",
   "accepted",
   "declined",
   "scheduled",
+  "diagnosing",
   "in_progress",
+  "awaiting_approval",
+  "repairing",
   "completed",
+  "closed",
   "cancelled",
 ] as const;
 
-/** Statuses Repara moves a request through in the admin dashboard. */
+/**
+ * Job lifecycle stages, in the order a job moves through them. The original
+ * statuses are unchanged; migration 0010 adds the missing active-work stages.
+ */
 export const WORKFLOW_STATUSES = [
   "new",
+  "reviewing",
   "contacted",
+  "ready_to_quote",
+  "quoted",
+  "accepted",
   "scheduled",
+  "diagnosing",
   "in_progress",
+  "awaiting_approval",
+  "repairing",
   "completed",
+  "closed",
   "declined",
   "cancelled",
 ] as const;
+
 
 
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];

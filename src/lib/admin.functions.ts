@@ -290,14 +290,20 @@ export const updateRequestStatus = createServerFn({ method: "POST" })
           "new",
           "contacted",
           "reviewing",
+          "ready_to_quote",
           "quoted",
           "accepted",
           "declined",
           "scheduled",
+          "diagnosing",
           "in_progress",
+          "awaiting_approval",
+          "repairing",
           "completed",
+          "closed",
           "cancelled",
         ]),
+
       })
       .parse(data),
   )
