@@ -260,6 +260,12 @@ function RequestsDashboard() {
                     <div className="flex flex-wrap items-center gap-2">
                       <CopyValue value={r.phone} label="phone number" />
                       {r.vin && <CopyValue value={r.vin} label="VIN" mono />}
+                      <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                        {r.assignedProvider ||
+                          r.assignedTechnician ||
+                          ASSIGNMENT_LABEL[r.assignmentStatus] ||
+                          "Unassigned"}
+                      </span>
                       {outside && (
                         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-warning">
                           <MapPinOff className="size-3" /> Outside area
