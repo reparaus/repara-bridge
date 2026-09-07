@@ -203,3 +203,104 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </label>
   );
 }
+
+/**
+ * One concern's outcome: what was actually performed, how it was verified, and
+ * where it landed. Repara AI can draft the wording from what is already
+ * documented; the technician still saves it.
+ */
+function ConcernCloseout({ requestId, concern }: { requestId: string; concern: JobConcern }) {
+  const persist = useServerFn(saveConcern);
+  const runDraft = useServerFn(draftConcernCloseout);
+  const queryClient = useQueryClient();
+
+  const [performed, setPerformed] = useState(concern.repairPerformed ?? "");
+  const [verification, setVerification] = useState(concern.verification ?? "");
+  const [result, setResult] = useState<NonNullable<JobConcern["outcome"]> | "">(
+    concern.outcome ?? "",
+  );
+
+  const save = useMutation({
+    mutationFn: () =>
+      persist({
+        data: {
+          id: requestId,
+          concernId: concern.id,
+          repairPerformed: performed,
+          verification,
+          outcome: (result || null) as never,
+        } as never,
+      }),
+    onSuccess: () => {
+      toast.success("Concern outcome saved.");
+      void queryClient.invalidateQueries({ queryKey: ["job-workspace", requestId] });
+    },
+    onError: () => toast.error("Could not save this outcome."),
+  });
+
+  const draft = useMutation({
+    mutationFn: () => runDraft({ data: { concernId: concern.id } }),
+    onSuccess: (res) => {
+      if (!performed.trim()) setPerformed(res.draft.repairPerformed);
+      if (!verification.trim()) setVerification(res.draft.verification);
+      if (!result) setResult(res.draft.outcome as NonNullable<JobConcern["outcome"]>);
+      toast.success("Draft filled in — review it before saving.");
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Repara AI could not draft this."),
+  });
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border p-3">
+      <p className="text-sm font-medium">{concern.title}</p>
+      {concern.customerReport && (
+        <p className="text-xs text-muted-foreground">Customer reported: {concern.customerReport}</p>
+      )}
+      <Field label="What was performed">
+        <Textarea rows={2} value={performed} onChange={(e) => setPerformed(e.target.value)} />
+      </Field>
+      <Field label="How it was verified">
+        <Textarea rows={2} value={verification} onChange={(e) => setVerification(e.target.value)} />
+      </Field>
+      <select
+        value={result}
+        aria-label="Outcome"
+        onChange={(e) => setResult(e.target.value as NonNullable<JobConcern["outcome"]>)}
+        className="h-11 w-full rounded-md border border-input bg-surface px-3 text-sm"
+      >
+        <option value="">Outcome not set</option>
+        {OUTCOME_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          className="h-10 text-xs"
+          disabled={save.isPending}
+          onClick={() => save.mutate()}
+        >
+          {save.isPending && <Loader2 className="mr-1.5 size-3.5 animate-spin" />} Save
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-10 border-border bg-transparent text-xs"
+          disabled={draft.isPending}
+          onClick={() => draft.mutate()}
+        >
+          {draft.isPending ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="mr-1.5 size-3.5" />
+          )}
+          Draft with AI
+        </Button>
+      </div>
+    </div>
+  );
+}
