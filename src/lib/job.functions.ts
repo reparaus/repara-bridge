@@ -142,43 +142,58 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
       createdAt: String(d['created_at']),
     }));
 
-    const findings: JobFinding[] = (
-      await safeSelect(() =>
+    // Newer columns first, legacy column list as a fallback, so a database that
+    // has not run 0011 yet still shows its findings instead of an empty tab.
+    const readTable = async (table: string, columns: string, legacy: string) => {
+      const run = (cols: string) =>
         client
-          .from("job_findings")
-          .select("id, title, detail, measurement, severity, source, status, created_at")
+          .from(table)
+          .select(cols)
           .eq("service_request_id", data.id)
-          .order("created_at", { ascending: false }),
+          .order("created_at", { ascending: false });
+      let rows = await safeSelect(() => run(columns));
+      if (!rows.length) rows = await safeSelect(() => run(legacy));
+      return rows;
+    };
+
+    const findings: JobFinding[] = (
+      await readTable(
+        "job_findings",
+        "id, concern_id, title, detail, measurement, evidence, confidence, severity, source, status, ai_drafted, approved_at, created_at",
+        "id, title, detail, measurement, severity, source, status, created_at",
       )
     ).map((f) => ({
       id: String(f['id']),
+      concernId: s(f['concern_id']),
       title: String(f['title'] ?? ""),
       detail: s(f['detail']),
       measurement: s(f['measurement']),
+      evidence: s(f['evidence']),
+      confidence: String(f['confidence'] ?? "confirmed"),
       severity: String(f['severity'] ?? "recommended"),
       source: String(f['source'] ?? "technician"),
       status: String(f['status'] ?? "open"),
+      aiDrafted: Boolean(f['ai_drafted']),
+      approvedAt: s(f['approved_at']),
       createdAt: String(f['created_at']),
     }));
 
     const recommendations: JobRecommendation[] = (
-      await safeSelect(() =>
-        client
-          .from("job_recommendations")
-          .select(
-            "id, finding_id, title, customer_description, internal_notes, priority, status, ai_drafted, approved_at, created_at",
-          )
-          .eq("service_request_id", data.id)
-          .order("created_at", { ascending: false }),
+      await readTable(
+        "job_recommendations",
+        "id, finding_id, concern_id, title, customer_description, internal_notes, priority, status, performed_status, ai_drafted, approved_at, created_at",
+        "id, finding_id, title, customer_description, internal_notes, priority, status, ai_drafted, approved_at, created_at",
       )
     ).map((x) => ({
       id: String(x['id']),
       findingId: s(x['finding_id']),
+      concernId: s(x['concern_id']),
       title: String(x['title'] ?? ""),
       customerDescription: s(x['customer_description']),
       internalNotes: s(x['internal_notes']),
       priority: String(x['priority'] ?? "recommended"),
       status: String(x['status'] ?? "draft"),
+      performedStatus: String(x['performed_status'] ?? "pending"),
       aiDrafted: Boolean(x['ai_drafted']),
       approvedAt: s(x['approved_at']),
       createdAt: String(x['created_at']),
