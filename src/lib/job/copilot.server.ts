@@ -179,9 +179,11 @@ export async function runCopilot(input: {
   question: string;
   userId: string;
   force?: boolean;
-}): Promise<{ answer: CopilotAnswer; cached: boolean }> {
-  const { client, requestId, action, userId } = input;
+}): Promise<{ answer: CopilotAnswer; cached: boolean; persisted: boolean; persistError: string | null }> {
+  const { client, requestId, userId } = input;
   const question = input.question.trim();
+  // A typed question can carry its own intent ("draft a recommendation for…").
+  const action = input.action === "ask" ? detectActionIntent(question) : input.action;
 
   const context = await assembleJobContext(client, requestId, SCOPE_BY_ACTION[action] ?? FULL_SCOPE);
   const rendered = renderJobContext(context);
@@ -199,7 +201,7 @@ export async function runCopilot(input: {
         .limit(1)
         .maybeSingle();
       if (data?.payload && Object.keys(data.payload).length)
-        return { answer: data.payload as CopilotAnswer, cached: true };
+        return { answer: data.payload as CopilotAnswer, cached: true, persisted: true, persistError: null };
     } catch {
       /* copilot log unavailable — fall through to a live call */
     }
@@ -219,14 +221,17 @@ export async function runCopilot(input: {
 
   const answer = validate(result.text, specsUnavailable);
 
-  // Best-effort logging: a missing copilot table must not lose the answer.
+  // Persistence is reported back instead of silently swallowed: a conversation
+  // that looks saved but is not is worse than a visible warning.
+  let persistError: string | null = null;
   try {
-    await client.from("job_ai_messages").insert([
+    const { error } = await client.from("job_ai_messages").insert([
       {
         service_request_id: requestId,
         role: "technician",
         action,
         content: question,
+        context_digest: digest,
         created_by: userId,
       },
       {
@@ -239,11 +244,31 @@ export async function runCopilot(input: {
         created_by: userId,
       },
     ]);
-  } catch {
-    /* ignore */
+    if (error) persistError = String(error.message ?? "insert failed");
+  } catch (error) {
+    persistError = (error as Error)?.message ?? "insert failed";
   }
+  if (persistError) console.error("[repara-ai] copilot log insert failed", persistError);
 
-  return { answer, cached: false };
+  return { answer, cached: false, persisted: !persistError, persistError };
+}
+
+/**
+ * Maps a naturally-typed technician request onto a copilot action, so the
+ * technician does not have to find the matching button first.
+ */
+export function detectActionIntent(question: string): CopilotAction {
+  const q = question.toLowerCase();
+  if (/\b(draft|write|add|create|make).{0,24}\brecommendation/.test(q)) return "draft_recommendation";
+  if (/\b(draft|write|add|create|make|log).{0,24}\bfinding/.test(q)) return "draft_finding";
+  if (/\b(summar|hand ?off|recap)/.test(q)) return "summarize_job";
+  if (/\b(what|which).{0,30}\b(test|check) (next|first)|next (step|test)\b/.test(q)) return "next_test";
+  if (/\b[pbuc]\d{4}\b/.test(q)) return "explain_dtc";
+  if (/\b(torque|capacity|spec|specification|fluid type|how much oil)\b/.test(q)) return "specs";
+  if (/\b(relearn|reset procedure|calibrat)/.test(q)) return "reset_relearn";
+  if (/\b(procedure|how do i|steps to|remove and replace|r&r)\b/.test(q)) return "find_procedure";
+  if (/\b(diagnos|likely cause|what would cause|why (is|does|would))/.test(q)) return "diagnose";
+  return "ask";
 }
 
 /** Full copilot transcript for one job, oldest first. */
