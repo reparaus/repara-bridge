@@ -42,9 +42,25 @@ async function loadEngine() {
         },
       });
       return mod;
-    })();
+    })().catch((error) => {
+      // A transient mobile fetch/compile failure must not poison every later
+      // scan attempt for the lifetime of the page.
+      ready = null;
+      throw error;
+    });
   }
   return ready;
+}
+
+/** Clears a failed/unstable WASM instance so the next frame can initialize it. */
+export async function resetDecoder(): Promise<void> {
+  ready = null;
+  try {
+    const mod = await import("zxing-wasm/reader");
+    mod.purgeZXingModule();
+  } catch {
+    // The next load still gets a clean attempt through our local promise cache.
+  }
 }
 
 /** Warms the WASM module so the first frame isn't spent compiling. */
@@ -61,8 +77,13 @@ export async function decodeImageData(
   image: ImageData,
   options: ReaderOptions = readerOptions,
 ): Promise<string | null> {
-  const { readBarcodes } = await loadEngine();
-  const results = await readBarcodes(image, options);
-  const texts = results.map((result) => result.text?.trim()).filter(Boolean);
-  return texts.length ? texts.join("\n") : null;
+  try {
+    const { readBarcodes } = await loadEngine();
+    const results = await readBarcodes(image, options);
+    const texts = results.map((result) => result.text?.trim()).filter(Boolean);
+    return texts.length ? texts.join("\n") : null;
+  } catch (error) {
+    await resetDecoder();
+    throw error;
+  }
 }

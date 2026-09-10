@@ -279,7 +279,14 @@ export async function findVinInSource(
   for (const raw of rects) {
     const rect = clampRect(raw, frameW, frameH);
     // One upscale pass for narrow crops, then the crop at native resolution.
-    const upscale = rect.w < 1400 ? Math.min(3, 1600 / rect.w) : 1;
+    // Avoid turning a soft mobile preview into a huge buffer. Samsung browsers
+    // otherwise spend seconds copying and decoding each frame while the preview
+    // misleadingly continues to move.
+    const targetWidth =
+      typeof navigator !== "undefined" && /SamsungBrowser\//i.test(navigator.userAgent)
+        ? 1100
+        : 1600;
+    const upscale = rect.w < targetWidth ? Math.min(2, targetWidth / rect.w) : 1;
     const scales = upscale > 1.05 ? [upscale, 1] : [1];
     for (const scale of scales) {
       const w = Math.max(16, Math.round(rect.w * scale));
