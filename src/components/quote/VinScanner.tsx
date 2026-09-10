@@ -447,6 +447,32 @@ export function VinScanner({
               </div>
             )}
 
+            {phase === "scanning" && (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void readPhotoFile(file);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="link"
+                  disabled={busy}
+                  onClick={() => fileRef.current?.click()}
+                  className="mt-3 h-11 text-xs font-medium text-white underline underline-offset-4"
+                >
+                  {t("vin.takePhoto")}
+                </Button>
+              </>
+            )}
+
             <Button
               type="button"
               variant="link"
