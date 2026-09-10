@@ -82,6 +82,8 @@ export async function createFrameDecoder(): Promise<FrameDecoder> {
   const worker = createWorker();
   if (worker) {
     let seq = 0;
+    let broken = false;
+    let inline: ((image: ImageData) => Promise<string | null>) | null = null;
     const pending = new Map<number, (text: string | null) => void>();
     worker.onmessage = (event: MessageEvent<{ id: number; text: string | null }>) => {
       const resolve = pending.get(event.data.id);
@@ -91,21 +93,36 @@ export async function createFrameDecoder(): Promise<FrameDecoder> {
       }
     };
     worker.onerror = () => {
-      // Fail the in-flight jobs rather than hanging the scan loop.
+      // Some Android/Samsung builds fail to instantiate the WASM module inside a
+      // module worker. Rather than silently returning null forever (which looked
+      // exactly like "the scanner does nothing"), fall back to the main thread.
+      broken = true;
       pending.forEach((resolve) => resolve(null));
       pending.clear();
     };
-    const decode: FrameDecoder = (image) =>
-      new Promise<string | null>((resolve) => {
+    const runInline = async (image: ImageData) => {
+      if (!inline) {
+        const { decodeImageData } = await import("./vin-decode");
+        inline = (img) => decodeImageData(img);
+      }
+      return inline(image);
+    };
+    const decode: FrameDecoder = (image) => {
+      if (broken) return runInline(image).catch(() => null);
+      return new Promise<string | null>((resolve) => {
         const id = ++seq;
         pending.set(id, resolve);
         try {
           worker.postMessage({ id, image });
         } catch {
           pending.delete(id);
-          resolve(null);
+          broken = true;
+          runInline(image)
+            .catch(() => null)
+            .then(resolve);
         }
       });
+    };
     decode.dispose = () => {
       pending.forEach((resolve) => resolve(null));
       pending.clear();
@@ -117,6 +134,33 @@ export async function createFrameDecoder(): Promise<FrameDecoder> {
   const { decodeImageData, warmDecoder } = await import("./vin-decode");
   await warmDecoder();
   return (image) => decodeImageData(image);
+}
+
+/**
+ * Decodes a VIN out of a still image file (native camera capture). Android
+ * camera apps focus far better than a live preview frame, so this is the
+ * reliable fallback when live scanning can't lock on.
+ */
+export async function scanVinFromFile(file: Blob): Promise<string | null> {
+  let decode: FrameDecoder | null = null;
+  try {
+    decode = await createFrameDecoder();
+    const bitmap = await createImageBitmap(file);
+    const w = bitmap.width;
+    const h = bitmap.height;
+    const rects: Rect[] = [
+      { x: 0, y: 0, w, h },
+      { x: 0, y: h * 0.25, w, h: h * 0.5 },
+      { x: w * 0.1, y: h * 0.3, w: w * 0.8, h: h * 0.4 },
+    ];
+    const vin = await findVinInSource(decode, bitmap, w, h, rects);
+    bitmap.close?.();
+    return vin;
+  } catch {
+    return null;
+  } finally {
+    decode?.dispose?.();
+  }
 }
 
 function createWorker(): Worker | null {

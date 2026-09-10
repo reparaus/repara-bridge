@@ -10,6 +10,7 @@ import {
   expandRect,
   findVinInSource,
   getVinScanDiagnostics,
+  scanVinFromFile,
   type FrameDecoder,
   type Rect,
 } from "@/lib/vin-scan";
@@ -30,6 +31,7 @@ export function VinScanner({
   const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const guideRef = useRef<HTMLDivElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const decoderRef = useRef<FrameDecoder | null>(null);
   const stoppedRef = useRef(false);
@@ -188,16 +190,8 @@ export function VinScanner({
             } as unknown as MediaTrackConstraints)
             .catch(() => undefined);
         }
-        // A small optical zoom gives long VIN bars more usable pixels without
-        // forcing the customer to hold the phone uncomfortably close.
-        const maxZoom = caps.zoom?.max;
-        const minZoom = caps.zoom?.min ?? 1;
-        if (typeof maxZoom === "number" && maxZoom > minZoom) {
-          const zoom = Math.min(maxZoom, Math.max(minZoom, 1.5));
-          await track
-            ?.applyConstraints({ advanced: [{ zoom }] } as unknown as MediaTrackConstraints)
-            .catch(() => undefined);
-        }
+        // No forced optical zoom: on Android the rear camera loses close-range
+        // focus once zoomed, which left VIN bars permanently blurry.
 
         const video = videoRef.current;
         if (video) {
@@ -285,12 +279,47 @@ export function VinScanner({
     setBusy(true);
     setHint(t("vin.reading"));
     try {
+      // Android/Chrome can hand us a full-resolution still, which is far sharper
+      // than a preview frame. iOS has no ImageCapture, so it uses the frame.
+      const track = streamRef.current?.getVideoTracks()[0];
+      const Capture = (window as unknown as { ImageCapture?: new (t: MediaStreamTrack) => { takePhoto(): Promise<Blob> } })
+        .ImageCapture;
+      if (track && Capture) {
+        try {
+          const photo = await new Capture(track).takePhoto();
+          const vin = await scanVinFromFile(photo);
+          if (vin) {
+            finish(vin);
+            return;
+          }
+        } catch {
+          // Fall through to the preview-frame path below.
+        }
+      }
+
       const fw = video.videoWidth;
       const fh = video.videoHeight;
       const vin = await findVinInSource(decode, video, fw, fh, [
         ...cropsForFrame(fw, fh),
         { x: 0, y: fh * 0.2, w: fw, h: fh * 0.6 },
       ]);
+      if (vin) {
+        finish(vin);
+        return;
+      }
+      setHint(t("vin.noVinPhoto"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Native camera photo: the phone's own camera app focuses far better. */
+  async function readPhotoFile(file: File) {
+    if (busy || doneRef.current) return;
+    setBusy(true);
+    setHint(t("vin.reading"));
+    try {
+      const vin = await scanVinFromFile(file);
       if (vin) {
         finish(vin);
         return;
@@ -417,6 +446,32 @@ export function VinScanner({
                   <RotateCcw className="mr-2 size-4" /> {t("vin.tryAgain")}
                 </Button>
               </div>
+            )}
+
+            {phase === "scanning" && (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void readPhotoFile(file);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="link"
+                  disabled={busy}
+                  onClick={() => fileRef.current?.click()}
+                  className="mt-3 h-11 text-xs font-medium text-white underline underline-offset-4"
+                >
+                  {t("vin.takePhoto")}
+                </Button>
+              </>
             )}
 
             <Button

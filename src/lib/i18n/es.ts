@@ -223,6 +223,7 @@ export const es: Dictionary = {
     detected: "VIN detectado",
     reading: "Leyendo el código de barras…",
     capture: "Capturar",
+    takePhoto: "Tomar una foto",
     tryAgain: "Intentar de nuevo",
     cancel: "Cancelar",
     manual: "Ingresar el VIN manualmente",
