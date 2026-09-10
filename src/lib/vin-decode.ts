@@ -52,16 +52,17 @@ export async function warmDecoder(): Promise<void> {
   await loadEngine();
 }
 
-/** Decodes raw pixels, returning the first non-empty barcode text. */
+/**
+ * Decodes raw pixels, returning every non-empty barcode payload together.
+ * Door-jamb labels commonly contain several barcodes; returning only the first
+ * meant an unrelated part/production code could hide the VIN beside it.
+ */
 export async function decodeImageData(
   image: ImageData,
   options: ReaderOptions = readerOptions,
 ): Promise<string | null> {
   const { readBarcodes } = await loadEngine();
   const results = await readBarcodes(image, options);
-  for (const result of results) {
-    const text = result.text?.trim();
-    if (text) return text;
-  }
-  return null;
+  const texts = results.map((result) => result.text?.trim()).filter(Boolean);
+  return texts.length ? texts.join("\n") : null;
 }

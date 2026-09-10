@@ -79,17 +79,34 @@ export type FrameDecoder = ((image: ImageData) => Promise<string | null>) & {
  * same engine runs inline.
  */
 export async function createFrameDecoder(): Promise<FrameDecoder> {
-  const worker = createWorker();
+  // Samsung Internet has shipped several module-worker/WebAssembly regressions.
+  // Keep its decoder on the main thread rather than presenting an apparently
+  // active scanner whose worker silently fails every frame.
+  const samsungBrowser =
+    typeof navigator !== "undefined" && /SamsungBrowser\//i.test(navigator.userAgent);
+  const worker = samsungBrowser ? null : createWorker();
   if (worker) {
     let seq = 0;
     let broken = false;
     let inline: ((image: ImageData) => Promise<string | null>) | null = null;
-    const pending = new Map<number, (text: string | null) => void>();
-    worker.onmessage = (event: MessageEvent<{ id: number; text: string | null }>) => {
-      const resolve = pending.get(event.data.id);
-      if (resolve) {
+    const pending = new Map<
+      number,
+      { resolve: (text: string | null) => void; image: ImageData; timer: number }
+    >();
+    worker.onmessage = (
+      event: MessageEvent<{ id: number; text: string | null; error?: string }>,
+    ) => {
+      const job = pending.get(event.data.id);
+      if (job) {
         pending.delete(event.data.id);
-        resolve(event.data.text ?? null);
+        clearTimeout(job.timer);
+        if (event.data.error) {
+          broken = true;
+          worker.terminate();
+          void runInline(job.image).catch(() => null).then(job.resolve);
+          return;
+        }
+        job.resolve(event.data.text ?? null);
       }
     };
     worker.onerror = () => {
@@ -97,8 +114,12 @@ export async function createFrameDecoder(): Promise<FrameDecoder> {
       // module worker. Rather than silently returning null forever (which looked
       // exactly like "the scanner does nothing"), fall back to the main thread.
       broken = true;
-      pending.forEach((resolve) => resolve(null));
+      pending.forEach((job) => {
+        clearTimeout(job.timer);
+        void runInline(job.image).catch(() => null).then(job.resolve);
+      });
       pending.clear();
+      worker.terminate();
     };
     const runInline = async (image: ImageData) => {
       if (!inline) {
@@ -111,12 +132,24 @@ export async function createFrameDecoder(): Promise<FrameDecoder> {
       if (broken) return runInline(image).catch(() => null);
       return new Promise<string | null>((resolve) => {
         const id = ++seq;
-        pending.set(id, resolve);
-        try {
-          worker.postMessage({ id, image });
-        } catch {
+        const timer = window.setTimeout(() => {
+          const job = pending.get(id);
+          if (!job) return;
           pending.delete(id);
           broken = true;
+          worker.terminate();
+          void runInline(job.image).catch(() => null).then(job.resolve);
+        }, 8000);
+        pending.set(id, { resolve, image, timer });
+        try {
+          const pixels = image.data.buffer.slice(0);
+          worker.postMessage({ id, width: image.width, height: image.height, pixels }, [pixels]);
+        } catch {
+          const job = pending.get(id);
+          if (job) clearTimeout(job.timer);
+          pending.delete(id);
+          broken = true;
+          worker.terminate();
           runInline(image)
             .catch(() => null)
             .then(resolve);
@@ -124,7 +157,10 @@ export async function createFrameDecoder(): Promise<FrameDecoder> {
       });
     };
     decode.dispose = () => {
-      pending.forEach((resolve) => resolve(null));
+      pending.forEach((job) => {
+        clearTimeout(job.timer);
+        job.resolve(null);
+      });
       pending.clear();
       worker.terminate();
     };
