@@ -31,6 +31,7 @@ export function VinScanner({
   const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const guideRef = useRef<HTMLDivElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const decoderRef = useRef<FrameDecoder | null>(null);
   const stoppedRef = useRef(false);
