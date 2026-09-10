@@ -10,6 +10,7 @@ import {
   expandRect,
   findVinInSource,
   getVinScanDiagnostics,
+  scanVinFromFile,
   type FrameDecoder,
   type Rect,
 } from "@/lib/vin-scan";
