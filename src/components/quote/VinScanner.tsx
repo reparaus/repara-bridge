@@ -188,16 +188,8 @@ export function VinScanner({
             } as unknown as MediaTrackConstraints)
             .catch(() => undefined);
         }
-        // A small optical zoom gives long VIN bars more usable pixels without
-        // forcing the customer to hold the phone uncomfortably close.
-        const maxZoom = caps.zoom?.max;
-        const minZoom = caps.zoom?.min ?? 1;
-        if (typeof maxZoom === "number" && maxZoom > minZoom) {
-          const zoom = Math.min(maxZoom, Math.max(minZoom, 1.5));
-          await track
-            ?.applyConstraints({ advanced: [{ zoom }] } as unknown as MediaTrackConstraints)
-            .catch(() => undefined);
-        }
+        // No forced optical zoom: on Android the rear camera loses close-range
+        // focus once zoomed, which left VIN bars permanently blurry.
 
         const video = videoRef.current;
         if (video) {
