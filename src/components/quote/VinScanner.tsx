@@ -277,12 +277,47 @@ export function VinScanner({
     setBusy(true);
     setHint(t("vin.reading"));
     try {
+      // Android/Chrome can hand us a full-resolution still, which is far sharper
+      // than a preview frame. iOS has no ImageCapture, so it uses the frame.
+      const track = streamRef.current?.getVideoTracks()[0];
+      const Capture = (window as unknown as { ImageCapture?: new (t: MediaStreamTrack) => { takePhoto(): Promise<Blob> } })
+        .ImageCapture;
+      if (track && Capture) {
+        try {
+          const photo = await new Capture(track).takePhoto();
+          const vin = await scanVinFromFile(photo);
+          if (vin) {
+            finish(vin);
+            return;
+          }
+        } catch {
+          // Fall through to the preview-frame path below.
+        }
+      }
+
       const fw = video.videoWidth;
       const fh = video.videoHeight;
       const vin = await findVinInSource(decode, video, fw, fh, [
         ...cropsForFrame(fw, fh),
         { x: 0, y: fh * 0.2, w: fw, h: fh * 0.6 },
       ]);
+      if (vin) {
+        finish(vin);
+        return;
+      }
+      setHint(t("vin.noVinPhoto"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Native camera photo: the phone's own camera app focuses far better. */
+  async function readPhotoFile(file: File) {
+    if (busy || doneRef.current) return;
+    setBusy(true);
+    setHint(t("vin.reading"));
+    try {
+      const vin = await scanVinFromFile(file);
       if (vin) {
         finish(vin);
         return;
