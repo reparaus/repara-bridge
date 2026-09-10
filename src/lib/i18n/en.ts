@@ -223,6 +223,7 @@ export const en = {
     detected: "VIN detected",
     reading: "Reading barcode…",
     capture: "Capture",
+    takePhoto: "Take a photo",
     tryAgain: "Try Again",
     cancel: "Cancel",
     manual: "Enter VIN manually",
