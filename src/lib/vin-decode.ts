@@ -42,9 +42,25 @@ async function loadEngine() {
         },
       });
       return mod;
-    })();
+    })().catch((error) => {
+      // A transient mobile fetch/compile failure must not poison every later
+      // scan attempt for the lifetime of the page.
+      ready = null;
+      throw error;
+    });
   }
   return ready;
+}
+
+/** Clears a failed/unstable WASM instance so the next frame can initialize it. */
+export async function resetDecoder(): Promise<void> {
+  ready = null;
+  try {
+    const mod = await import("zxing-wasm/reader");
+    mod.purgeZXingModule();
+  } catch {
+    // The next load still gets a clean attempt through our local promise cache.
+  }
 }
 
 /** Warms the WASM module so the first frame isn't spent compiling. */
@@ -52,16 +68,22 @@ export async function warmDecoder(): Promise<void> {
   await loadEngine();
 }
 
-/** Decodes raw pixels, returning the first non-empty barcode text. */
+/**
+ * Decodes raw pixels, returning every non-empty barcode payload together.
+ * Door-jamb labels commonly contain several barcodes; returning only the first
+ * meant an unrelated part/production code could hide the VIN beside it.
+ */
 export async function decodeImageData(
   image: ImageData,
   options: ReaderOptions = readerOptions,
 ): Promise<string | null> {
-  const { readBarcodes } = await loadEngine();
-  const results = await readBarcodes(image, options);
-  for (const result of results) {
-    const text = result.text?.trim();
-    if (text) return text;
+  try {
+    const { readBarcodes } = await loadEngine();
+    const results = await readBarcodes(image, options);
+    const texts = results.map((result) => result.text?.trim()).filter(Boolean);
+    return texts.length ? texts.join("\n") : null;
+  } catch (error) {
+    await resetDecoder();
+    throw error;
   }
-  return null;
 }

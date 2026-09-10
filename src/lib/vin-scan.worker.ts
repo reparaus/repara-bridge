@@ -7,15 +7,18 @@
  */
 import { readerOptions, decodeImageData } from "./vin-decode";
 
-type Job = { id: number; image: ImageData };
+type Job = { id: number; width: number; height: number; pixels: ArrayBuffer };
 
 self.onmessage = async (event: MessageEvent<Job>) => {
-  const { id, image } = event.data;
-  let text: string | null = null;
+  const { id, width, height, pixels } = event.data;
   try {
-    text = await decodeImageData(image, readerOptions);
-  } catch {
-    text = null;
+    const image = new ImageData(new Uint8ClampedArray(pixels), width, height);
+    const text = await decodeImageData(image, readerOptions);
+    self.postMessage({ id, text });
+  } catch (error) {
+    // A decoder/WASM startup failure is not the same as a frame with no barcode.
+    // Tell the caller to abandon this worker and retry on the main thread.
+    const message = error instanceof Error ? error.message : "VIN decoder failed";
+    self.postMessage({ id, text: null, error: message });
   }
-  (self as unknown as Worker).postMessage({ id, text });
 };
