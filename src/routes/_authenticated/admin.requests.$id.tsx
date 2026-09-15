@@ -765,6 +765,16 @@ function JobWorkspace() {
                     concerns={concerns}
                     onFindingsDrafted={() => setTab("findings")}
                   />
+                  {/* Repair Information: only categories Repara actually has
+                      source-backed data for are shown, so nothing is faked. */}
+                  <Panel title="Repair information">
+                    <VehicleKnowledge requestId={id} initial={knowledge} variant="diagnosis" />
+                    <p className="text-[11px] text-muted-foreground">
+                      Available now: bulletins &amp; recalls from public sources. Procedures, wiring,
+                      specs, fluids and reset/relearn become available here as Repara adds
+                      authorized sources — they are never generated.
+                    </p>
+                  </Panel>
                   <JobDiagnosis requestId={id} entries={diagnostics} />
                 </>
               )}
