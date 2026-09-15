@@ -511,15 +511,24 @@ function JobWorkspace() {
                   <VehicleKnowledge requestId={id} initial={knowledge} />
                 </div>
               </Panel>
-              <Panel title="Who is doing this work">
-                <AssignmentControl
-                  requestId={id}
-                  initialStatus={String(request.assignment_status ?? "unassigned")}
-                  initialProvider={String(request.assigned_provider ?? "")}
-                  initialTechnician={String(request.assigned_technician ?? "")}
-                  onSaved={() => void query.refetch()}
-                />
-              </Panel>
+              {/* Assignment is a one-line control until it needs attention. */}
+              <details className="rounded-lg border border-border px-3 py-2">
+                <summary className="cursor-pointer text-xs">
+                  Technician:{" "}
+                  <span className="font-medium">
+                    {String(request.assigned_technician || "") || "Unassigned"}
+                  </span>
+                </summary>
+                <div className="pt-3">
+                  <AssignmentControl
+                    requestId={id}
+                    initialStatus={String(request.assignment_status ?? "unassigned")}
+                    initialProvider={String(request.assigned_provider ?? "")}
+                    initialTechnician={String(request.assigned_technician ?? "")}
+                    onSaved={() => void query.refetch()}
+                  />
+                </div>
+              </details>
               <Panel title="Customer concern">
                 <p className="text-sm whitespace-pre-line">{concern || "No description provided."}</p>
                 {intake.summary && (
