@@ -14,6 +14,7 @@ import { JobFindings } from "@/components/admin/JobFindings";
 import { JobConcerns } from "@/components/admin/JobConcerns";
 import { JobCloseout } from "@/components/admin/JobCloseout";
 import { QuotePreview } from "@/components/admin/QuotePreview";
+import { VehicleKnowledge } from "@/components/admin/VehicleKnowledge";
 
 import { Field } from "@/components/common/Field";
 import { LoadingState } from "@/components/common/LoadingState";
@@ -339,6 +340,23 @@ function JobWorkspace() {
   const diagnostics = job.data?.diagnostics ?? [];
   const activity = job.data?.activity ?? [];
   const concerns = job.data?.concerns ?? [];
+  const knowledge = job.data?.knowledge ?? [];
+  // Intake completed in another language is normalized to English for the
+  // technician; the customer's own words stay one tap away.
+  const originalLanguage =
+    job.data?.preferredLanguage && job.data.preferredLanguage !== "en"
+      ? job.data.preferredLanguage
+      : null;
+
+  // Original intake question → its normalized English wording (same order as
+  // the stored answers), so the admin UI can show English and keep the original.
+  const normalizedIntake = new Map<string, { question: string; answer: string }>();
+  for (const concern of concerns) {
+    concern.intakeDetails.forEach((detail, index) => {
+      const english = concern.normalizedIntakeDetails[index];
+      if (english) normalizedIntake.set(detail.question.trim(), english);
+    });
+  }
   const openRecommendations = recommendations.filter((r) => r.status === "draft").length;
 
   /**
@@ -434,24 +452,45 @@ function JobWorkspace() {
           {/* ------------------------------------------------------- OVERVIEW */}
           <TabsContent value="overview" className="mt-0 grid gap-5 lg:grid-cols-2">
             <div className="min-w-0 space-y-5">
-              {/* Pre-arrival brief: what this job is, and what to do next. */}
-              <Panel title="Job brief">
+              {/* Live job snapshot: what a technician needs before starting. */}
+              <Panel title="What do I need to know before I start?">
                 <p className="text-sm">{nextBestAction}</p>
                 {concerns.length > 0 && (
                   <ul className="space-y-2 pt-2">
                     {concerns.map((c) => {
                       const related = findings.filter((f) => f.concernId === c.id);
+                      const title = c.normalizedTitle || c.title;
+                      const report = c.normalizedCustomerReport || c.customerReport;
+                      const translated =
+                        Boolean(c.normalizedCustomerReport) &&
+                        c.normalizedCustomerReport !== c.customerReport;
                       return (
                         <li key={c.id} className="rounded-lg border border-border p-3">
                           <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <span className="text-sm font-medium">{c.title}</span>
+                            <span className="font-display text-sm font-bold tracking-wide uppercase">
+                              {title}
+                            </span>
                             <span className="text-[11px] tracking-wide text-muted-foreground uppercase">
                               {c.concernStatus.replace(/_/g, " ")}
                             </span>
                           </div>
-                          {c.customerReport && (
+                          {report && (
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Customer reported: {c.customerReport}
+                              Customer reported: {report}
+                            </p>
+                          )}
+                          {translated && (
+                            <details className="mt-1">
+                              <summary className="cursor-pointer text-[11px] text-muted-foreground">
+                                View original{originalLanguage === "es" ? " (Spanish)" : ""}
+                              </summary>
+                              <p className="pt-1 text-xs text-muted-foreground">{c.customerReport}</p>
+                            </details>
+                          )}
+                          {c.mergedReports.length > 0 && (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Includes {c.mergedReports.length} duplicate report
+                              {c.mergedReports.length === 1 ? "" : "s"} of the same problem.
                             </p>
                           )}
                           {c.confirmedCause && (
@@ -462,21 +501,44 @@ function JobWorkspace() {
                               {related.length} finding(s) recorded
                             </p>
                           )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 h-9 bg-transparent text-xs"
+                            onClick={() => setTab("diagnosis")}
+                          >
+                            Go to Diagnosis
+                          </Button>
                         </li>
                       );
                     })}
                   </ul>
                 )}
+                <div className="pt-3">
+                  <p className="pb-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                    Vehicle knowledge
+                  </p>
+                  <VehicleKnowledge requestId={id} initial={knowledge} />
+                </div>
               </Panel>
-              <Panel title="Who is doing this work">
-                <AssignmentControl
-                  requestId={id}
-                  initialStatus={String(request.assignment_status ?? "unassigned")}
-                  initialProvider={String(request.assigned_provider ?? "")}
-                  initialTechnician={String(request.assigned_technician ?? "")}
-                  onSaved={() => void query.refetch()}
-                />
-              </Panel>
+              {/* Assignment is a one-line control until it needs attention. */}
+              <details className="rounded-lg border border-border px-3 py-2">
+                <summary className="cursor-pointer text-xs">
+                  Technician:{" "}
+                  <span className="font-medium">
+                    {String(request.assigned_technician || "") || "Unassigned"}
+                  </span>
+                </summary>
+                <div className="pt-3">
+                  <AssignmentControl
+                    requestId={id}
+                    initialStatus={String(request.assignment_status ?? "unassigned")}
+                    initialProvider={String(request.assigned_provider ?? "")}
+                    initialTechnician={String(request.assigned_technician ?? "")}
+                    onSaved={() => void query.refetch()}
+                  />
+                </div>
+              </details>
               <Panel title="Customer concern">
                 <p className="text-sm whitespace-pre-line">{concern || "No description provided."}</p>
                 {intake.summary && (
@@ -519,30 +581,46 @@ function JobWorkspace() {
 
               <ReparaAiCard requestId={id} request={request as never} />
 
+              {/* Intake stays out of the way until the technician wants it. */}
               {intake.followups.length > 0 && (
-                <Panel title="Intake answers">
-                  <div className="space-y-3">
+                <details className="rounded-lg border border-border px-3 py-2">
+                  <summary className="cursor-pointer text-xs font-medium">
+                    Customer intake — view all {intake.followups.length} answers
+                  </summary>
+                  <div className="space-y-3 pt-3">
                     {intake.groups.map((group) => (
                       <div key={group.concern}>
                         <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
                           {group.concern.replace(/_/g, " ")}
                         </p>
                         <ul className="mt-1 space-y-1.5">
-                          {group.items.map((f) => (
-                            <li key={f.questionId}>
-                              <span className="block text-xs text-muted-foreground">{f.question}</span>
-                              <span className="text-sm">
-                                {f.skipped
-                                  ? "Not answered"
-                                  : [f.answer, f.otherText].filter(Boolean).join(" — ")}
-                              </span>
-                            </li>
-                          ))}
+                          {group.items.map((f) => {
+                            const original = [f.answer, f.otherText].filter(Boolean).join(" — ");
+                            const english = normalizedIntake.get(f.question.trim());
+                            return (
+                              <li key={f.questionId}>
+                                <span className="block text-xs text-muted-foreground">
+                                  {english?.question || f.question}
+                                </span>
+                                <span className="text-sm">
+                                  {f.skipped ? "Not answered" : english?.answer || original}
+                                </span>
+                                {!f.skipped && english && english.answer !== original && (
+                                  <details className="pt-0.5">
+                                    <summary className="cursor-pointer text-[11px] text-muted-foreground">
+                                      View original{originalLanguage === "es" ? " (Spanish)" : ""}
+                                    </summary>
+                                    <p className="text-xs text-muted-foreground">{original}</p>
+                                  </details>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     ))}
                   </div>
-                </Panel>
+                </details>
               )}
             </div>
 
@@ -621,7 +699,12 @@ function JobWorkspace() {
                 <Row label="Submitted" value={new Date(request.created_at).toLocaleString()} />
               </Panel>
 
-              <Panel title="Confirmation emails">
+              {/* Email plumbing is support detail, not a primary job surface. */}
+              <details className="space-y-3 rounded-lg border border-border px-3 py-2 [&>*+*]:mt-3">
+                <summary className="cursor-pointer text-xs font-medium">
+                  Confirmation emails
+                  {request.email_last_error ? " — needs attention" : ""}
+                </summary>
                 <Row
                   label="Customer"
                   value={
@@ -659,7 +742,7 @@ function JobWorkspace() {
                     {request.email_last_error ? "RETRY EMAILS" : "RESEND CONFIRMATION"}
                   </Button>
                 </div>
-              </Panel>
+              </details>
             </div>
           </TabsContent>
 
@@ -682,6 +765,16 @@ function JobWorkspace() {
                     concerns={concerns}
                     onFindingsDrafted={() => setTab("findings")}
                   />
+                  {/* Repair Information: only categories Repara actually has
+                      source-backed data for are shown, so nothing is faked. */}
+                  <Panel title="Repair information">
+                    <VehicleKnowledge requestId={id} initial={knowledge} variant="diagnosis" />
+                    <p className="text-[11px] text-muted-foreground">
+                      Available now: bulletins &amp; recalls from public sources. Procedures, wiring,
+                      specs, fluids and reset/relearn become available here as Repara adds
+                      authorized sources — they are never generated.
+                    </p>
+                  </Panel>
                   <JobDiagnosis requestId={id} entries={diagnostics} />
                 </>
               )}
