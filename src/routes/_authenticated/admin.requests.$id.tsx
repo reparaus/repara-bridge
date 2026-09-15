@@ -742,7 +742,7 @@ function JobWorkspace() {
                     {request.email_last_error ? "RETRY EMAILS" : "RESEND CONFIRMATION"}
                   </Button>
                 </div>
-              </Panel>
+              </details>
             </div>
           </TabsContent>
 
