@@ -339,6 +339,13 @@ function JobWorkspace() {
   const diagnostics = job.data?.diagnostics ?? [];
   const activity = job.data?.activity ?? [];
   const concerns = job.data?.concerns ?? [];
+  const knowledge = job.data?.knowledge ?? [];
+  // Intake completed in another language is normalized to English for the
+  // technician; the customer's own words stay one tap away.
+  const originalLanguage =
+    job.data?.preferredLanguage && job.data.preferredLanguage !== "en"
+      ? job.data.preferredLanguage
+      : null;
   const openRecommendations = recommendations.filter((r) => r.status === "draft").length;
 
   /**
