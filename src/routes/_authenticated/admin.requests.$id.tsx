@@ -571,30 +571,46 @@ function JobWorkspace() {
 
               <ReparaAiCard requestId={id} request={request as never} />
 
+              {/* Intake stays out of the way until the technician wants it. */}
               {intake.followups.length > 0 && (
-                <Panel title="Intake answers">
-                  <div className="space-y-3">
+                <details className="rounded-lg border border-border px-3 py-2">
+                  <summary className="cursor-pointer text-xs font-medium">
+                    Customer intake — view all {intake.followups.length} answers
+                  </summary>
+                  <div className="space-y-3 pt-3">
                     {intake.groups.map((group) => (
                       <div key={group.concern}>
                         <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
                           {group.concern.replace(/_/g, " ")}
                         </p>
                         <ul className="mt-1 space-y-1.5">
-                          {group.items.map((f) => (
-                            <li key={f.questionId}>
-                              <span className="block text-xs text-muted-foreground">{f.question}</span>
-                              <span className="text-sm">
-                                {f.skipped
-                                  ? "Not answered"
-                                  : [f.answer, f.otherText].filter(Boolean).join(" — ")}
-                              </span>
-                            </li>
-                          ))}
+                          {group.items.map((f) => {
+                            const original = [f.answer, f.otherText].filter(Boolean).join(" — ");
+                            const english = normalizedIntake.get(f.question.trim());
+                            return (
+                              <li key={f.questionId}>
+                                <span className="block text-xs text-muted-foreground">
+                                  {english?.question || f.question}
+                                </span>
+                                <span className="text-sm">
+                                  {f.skipped ? "Not answered" : english?.answer || original}
+                                </span>
+                                {!f.skipped && english && english.answer !== original && (
+                                  <details className="pt-0.5">
+                                    <summary className="cursor-pointer text-[11px] text-muted-foreground">
+                                      View original{originalLanguage === "es" ? " (Spanish)" : ""}
+                                    </summary>
+                                    <p className="text-xs text-muted-foreground">{original}</p>
+                                  </details>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     ))}
                   </div>
-                </Panel>
+                </details>
               )}
             </div>
 
