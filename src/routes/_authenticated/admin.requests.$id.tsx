@@ -441,24 +441,45 @@ function JobWorkspace() {
           {/* ------------------------------------------------------- OVERVIEW */}
           <TabsContent value="overview" className="mt-0 grid gap-5 lg:grid-cols-2">
             <div className="min-w-0 space-y-5">
-              {/* Pre-arrival brief: what this job is, and what to do next. */}
-              <Panel title="Job brief">
+              {/* Live job snapshot: what a technician needs before starting. */}
+              <Panel title="What do I need to know before I start?">
                 <p className="text-sm">{nextBestAction}</p>
                 {concerns.length > 0 && (
                   <ul className="space-y-2 pt-2">
                     {concerns.map((c) => {
                       const related = findings.filter((f) => f.concernId === c.id);
+                      const title = c.normalizedTitle || c.title;
+                      const report = c.normalizedCustomerReport || c.customerReport;
+                      const translated =
+                        Boolean(c.normalizedCustomerReport) &&
+                        c.normalizedCustomerReport !== c.customerReport;
                       return (
                         <li key={c.id} className="rounded-lg border border-border p-3">
                           <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <span className="text-sm font-medium">{c.title}</span>
+                            <span className="font-display text-sm font-bold tracking-wide uppercase">
+                              {title}
+                            </span>
                             <span className="text-[11px] tracking-wide text-muted-foreground uppercase">
                               {c.concernStatus.replace(/_/g, " ")}
                             </span>
                           </div>
-                          {c.customerReport && (
+                          {report && (
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Customer reported: {c.customerReport}
+                              Customer reported: {report}
+                            </p>
+                          )}
+                          {translated && (
+                            <details className="mt-1">
+                              <summary className="cursor-pointer text-[11px] text-muted-foreground">
+                                View original{originalLanguage === "es" ? " (Spanish)" : ""}
+                              </summary>
+                              <p className="pt-1 text-xs text-muted-foreground">{c.customerReport}</p>
+                            </details>
+                          )}
+                          {c.mergedReports.length > 0 && (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Includes {c.mergedReports.length} duplicate report
+                              {c.mergedReports.length === 1 ? "" : "s"} of the same problem.
                             </p>
                           )}
                           {c.confirmedCause && (
@@ -469,11 +490,25 @@ function JobWorkspace() {
                               {related.length} finding(s) recorded
                             </p>
                           )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 h-9 bg-transparent text-xs"
+                            onClick={() => setTab("diagnosis")}
+                          >
+                            Go to Diagnosis
+                          </Button>
                         </li>
                       );
                     })}
                   </ul>
                 )}
+                <div className="pt-3">
+                  <p className="pb-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                    Vehicle knowledge
+                  </p>
+                  <VehicleKnowledge requestId={id} initial={knowledge} />
+                </div>
               </Panel>
               <Panel title="Who is doing this work">
                 <AssignmentControl
