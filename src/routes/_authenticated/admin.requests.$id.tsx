@@ -347,6 +347,16 @@ function JobWorkspace() {
     job.data?.preferredLanguage && job.data.preferredLanguage !== "en"
       ? job.data.preferredLanguage
       : null;
+
+  // Original intake question → its normalized English wording (same order as
+  // the stored answers), so the admin UI can show English and keep the original.
+  const normalizedIntake = new Map<string, { question: string; answer: string }>();
+  for (const concern of concerns) {
+    concern.intakeDetails.forEach((detail, index) => {
+      const english = concern.normalizedIntakeDetails[index];
+      if (english) normalizedIntake.set(detail.question.trim(), english);
+    });
+  }
   const openRecommendations = recommendations.filter((r) => r.status === "draft").length;
 
   /**
