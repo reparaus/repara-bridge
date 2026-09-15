@@ -699,7 +699,12 @@ function JobWorkspace() {
                 <Row label="Submitted" value={new Date(request.created_at).toLocaleString()} />
               </Panel>
 
-              <Panel title="Confirmation emails">
+              {/* Email plumbing is support detail, not a primary job surface. */}
+              <details className="space-y-3 rounded-lg border border-border px-3 py-2 [&>*+*]:mt-3">
+                <summary className="cursor-pointer text-xs font-medium">
+                  Confirmation emails
+                  {request.email_last_error ? " — needs attention" : ""}
+                </summary>
                 <Row
                   label="Customer"
                   value={
