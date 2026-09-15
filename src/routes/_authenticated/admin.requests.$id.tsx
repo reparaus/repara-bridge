@@ -14,6 +14,7 @@ import { JobFindings } from "@/components/admin/JobFindings";
 import { JobConcerns } from "@/components/admin/JobConcerns";
 import { JobCloseout } from "@/components/admin/JobCloseout";
 import { QuotePreview } from "@/components/admin/QuotePreview";
+import { VehicleKnowledge } from "@/components/admin/VehicleKnowledge";
 
 import { Field } from "@/components/common/Field";
 import { LoadingState } from "@/components/common/LoadingState";
