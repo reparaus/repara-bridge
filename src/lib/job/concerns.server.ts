@@ -75,6 +75,20 @@ export type ConcernRow = {
   verification: string | null;
   outcome: string | null;
   sortOrder: number;
+  /**
+   * Technician-facing English wording. The customer's own words always stay in
+   * `title` / `customerReport` / `intakeDetails`; these fields only ever hold a
+   * normalized translation of them (empty when intake was already English).
+   */
+  normalizedTitle: string | null;
+  normalizedCustomerReport: string | null;
+  normalizedIntakeDetails: { question: string; answer: string }[];
+  sourceLanguage: string | null;
+  normalizedAt: string | null;
+  /** Set when this concern was merged into another as a duplicate. */
+  mergedIntoId: string | null;
+  /** Original wording of concerns merged into this one — kept, never deleted. */
+  mergedReports: { title?: string; original?: string | null; english?: string | null; reason?: string }[];
 };
 
 const text = (value: unknown, max = 2000) => String(value ?? "").trim().slice(0, max);
@@ -177,25 +191,44 @@ function mapConcern(row: Row): ConcernRow {
     verification: row['verification'] ? String(row['verification']) : null,
     outcome: row['outcome'] ? String(row['outcome']) : null,
     sortOrder: Number(row['sort_order'] ?? 0),
+    normalizedTitle: row['normalized_title'] ? String(row['normalized_title']) : null,
+    normalizedCustomerReport: row['normalized_customer_report']
+      ? String(row['normalized_customer_report'])
+      : null,
+    normalizedIntakeDetails: Array.isArray(row['normalized_intake_details'])
+      ? (row['normalized_intake_details'] as { question: string; answer: string }[])
+      : [],
+    sourceLanguage: row['source_language'] ? String(row['source_language']) : null,
+    normalizedAt: row['normalized_at'] ? String(row['normalized_at']) : null,
+    mergedIntoId: row['merged_into_id'] ? String(row['merged_into_id']) : null,
+    mergedReports: Array.isArray(row['merged_reports']) ? (row['merged_reports'] as any[]) : [],
   };
 }
 
 const CONCERN_COLUMNS =
   "id, title, category, origin, customer_report, intake_details, concern_status, tests_performed, technician_observed, confirmed_cause, shorthand, story, story_approved_at, repair_performed, verification, outcome, sort_order, created_at";
 
+/** Normalization/dedup columns from 0012; selected separately so a database
+ *  that has not run 0012 yet still returns its concerns. */
+const CONCERN_COLUMNS_V2 = `${CONCERN_COLUMNS}, normalized_title, normalized_customer_report, normalized_intake_details, source_language, normalized_at, merged_into_id, merged_reports`;
+
 /** Reads the concerns for one job. Returns [] if migration 0011 is not applied. */
 export async function listConcerns(client: Client, requestId: string): Promise<ConcernRow[]> {
-  try {
-    const { data } = await client
-      .from("job_concerns")
-      .select(CONCERN_COLUMNS)
-      .eq("service_request_id", requestId)
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true });
-    return ((data ?? []) as Row[]).map(mapConcern);
-  } catch {
-    return [];
-  }
+  const read = async (columns: string): Promise<ConcernRow[] | null> => {
+    try {
+      const { data, error } = await client
+        .from("job_concerns")
+        .select(columns)
+        .eq("service_request_id", requestId)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true });
+      if (error) return null;
+      return ((data ?? []) as Row[]).map(mapConcern);
+    } catch {
+      return null;
+    }
+  };
+  return (await read(CONCERN_COLUMNS_V2)) ?? (await read(CONCERN_COLUMNS)) ?? [];
 }
 
 /**

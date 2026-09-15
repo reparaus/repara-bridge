@@ -19,7 +19,8 @@ export type JobContextScope =
   | "diagnostics"
   | "findings"
   | "recommendations"
-  | "outcome";
+  | "outcome"
+  | "knowledge";
 
 export const DIAGNOSTIC_SCOPE: JobContextScope[] = [
   "vehicle",
@@ -28,6 +29,7 @@ export const DIAGNOSTIC_SCOPE: JobContextScope[] = [
   "stage",
   "diagnostics",
   "findings",
+  "knowledge",
 ];
 
 export const FULL_SCOPE: JobContextScope[] = [
@@ -40,6 +42,7 @@ export const FULL_SCOPE: JobContextScope[] = [
   "findings",
   "recommendations",
   "outcome",
+  "knowledge",
 ];
 
 export type JobContext = {
@@ -317,6 +320,28 @@ export async function assembleJobContext(
         ]
           .filter(Boolean)
           .join("\n"),
+      );
+  }
+
+  /* ----------------------------------------------------------- knowledge */
+  // Only knowledge already matched to THIS job is included, and only titles and
+  // short summaries — the AI context stays small, and every line keeps its
+  // source so the model can cite instead of inventing.
+  if (want.has("knowledge")) {
+    const body = await safe(async () => {
+      const { listJobKnowledge, renderKnowledgeForAi } = await import(
+        "@/lib/knowledge/knowledge.server"
+      );
+      return renderKnowledgeForAi(await listJobKnowledge(client, requestId));
+    }, "");
+    if (body)
+      push(
+        "knowledge",
+        "Source-backed vehicle knowledge available to Repara",
+        `${body}\n\nOnly the information above is source-backed. If a repair procedure, torque specification, ` +
+          "fluid capacity, wiring detail, bulletin number or recall status is not listed here, say it is not " +
+          "available from current Repara sources — never invent it. Applicability shown is by vehicle only and " +
+          "does not establish that a recall remains unrepaired on this VIN.",
       );
   }
 

@@ -256,9 +256,164 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
     // Concerns are derived from the customer's own submission the first time the
     // job is opened, so nothing from intake has to be retyped.
     const { ensureConcerns } = await import("@/lib/job/concerns.server");
-    const concerns = await ensureConcerns(client, data.id, context.userId);
+    const derived = await ensureConcerns(client, data.id, context.userId);
 
-    return { concerns, diagnostics, findings, recommendations, activity, outcome };
+    // A customer who used Spanish intake must not leave a technician reading
+    // Spanish: normalize once, keep the original, then merge true duplicates.
+    let language: string | null = null;
+    try {
+      const { data: row } = await client
+        .from("service_requests")
+        .select("preferred_language")
+        .eq("id", data.id)
+        .maybeSingle();
+      language = (row as Row | null)?.['preferred_language'] ?? null;
+    } catch {
+      language = null;
+    }
+
+    const { normalizeConcerns } = await import("@/lib/job/normalize.server");
+    const allConcerns = await normalizeConcerns(client, data.id, derived, language);
+    // Merged duplicates stay in the database as supporting context, but the
+    // technician sees one concern per problem.
+    const concerns = allConcerns.filter((c) => !c.mergedIntoId);
+
+    const { listJobKnowledge } = await import("@/lib/knowledge/knowledge.server");
+    const knowledge = await listJobKnowledge(client, data.id);
+
+    return {
+      concerns,
+      diagnostics,
+      findings,
+      recommendations,
+      activity,
+      outcome,
+      knowledge,
+      preferredLanguage: language,
+    };
+  });
+
+/* ------------------------------------------------------------- knowledge */
+
+/**
+ * Syncs source-backed vehicle knowledge for one job and returns the matches.
+ *
+ * Cached in `repair_knowledge` and stamped on the request, so opening the
+ * workspace does not hit an external service; a sync is only attempted when the
+ * cached data is older than a day (or the technician asks for a refresh).
+ * NHTSA public recall data is the first source; the pipeline itself is
+ * source-agnostic.
+ */
+export const syncJobKnowledge = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => idSchema.extend({ force: z.boolean().optional() }).parse(data))
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { listJobKnowledge, matchKnowledgeToJob, upsertKnowledge } = await import(
+      "@/lib/knowledge/knowledge.server"
+    );
+
+    let request: Row | null = null;
+    try {
+      const { data: row } = await client
+        .from("service_requests")
+        .select("id, vehicle, notes, details, knowledge_synced_at")
+        .eq("id", data.id)
+        .maybeSingle();
+      request = (row as Row | null) ?? null;
+    } catch {
+      request = null;
+    }
+    if (!request) return { knowledge: await listJobKnowledge(client, data.id), synced: false };
+
+    const lastSynced = request['knowledge_synced_at']
+      ? Date.parse(String(request['knowledge_synced_at']))
+      : 0;
+    const stale = !lastSynced || Date.now() - lastSynced > 24 * 60 * 60 * 1000;
+    if (!stale && !data.force) {
+      return { knowledge: await listJobKnowledge(client, data.id), synced: false };
+    }
+
+    const vehicle = (request['vehicle'] ?? {}) as Row;
+    const year = Number(vehicle['year']) || null;
+    const make = vehicle['make'] ? String(vehicle['make']) : null;
+    const model = vehicle['model'] ? String(vehicle['model']) : null;
+
+    try {
+      const { fetchNhtsaRecalls } = await import("@/lib/knowledge/nhtsa.server");
+      const records = await fetchNhtsaRecalls({ year, make, model });
+      const ids = await upsertKnowledge(client, records);
+
+      const concernText = [
+        String(request['notes'] ?? ""),
+        String((request['details'] as Row | null)?.['description'] ?? ""),
+      ]
+        .filter(Boolean)
+        .join(" \n");
+      const dtcs = (
+        await safeSelect(() =>
+          client
+            .from("job_diagnostics")
+            .select("code")
+            .eq("service_request_id", data.id)
+            .not("code", "is", null),
+        )
+      ).map((row) => String(row['code']));
+
+      await matchKnowledgeToJob(client, data.id, { knowledgeIds: ids, concernText, dtcs });
+      await client
+        .from("service_requests")
+        .update({ knowledge_synced_at: new Date().toISOString() })
+        .eq("id", data.id);
+    } catch (error) {
+      // An external outage must never break the Job Workspace.
+      console.error("[knowledge] sync failed", error);
+    }
+
+    return { knowledge: await listJobKnowledge(client, data.id), synced: true };
+  });
+
+/** Technician feedback on one knowledge match: relevant, or not for this job. */
+export const setKnowledgeMatchState = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z
+      .object({
+        matchId: z.string().uuid(),
+        requestId: z.string().uuid(),
+        action: z.enum(["dismiss", "restore", "confirm"]),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const patch =
+      data.action === "dismiss"
+        ? { dismissed_at: new Date().toISOString() }
+        : data.action === "restore"
+          ? { dismissed_at: null }
+          : { technician_confirmed_relevant: true, dismissed_at: null };
+    try {
+      await client
+        .from("job_knowledge_matches")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", data.matchId);
+      if (data.action === "confirm") {
+        await logActivity(
+          client,
+          data.requestId,
+          "knowledge_confirmed",
+          "Technician marked vehicle knowledge as relevant to this job.",
+          context.userId,
+        );
+      }
+    } catch (error) {
+      console.error("[knowledge] state update failed", error);
+    }
+    const { listJobKnowledge } = await import("@/lib/knowledge/knowledge.server");
+    return { knowledge: await listJobKnowledge(client, data.requestId) };
   });
 
 /* ----------------------------------------------------------- diagnostics */
