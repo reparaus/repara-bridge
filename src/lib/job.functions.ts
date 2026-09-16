@@ -166,7 +166,7 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
     const findings: JobFinding[] = (
       await readTable(
         "job_findings",
-        "id, concern_id, title, detail, measurement, evidence, confidence, severity, source, status, ai_drafted, approved_at, created_at",
+        "id, concern_id, title, detail, measurement, evidence, confidence, severity, condition, system, safety_concern, source, status, ai_drafted, approved_at, created_at",
         "id, title, detail, measurement, severity, source, status, created_at",
       )
     ).map((f) => ({
@@ -178,6 +178,16 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
       evidence: s(f['evidence']),
       confidence: String(f['confidence'] ?? "confirmed"),
       severity: String(f['severity'] ?? "recommended"),
+      condition: String(
+        f['condition'] ??
+          (f['severity'] === "monitor"
+            ? "monitor"
+            : f['severity'] === "informational"
+              ? "good"
+              : "needs_attention"),
+      ),
+      system: s(f['system']),
+      safetyConcern: Boolean(f['safety_concern']),
       source: String(f['source'] ?? "technician"),
       status: String(f['status'] ?? "open"),
       aiDrafted: Boolean(f['ai_drafted']),
