@@ -58,7 +58,6 @@ export const Route = createFileRoute("/_authenticated/admin/requests/$id")({
 
 /** Quote line shape lives with the builder so both stay in sync. */
 
-
 type TabKey = "overview" | "ai" | "diagnosis" | "findings" | "quote" | "messages" | "history";
 
 function JobWorkspace() {
@@ -112,19 +111,19 @@ function JobWorkspace() {
     if (items.length)
       setLines(
         items.map((i) => ({
-          itemType: i['item_type'] as Line["itemType"],
-          description: String(i['description'] ?? ""),
-          quantity: String(i['quantity'] ?? 0),
-          unitPrice: String(i['unit_price'] ?? 0),
-          groupLabel: String(i['group_label'] ?? ""),
-          partBrand: String(i['part_brand'] ?? ""),
-          partNumber: String(i['part_number'] ?? ""),
-          supplier: String(i['supplier'] ?? ""),
+          itemType: i["item_type"] as Line["itemType"],
+          description: String(i["description"] ?? ""),
+          quantity: String(i["quantity"] ?? 0),
+          unitPrice: String(i["unit_price"] ?? 0),
+          groupLabel: String(i["group_label"] ?? ""),
+          partBrand: String(i["part_brand"] ?? ""),
+          partNumber: String(i["part_number"] ?? ""),
+          supplier: String(i["supplier"] ?? ""),
           internalUnitCost:
-            i['internal_unit_cost'] === null || i['internal_unit_cost'] === undefined
+            i["internal_unit_cost"] === null || i["internal_unit_cost"] === undefined
               ? ""
-              : String(i['internal_unit_cost']),
-          recommendationId: i['recommendation_id'] ? String(i['recommendation_id']) : null,
+              : String(i["internal_unit_cost"]),
+          recommendationId: i["recommendation_id"] ? String(i["recommendation_id"]) : null,
         })),
       );
   }, [detail?.quotes]);
@@ -225,7 +224,8 @@ function JobWorkspace() {
   const customer = request.customers ?? {};
   const vehicle = request.vehicles ?? {};
   const vehicleTitle =
-    [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ") || "Vehicle";
+    [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ") ||
+    "Vehicle";
   const mileage = request.mileage || vehicle.mileage;
   const concern = String(request.details?.description ?? request.notes ?? "");
 
@@ -260,21 +260,21 @@ function JobWorkspace() {
   const requestedServices: { key: string; label: string; detail: string }[] = Array.isArray(
     request.services,
   )
-    ? (request.services as { key: string; label?: string; answers?: Record<string, unknown> }[]).map(
-        (s) => ({
-          key: s.key,
-          label: s.label ?? serviceLabel(s.key),
-          detail: Object.entries(s.answers ?? {})
-            .flatMap(([qid, v]) =>
-              Array.isArray(v)
-                ? v.map((x) => answerLabel(s.key, qid, String(x)))
-                : String(v ?? "").trim()
-                  ? [answerLabel(s.key, qid, String(v).trim())]
-                  : [],
-            )
-            .join(" · "),
-        }),
-      )
+    ? (
+        request.services as { key: string; label?: string; answers?: Record<string, unknown> }[]
+      ).map((s) => ({
+        key: s.key,
+        label: s.label ?? serviceLabel(s.key),
+        detail: Object.entries(s.answers ?? {})
+          .flatMap(([qid, v]) =>
+            Array.isArray(v)
+              ? v.map((x) => answerLabel(s.key, qid, String(x)))
+              : String(v ?? "").trim()
+                ? [answerLabel(s.key, qid, String(v).trim())]
+                : [],
+          )
+          .join(" · "),
+      }))
     : [];
 
   const quoteUrl = publicToken
@@ -393,7 +393,9 @@ function JobWorkspace() {
                 <option value={request.status}>{statusLabel(request.status)}</option>
               )}
             </select>
-            {statusMutation.isPending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+            {statusMutation.isPending && (
+              <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            )}
           </div>
         </div>
       </header>
@@ -457,7 +459,9 @@ function JobWorkspace() {
                               <summary className="cursor-pointer text-[11px] text-muted-foreground">
                                 View original{originalLanguage === "es" ? " (Spanish)" : ""}
                               </summary>
-                              <p className="pt-1 text-xs text-muted-foreground">{c.customerReport}</p>
+                              <p className="pt-1 text-xs text-muted-foreground">
+                                {c.customerReport}
+                              </p>
                             </details>
                           )}
                           {c.mergedReports.length > 0 && (
@@ -513,7 +517,9 @@ function JobWorkspace() {
                 </div>
               </details>
               <Panel title="Customer concern">
-                <p className="text-sm whitespace-pre-line">{concern || "No description provided."}</p>
+                <p className="text-sm whitespace-pre-line">
+                  {concern || "No description provided."}
+                </p>
                 {intake.summary && (
                   <div className="pt-2">
                     <p className="text-xs text-muted-foreground">
@@ -528,7 +534,9 @@ function JobWorkspace() {
                       <li key={s.key}>
                         <span className="text-sm font-medium">{s.label}</span>
                         {s.detail && (
-                          <span className="mt-0.5 block text-xs text-muted-foreground">{s.detail}</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {s.detail}
+                          </span>
                         )}
                       </li>
                     ))}
@@ -743,8 +751,8 @@ function JobWorkspace() {
                   <Panel title="Repair information">
                     <VehicleKnowledge requestId={id} initial={knowledge} variant="diagnosis" />
                     <p className="text-[11px] text-muted-foreground">
-                      Available now: bulletins &amp; recalls from public sources. Procedures, wiring,
-                      specs, fluids and reset/relearn become available here as Repara adds
+                      Available now: bulletins &amp; recalls from public sources. Procedures,
+                      wiring, specs, fluids and reset/relearn become available here as Repara adds
                       authorized sources — they are never generated.
                     </p>
                   </Panel>
@@ -857,7 +865,6 @@ function JobWorkspace() {
                 <p className="text-xs font-medium">🟢 Approved by the customer</p>
               )}
 
-
               <div className="flex flex-wrap gap-3">
                 <Button
                   variant="outline"
@@ -874,8 +881,13 @@ function JobWorkspace() {
                 >
                   SAVE DRAFT
                 </Button>
-                <Button className="h-12" disabled={save.isPending} onClick={() => save.mutate(true)}>
-                  {save.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} SEND QUOTE
+                <Button
+                  className="h-12"
+                  disabled={save.isPending}
+                  onClick={() => save.mutate(true)}
+                >
+                  {save.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} SEND
+                  QUOTE
                 </Button>
                 {quoteUrl && quoteRow?.status !== "draft" && (
                   <Button
@@ -892,7 +904,10 @@ function JobWorkspace() {
               </div>
 
               <Panel title="Approval status">
-                <Row label="Quote status" value={quoteRow ? statusLabel(String(quoteRow.status)) : "Not created"} />
+                <Row
+                  label="Quote status"
+                  value={quoteRow ? statusLabel(String(quoteRow.status)) : "Not created"}
+                />
                 <Row
                   label="Sent"
                   value={quoteRow?.sent_at ? new Date(quoteRow.sent_at).toLocaleString() : "—"}

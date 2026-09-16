@@ -101,7 +101,11 @@ export function JobConcerns({
             disabled={newTitle.trim().length < 2 || add.isPending}
             onClick={() => add.mutate(newTitle.trim())}
           >
-            {add.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+            {add.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Plus className="size-4" />
+            )}
           </Button>
         </div>
       </div>
@@ -131,12 +135,21 @@ function ConcernCard({
   const [cause, setCause] = useState(concern.confirmedCause ?? "");
   const [status, setStatus] = useState(concern.concernStatus);
   const [draft, setDraft] = useState<string | null>(null);
-  const [draftMeta, setDraftMeta] = useState<{ observed: string; cause: string; tests: string } | null>(
-    null,
-  );
+  const [draftMeta, setDraftMeta] = useState<{
+    observed: string;
+    cause: string;
+    tests: string;
+  } | null>(null);
   const [omitted, setOmitted] = useState<string[]>([]);
   const [findingDrafts, setFindingDrafts] = useState<
-    { title: string; detail: string; evidence: string; measurement: string; severity: string; confidence: string }[]
+    {
+      title: string;
+      detail: string;
+      evidence: string;
+      measurement: string;
+      severity: string;
+      confidence: string;
+    }[]
   >([]);
 
   const save = useMutation({
@@ -233,7 +246,9 @@ function ConcernCard({
         <div className="min-w-0">
           <h3 className="text-base font-semibold">{concern.title}</h3>
           <p className="text-[11px] tracking-wide text-muted-foreground uppercase">
-            {concern.origin === "technician" ? "Found by technician" : "From the customer's request"}
+            {concern.origin === "technician"
+              ? "Found by technician"
+              : "From the customer's request"}
             {concern.storyApprovedAt ? " · diagnosis approved" : ""}
           </p>
         </div>
