@@ -1004,6 +1004,35 @@ export const draftConcernFindings = createServerFn({ method: "POST" })
     return { ok: true as const, drafts: await draftFindings({ client, requestId, concern, source: documented }) };
   });
 
+/**
+ * One natural inspection note → a clean findings-sheet entry. Draft only:
+ * nothing is written until the technician saves it.
+ */
+export const cleanupFindingNote = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema
+      .extend({
+        note: z.string().trim().min(3).max(2000),
+        condition: z.enum(["good", "monitor", "needs_attention", "not_inspected"]),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { draftFindingFromNote } = await import("@/lib/job/authoring.server");
+    return {
+      ok: true as const,
+      draft: await draftFindingFromNote({
+        client,
+        requestId: data.id,
+        note: data.note,
+        condition: data.condition,
+      }),
+    };
+  });
+
 /** Findings → candidate recommendations. Drafts only. */
 export const draftFindingRecommendations = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
