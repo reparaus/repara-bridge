@@ -79,6 +79,7 @@ import {
 import { VinScanner } from "@/components/quote/VinScanner";
 import { ComboboxInput } from "@/components/quote/ComboboxInput";
 import { MAKES, trimSuggestions, yearOptions } from "@/lib/vehicle-data";
+import { getServiceRequestPrefill } from "@/lib/garage.functions";
 import { useModelSuggestions } from "@/lib/use-model-suggestions";
 
 
