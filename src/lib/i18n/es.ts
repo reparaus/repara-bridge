@@ -38,6 +38,8 @@ export const es: Dictionary = {
     title2: "explicado claro.",
     sub: "Cuéntanos qué está haciendo tu auto. Hacemos las preguntas correctas desde el inicio, te explicamos lo que realmente encontramos y cotizamos el trabajo detallado antes de aprobar nada.",
     ctaQuote: "SOLICITAR COTIZACIÓN",
+    ctaGarage: "AGREGAR MI AUTO",
+    garageTagline: "Tu auto, entendido. Lleva el control del mantenimiento, el historial de servicio y la información de tu vehículo — y recibe ayuda cuando algo no se siente bien.",
     ctaServices: "VER SERVICIOS",
     trust: {
       years: { value: "5 años", label: "Formación en agencia" },
