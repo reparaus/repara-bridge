@@ -432,10 +432,19 @@ export function JobFindings({
                   Draft with AI
                 </Button>
               </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+
+      {findings.length === 0 && (
+        <p className="surface-panel p-4 text-xs text-muted-foreground">
+          Nothing inspected yet. Record what you checked above — good results are worth recording
+          too.
+        </p>
+      )}
+
 
       {converting && (
         <div className="surface-panel space-y-3 p-4">
