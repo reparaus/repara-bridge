@@ -25,6 +25,7 @@ import { Route as DriverGarageIndexRouteImport } from './routes/_driver/garage.i
 import { Route as DriverGarageAddRouteImport } from './routes/_driver/garage.add'
 import { Route as AuthenticatedAdminRequestsIndexRouteImport } from './routes/_authenticated/admin.requests.index'
 import { Route as AuthenticatedAdminRequestsIdRouteImport } from './routes/_authenticated/admin.requests.$id'
+import { Route as DriverGarageVehicleIdRouteImport } from './routes/_driver/garage.vehicle.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -106,6 +107,11 @@ const AuthenticatedAdminRequestsIdRoute =
     path: '/admin/requests/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const DriverGarageVehicleIdRoute = DriverGarageVehicleIdRouteImport.update({
+  id: '/garage/vehicle/$id',
+  path: '/garage/vehicle/$id',
+  getParentRoute: () => DriverRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/garage/': typeof DriverGarageIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
+  '/garage/vehicle/$id': typeof DriverGarageVehicleIdRoute
   '/admin/requests/': typeof AuthenticatedAdminRequestsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/garage': typeof DriverGarageIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
+  '/garage/vehicle/$id': typeof DriverGarageVehicleIdRoute
   '/admin/requests': typeof AuthenticatedAdminRequestsIndexRoute
 }
 export interface FileRoutesById {
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_driver/garage/': typeof DriverGarageIndexRoute
   '/_authenticated/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
+  '/_driver/garage/vehicle/$id': typeof DriverGarageVehicleIdRoute
   '/_authenticated/admin/requests/': typeof AuthenticatedAdminRequestsIndexRoute
 }
 export interface FileRouteTypes {
@@ -174,6 +183,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/garage/'
     | '/admin/requests/$id'
+    | '/garage/vehicle/$id'
     | '/admin/requests/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -190,6 +200,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/garage'
     | '/admin/requests/$id'
+    | '/garage/vehicle/$id'
     | '/admin/requests'
   id:
     | '__root__'
@@ -208,6 +219,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/'
     | '/_driver/garage/'
     | '/_authenticated/admin/requests/$id'
+    | '/_driver/garage/vehicle/$id'
     | '/_authenticated/admin/requests/'
   fileRoutesById: FileRoutesById
 }
@@ -339,6 +351,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRequestsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_driver/garage/vehicle/$id': {
+      id: '/_driver/garage/vehicle/$id'
+      path: '/garage/vehicle/$id'
+      fullPath: '/garage/vehicle/$id'
+      preLoaderRoute: typeof DriverGarageVehicleIdRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
   }
 }
 
@@ -360,11 +379,13 @@ const AuthenticatedRouteRouteWithChildren =
 interface DriverRouteRouteChildren {
   DriverGarageAddRoute: typeof DriverGarageAddRoute
   DriverGarageIndexRoute: typeof DriverGarageIndexRoute
+  DriverGarageVehicleIdRoute: typeof DriverGarageVehicleIdRoute
 }
 
 const DriverRouteRouteChildren: DriverRouteRouteChildren = {
   DriverGarageAddRoute: DriverGarageAddRoute,
   DriverGarageIndexRoute: DriverGarageIndexRoute,
+  DriverGarageVehicleIdRoute: DriverGarageVehicleIdRoute,
 }
 
 const DriverRouteRouteWithChildren = DriverRouteRoute._addFileChildren(
