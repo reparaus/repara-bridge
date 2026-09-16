@@ -22,7 +22,6 @@ import { formatCurrency, PriceSummary } from "@/components/common/PriceSummary";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   getRequestDetail,
@@ -93,7 +92,6 @@ function JobWorkspace() {
   const [tax, setTax] = useState("0");
   const [publicToken, setPublicToken] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [partsOpen, setPartsOpen] = useState<number | null>(null);
 
   const detail = query.data?.found ? query.data : null;
 
