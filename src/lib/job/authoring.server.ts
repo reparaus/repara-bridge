@@ -134,6 +134,79 @@ Reply with ONLY this json object:
     .filter((f) => f.title);
 }
 
+/* --------------------------------------- one natural note → one finding */
+
+export type FindingNoteDraft = {
+  title: string;
+  detail: string;
+  measurement: string;
+  system: string;
+  suggestedCondition: "good" | "monitor" | "needs_attention" | "not_inspected" | "";
+  safetySupported: boolean;
+};
+
+const SYSTEMS = [
+  "Brakes",
+  "Electrical",
+  "Tires & Wheels",
+  "Engine",
+  "Transmission & Driveline",
+  "Suspension & Steering",
+  "HVAC",
+  "Cooling",
+  "Fuel",
+  "Exhaust",
+  "Body & Interior",
+  "Fluids & Maintenance",
+  "Other",
+];
+
+/**
+ * Cleans up one inspection note ("rear pads 3mm, inner lip on rotor") into a
+ * findings-sheet entry. The condition is only ever a SUGGESTION — the
+ * technician's chip selection wins — and a safety claim is only echoed back
+ * when the note itself supports it.
+ */
+export async function draftFindingFromNote(input: {
+  client: Client;
+  requestId: string;
+  note: string;
+  condition: string;
+}): Promise<FindingNoteDraft> {
+  const header = await vehicleHeader(input.client, input.requestId);
+  const result = await runJsonCompletion({
+    system: `You turn one short technician inspection note into a clean findings-sheet entry. ${NO_INVENTION}
+
+- title: one short line naming the condition found (no pricing, no recommendation).
+- detail: 1-2 clean sentences of what was inspected and observed.
+- measurement: any measurement present in the note, verbatim units; otherwise "".
+- system: EXACTLY one of: ${SYSTEMS.join(" | ")}. Use "Other" when unsure.
+- suggested_condition: good | monitor | needs_attention | not_inspected, or "" if the note does not indicate one.
+- safety_supported: true ONLY if the note itself documents a safety-affecting condition. Never true from severity alone.
+
+Reply with ONLY this json object:
+{"title":string,"detail":string,"measurement":string,"system":string,"suggested_condition":string,"safety_supported":boolean}`,
+    user: `${header}\n\n## Technician selected condition\n${input.condition}\n\n## Technician note\n${input.note}\n\nReply with the json object only.`,
+    temperature: 0.2,
+    maxOutputTokens: 600,
+  });
+
+  const parsed = parseJsonObject(result.text);
+  const system = str(parsed['system'], 60);
+  const condition = str(parsed['suggested_condition'], 30);
+  const conditions = ["good", "monitor", "needs_attention", "not_inspected"];
+  return {
+    title: str(parsed['title'], 160),
+    detail: str(parsed['detail'], 1200),
+    measurement: str(parsed['measurement'], 120),
+    system: SYSTEMS.includes(system) ? system : "Other",
+    suggestedCondition: (conditions.includes(condition)
+      ? condition
+      : "") as FindingNoteDraft["suggestedCondition"],
+    safetySupported: parsed['safety_supported'] === true,
+  };
+}
+
 /* ------------------------------------------------ recommendations drafting */
 
 export type RecommendationDraft = {

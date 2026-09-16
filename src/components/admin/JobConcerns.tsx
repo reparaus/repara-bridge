@@ -410,22 +410,31 @@ function ConcernCard({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block space-y-1.5">
-          <span className="text-xs text-muted-foreground">Tests performed</span>
-          <Textarea rows={2} value={tests} onChange={(e) => setTests(e.target.value)} />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-xs text-muted-foreground">Technician observed</span>
-          <Textarea rows={2} value={observed} onChange={(e) => setObserved(e.target.value)} />
-        </label>
-      </div>
-      <label className="block space-y-1.5">
-        <span className="text-xs text-muted-foreground">
-          Confirmed cause — only when you have confirmed it
-        </span>
-        <Textarea rows={2} value={cause} onChange={(e) => setCause(e.target.value)} />
-      </label>
+      {/* Structured fields stay available, but out of the way — Repara AI fills
+          them from the notes above once a draft is approved. */}
+      <details className="rounded-lg border border-border p-3">
+        <summary className="cursor-pointer text-xs text-muted-foreground">
+          Structured details — tests, observations, confirmed cause
+        </summary>
+        <div className="space-y-3 pt-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block space-y-1.5">
+              <span className="text-xs text-muted-foreground">Tests performed</span>
+              <Textarea rows={2} value={tests} onChange={(e) => setTests(e.target.value)} />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-xs text-muted-foreground">Technician observed</span>
+              <Textarea rows={2} value={observed} onChange={(e) => setObserved(e.target.value)} />
+            </label>
+          </div>
+          <label className="block space-y-1.5">
+            <span className="text-xs text-muted-foreground">
+              Confirmed cause — only when you have confirmed it
+            </span>
+            <Textarea rows={2} value={cause} onChange={(e) => setCause(e.target.value)} />
+          </label>
+        </div>
+      </details>
 
       <Button
         type="button"

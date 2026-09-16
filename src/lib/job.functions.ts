@@ -97,6 +97,10 @@ export type JobFinding = {
   evidence: string | null;
   confidence: string;
   severity: string;
+  /** Inspection sheet condition — independent of severity. */
+  condition: string;
+  system: string | null;
+  safetyConcern: boolean;
   source: string;
   status: string;
   aiDrafted: boolean;
@@ -162,7 +166,7 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
     const findings: JobFinding[] = (
       await readTable(
         "job_findings",
-        "id, concern_id, title, detail, measurement, evidence, confidence, severity, source, status, ai_drafted, approved_at, created_at",
+        "id, concern_id, title, detail, measurement, evidence, confidence, severity, condition, system, safety_concern, source, status, ai_drafted, approved_at, created_at",
         "id, title, detail, measurement, severity, source, status, created_at",
       )
     ).map((f) => ({
@@ -174,6 +178,16 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
       evidence: s(f['evidence']),
       confidence: String(f['confidence'] ?? "confirmed"),
       severity: String(f['severity'] ?? "recommended"),
+      condition: String(
+        f['condition'] ??
+          (f['severity'] === "monitor"
+            ? "monitor"
+            : f['severity'] === "informational"
+              ? "good"
+              : "needs_attention"),
+      ),
+      system: s(f['system']),
+      safetyConcern: Boolean(f['safety_concern']),
       source: String(f['source'] ?? "technician"),
       status: String(f['status'] ?? "open"),
       aiDrafted: Boolean(f['ai_drafted']),
@@ -494,6 +508,10 @@ export const saveFinding = createServerFn({ method: "POST" })
         source: z.enum(["technician", "ai"]).default("technician"),
         status: z.enum(["open", "converted", "resolved", "dismissed"]).optional(),
         aiDrafted: z.boolean().optional(),
+        /** Inspection sheet fields (0013). */
+        condition: z.enum(["good", "monitor", "needs_attention", "not_inspected"]).optional(),
+        system: optionalText(60),
+        safetyConcern: z.boolean().optional(),
         /** True when a human is confirming an AI-drafted finding. */
         approve: z.boolean().optional(),
       })
@@ -517,6 +535,9 @@ export const saveFinding = createServerFn({ method: "POST" })
       ...(data.evidence ? { evidence: data.evidence } : {}),
       ...(data.confidence ? { confidence: data.confidence } : {}),
       ...(data.aiDrafted === undefined ? {} : { ai_drafted: data.aiDrafted }),
+      ...(data.condition ? { condition: data.condition } : {}),
+      ...(data.system ? { system: data.system } : {}),
+      ...(data.safetyConcern === undefined ? {} : { safety_concern: data.safetyConcern }),
       ...(data.approve
         ? { approved_at: new Date().toISOString(), approved_by: context.userId }
         : {}),
@@ -981,6 +1002,35 @@ export const draftConcernFindings = createServerFn({ method: "POST" })
 
     const { draftFindings } = await import("@/lib/job/authoring.server");
     return { ok: true as const, drafts: await draftFindings({ client, requestId, concern, source: documented }) };
+  });
+
+/**
+ * One natural inspection note → a clean findings-sheet entry. Draft only:
+ * nothing is written until the technician saves it.
+ */
+export const cleanupFindingNote = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    idSchema
+      .extend({
+        note: z.string().trim().min(3).max(2000),
+        condition: z.enum(["good", "monitor", "needs_attention", "not_inspected"]),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    await assertVerifiedAdmin(context);
+    const client = context.supabase as unknown as Client;
+    const { draftFindingFromNote } = await import("@/lib/job/authoring.server");
+    return {
+      ok: true as const,
+      draft: await draftFindingFromNote({
+        client,
+        requestId: data.id,
+        note: data.note,
+        condition: data.condition,
+      }),
+    };
   });
 
 /** Findings → candidate recommendations. Drafts only. */

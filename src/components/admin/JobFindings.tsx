@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  cleanupFindingNote,
   deleteFinding,
   deleteRecommendation,
   draftFindingRecommendations,
@@ -27,7 +28,45 @@ import {
  * until a human approves them.
  */
 
-const SEVERITIES: JobFinding["severity"][] = ["urgent", "recommended", "monitor", "informational"];
+type Condition = "good" | "monitor" | "needs_attention" | "not_inspected";
+
+/**
+ * Inspection sheet conditions. Deliberately separate from severity: a red
+ * condition is not by itself a safety or emergency claim.
+ */
+const CONDITIONS: { value: Condition; label: string; dot: string }[] = [
+  { value: "good", label: "Good", dot: "🟢" },
+  { value: "monitor", label: "Monitor", dot: "🟡" },
+  { value: "needs_attention", label: "Needs attention", dot: "🔴" },
+  { value: "not_inspected", label: "Not inspected", dot: "⚪" },
+];
+
+const CONDITION_DOT: Record<string, string> = Object.fromEntries(
+  CONDITIONS.map((c) => [c.value, c.dot]),
+);
+
+const SYSTEMS = [
+  "Brakes",
+  "Electrical",
+  "Tires & Wheels",
+  "Engine",
+  "Transmission & Driveline",
+  "Suspension & Steering",
+  "HVAC",
+  "Cooling",
+  "Fuel",
+  "Exhaust",
+  "Body & Interior",
+  "Fluids & Maintenance",
+  "Other",
+];
+
+/** Condition drives severity; safety is only ever opted into by a human. */
+function severityFor(condition: Condition, safety: boolean): JobFinding["severity"] {
+  if (condition === "good" || condition === "not_inspected") return "informational";
+  if (condition === "monitor") return "monitor";
+  return safety ? "urgent" : "recommended";
+}
 
 const PRIORITY_STYLE: Record<string, string> = {
   urgent: "border-destructive/40 bg-destructive/10 text-destructive",
@@ -65,10 +104,15 @@ export function JobFindings({
   const removeRecommendation = useServerFn(deleteRecommendation);
   const runRecommendationDrafts = useServerFn(draftFindingRecommendations);
 
+  const cleanupNote = useServerFn(cleanupFindingNote);
+
+  // Inspection sheet entry: one condition, one natural note.
+  const [note, setNote] = useState("");
   const [title, setTitle] = useState("");
   const [measurement, setMeasurement] = useState("");
-  const [severity, setSeverity] = useState<JobFinding["severity"]>("recommended");
-  const [detail, setDetail] = useState("");
+  const [condition, setCondition] = useState<Condition>("needs_attention");
+  const [system, setSystem] = useState("");
+  const [safety, setSafety] = useState(false);
   const [concernId, setConcernId] = useState("");
   const [converting, setConverting] = useState<JobFinding | null>(null);
   const [recTitle, setRecTitle] = useState("");
@@ -87,22 +131,45 @@ export function JobFindings({
         data: {
           id: requestId,
           concernId: concernId || null,
-          title: title.trim(),
+          // The cleaned-up title is used when Repara AI produced one; otherwise
+          // the technician's own words become the title verbatim.
+          title: (title.trim() || note.trim()).slice(0, 200),
           measurement: measurement.trim(),
-          detail: detail.trim(),
-          severity,
+          detail: title.trim() ? note.trim() : "",
+          severity: severityFor(condition, safety),
+          condition,
+          system: system || "",
+          safetyConcern: safety,
           source: "technician",
-        },
+        } as never,
       }),
     onSuccess: () => {
+      setNote("");
       setTitle("");
       setMeasurement("");
-      setDetail("");
+      setSafety(false);
       toast.success("Finding saved.");
       void refresh();
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Could not save this finding."),
+  });
+
+  /** Tidies the note into a sheet entry. Nothing is saved until Save finding. */
+  const cleanup = useMutation({
+    mutationFn: () => cleanupNote({ data: { id: requestId, note: note.trim(), condition } }),
+    onSuccess: (res) => {
+      const d = res.draft;
+      if (d.title) setTitle(d.title);
+      if (d.detail) setNote(d.detail);
+      if (d.measurement && !measurement.trim()) setMeasurement(d.measurement);
+      if (d.system && !system) setSystem(d.system);
+      if (d.suggestedCondition) setCondition(d.suggestedCondition as Condition);
+      if (d.safetySupported) setSafety(true);
+      toast.success("Cleaned up — review it, then save.");
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Repara AI could not clean this up."),
   });
 
   /** Confirms an AI-drafted finding — the human gate before it counts as fact. */
@@ -223,39 +290,74 @@ export function JobFindings({
     setRecPriority(finding.severity === "informational" ? "monitor" : finding.severity);
   }
 
+  /** Findings grouped into a compact inspection sheet by vehicle system. */
+  const grouped: [string, JobFinding[]][] = (() => {
+    const map = new Map<string, JobFinding[]>();
+    for (const f of findings) {
+      const key = (f.system || "Other findings").toUpperCase();
+      map.set(key, [...(map.get(key) ?? []), f]);
+    }
+    return [...map.entries()];
+  })();
+
   const concernTitle = (id: string | null) =>
     concerns.find((c) => c.id === id)?.title ?? "";
 
   return (
     <section className="space-y-4">
+      {/* Inspection sheet entry: condition first, then one plain-language note. */}
       <div className="surface-panel space-y-3 p-4">
         <h2 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">Add a finding</h2>
-        <Input
-          value={title}
-          placeholder="Front brake pads measured 2 mm"
-          className="h-12"
-          onChange={(e) => setTitle(e.target.value)}
+
+        <div className="-mx-1 flex flex-wrap gap-2 px-1">
+          {CONDITIONS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setCondition(c.value)}
+              className={`h-11 rounded-lg border px-3 text-xs font-medium ${
+                condition === c.value
+                  ? "border-primary bg-primary/10 text-foreground"
+                  : "border-border bg-surface text-muted-foreground"
+              }`}
+            >
+              <span aria-hidden className="mr-1.5">
+                {c.dot}
+              </span>
+              {c.label}
+            </button>
+          ))}
+        </div>
+
+        <Textarea
+          rows={3}
+          value={note}
+          placeholder="What did you find? e.g. rear pads 3mm, light lip on both rotors"
+          onChange={(e) => setNote(e.target.value)}
         />
+
         <div className="grid gap-2 sm:grid-cols-2">
+          <select
+            value={system}
+            aria-label="Vehicle system"
+            onChange={(e) => setSystem(e.target.value)}
+            className="h-12 rounded-md border border-input bg-surface px-3 text-sm"
+          >
+            <option value="">System (optional)</option>
+            {SYSTEMS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
           <Input
             value={measurement}
             placeholder="Measurement (2 mm, 310 CCA…)"
             className="h-12"
             onChange={(e) => setMeasurement(e.target.value)}
           />
-          <select
-            value={severity}
-            onChange={(e) => setSeverity(e.target.value as JobFinding["severity"])}
-            aria-label="Severity"
-            className="h-12 rounded-md border border-input bg-surface px-3 text-sm"
-          >
-            {SEVERITIES.map((s) => (
-              <option key={s} value={s}>
-                {s.charAt(0).toUpperCase() + s.slice(1)}
-              </option>
-            ))}
-          </select>
         </div>
+
         {concerns.length > 0 && (
           <select
             value={concernId}
@@ -271,38 +373,72 @@ export function JobFindings({
             ))}
           </select>
         )}
-        <Textarea
-          rows={2}
-          value={detail}
-          placeholder="Detail (optional)"
-          onChange={(e) => setDetail(e.target.value)}
-        />
-        <Button
-          type="button"
-          className="h-12 w-full sm:w-auto"
-          disabled={addFinding.isPending || title.trim().length < 2}
-          onClick={() => addFinding.mutate()}
-        >
-          {addFinding.isPending ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : (
-            <Plus className="mr-2 size-4" />
-          )}
-          Save finding
-        </Button>
+
+        {/* Red is not a safety claim on its own — safety is opted into. */}
+        {condition === "needs_attention" && (
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={safety}
+              className="size-4"
+              onChange={(e) => setSafety(e.target.checked)}
+            />
+            This affects safe operation of the vehicle
+          </label>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="h-12 flex-1 sm:flex-none"
+            disabled={addFinding.isPending || note.trim().length < 3}
+            onClick={() => addFinding.mutate()}
+          >
+            {addFinding.isPending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Plus className="mr-2 size-4" />
+            )}
+            Save finding
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-12 border-border bg-transparent text-xs"
+            disabled={cleanup.isPending || note.trim().length < 3}
+            onClick={() => cleanup.mutate()}
+          >
+            {cleanup.isPending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 size-4" />
+            )}
+            Clean up with Repara AI
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Repara AI only tidies what you wrote. It never adds a measurement, cause or safety claim
+          you did not record.
+        </p>
       </div>
 
-      <div className="surface-panel space-y-3 p-4">
-        <h3 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">Findings</h3>
-        {findings.length === 0 && (
-          <p className="text-xs text-muted-foreground">No findings recorded yet.</p>
-        )}
-        <ul className="space-y-3">
-          {findings.map((finding) => (
-            <li key={finding.id} className="space-y-2 border-b border-border pb-3 last:border-0 last:pb-0">
-              <div className="flex items-start justify-between gap-3">
+      {grouped.map(([groupName, groupFindings]) => (
+        <div key={groupName} className="surface-panel space-y-3 p-4">
+          <h3 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">{groupName}</h3>
+          <ul className="space-y-3">
+            {groupFindings.map((finding) => (
+              <li key={finding.id} className="space-y-2 border-b border-border pb-3 last:border-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
+                    <span aria-hidden className="text-[11px]">
+                      {CONDITION_DOT[finding.condition] ?? "⚪"}
+                    </span>
+                    {finding.safetyConcern && (
+                      <span className="text-[10px] font-medium text-destructive">
+                        Safety — technician marked
+                      </span>
+                    )}
                     <span
                       className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${PRIORITY_STYLE[finding.severity] ?? ""}`}
                     >
@@ -381,10 +517,19 @@ export function JobFindings({
                   Draft with AI
                 </Button>
               </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+
+      {findings.length === 0 && (
+        <p className="surface-panel p-4 text-xs text-muted-foreground">
+          Nothing inspected yet. Record what you checked above — good results are worth recording
+          too.
+        </p>
+      )}
+
 
       {converting && (
         <div className="surface-panel space-y-3 p-4">
