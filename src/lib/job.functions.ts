@@ -97,6 +97,10 @@ export type JobFinding = {
   evidence: string | null;
   confidence: string;
   severity: string;
+  /** Inspection sheet condition — independent of severity. */
+  condition: string;
+  system: string | null;
+  safetyConcern: boolean;
   source: string;
   status: string;
   aiDrafted: boolean;
