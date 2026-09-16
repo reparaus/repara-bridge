@@ -228,34 +228,59 @@ export function JobFindings({
 
   return (
     <section className="space-y-4">
+      {/* Inspection sheet entry: condition first, then one plain-language note. */}
       <div className="surface-panel space-y-3 p-4">
         <h2 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">Add a finding</h2>
-        <Input
-          value={title}
-          placeholder="Front brake pads measured 2 mm"
-          className="h-12"
-          onChange={(e) => setTitle(e.target.value)}
+
+        <div className="-mx-1 flex flex-wrap gap-2 px-1">
+          {CONDITIONS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setCondition(c.value)}
+              className={`h-11 rounded-lg border px-3 text-xs font-medium ${
+                condition === c.value
+                  ? "border-primary bg-primary/10 text-foreground"
+                  : "border-border bg-surface text-muted-foreground"
+              }`}
+            >
+              <span aria-hidden className="mr-1.5">
+                {c.dot}
+              </span>
+              {c.label}
+            </button>
+          ))}
+        </div>
+
+        <Textarea
+          rows={3}
+          value={note}
+          placeholder="What did you find? e.g. rear pads 3mm, light lip on both rotors"
+          onChange={(e) => setNote(e.target.value)}
         />
+
         <div className="grid gap-2 sm:grid-cols-2">
+          <select
+            value={system}
+            aria-label="Vehicle system"
+            onChange={(e) => setSystem(e.target.value)}
+            className="h-12 rounded-md border border-input bg-surface px-3 text-sm"
+          >
+            <option value="">System (optional)</option>
+            {SYSTEMS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
           <Input
             value={measurement}
             placeholder="Measurement (2 mm, 310 CCA…)"
             className="h-12"
             onChange={(e) => setMeasurement(e.target.value)}
           />
-          <select
-            value={severity}
-            onChange={(e) => setSeverity(e.target.value as JobFinding["severity"])}
-            aria-label="Severity"
-            className="h-12 rounded-md border border-input bg-surface px-3 text-sm"
-          >
-            {SEVERITIES.map((s) => (
-              <option key={s} value={s}>
-                {s.charAt(0).toUpperCase() + s.slice(1)}
-              </option>
-            ))}
-          </select>
         </div>
+
         {concerns.length > 0 && (
           <select
             value={concernId}
@@ -271,36 +296,62 @@ export function JobFindings({
             ))}
           </select>
         )}
-        <Textarea
-          rows={2}
-          value={detail}
-          placeholder="Detail (optional)"
-          onChange={(e) => setDetail(e.target.value)}
-        />
-        <Button
-          type="button"
-          className="h-12 w-full sm:w-auto"
-          disabled={addFinding.isPending || title.trim().length < 2}
-          onClick={() => addFinding.mutate()}
-        >
-          {addFinding.isPending ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : (
-            <Plus className="mr-2 size-4" />
-          )}
-          Save finding
-        </Button>
+
+        {/* Red is not a safety claim on its own — safety is opted into. */}
+        {condition === "needs_attention" && (
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={safety}
+              className="size-4"
+              onChange={(e) => setSafety(e.target.checked)}
+            />
+            This affects safe operation of the vehicle
+          </label>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="h-12 flex-1 sm:flex-none"
+            disabled={addFinding.isPending || note.trim().length < 3}
+            onClick={() => addFinding.mutate()}
+          >
+            {addFinding.isPending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Plus className="mr-2 size-4" />
+            )}
+            Save finding
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-12 border-border bg-transparent text-xs"
+            disabled={cleanup.isPending || note.trim().length < 3}
+            onClick={() => cleanup.mutate()}
+          >
+            {cleanup.isPending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 size-4" />
+            )}
+            Clean up with Repara AI
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Repara AI only tidies what you wrote. It never adds a measurement, cause or safety claim
+          you did not record.
+        </p>
       </div>
 
-      <div className="surface-panel space-y-3 p-4">
-        <h3 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">Findings</h3>
-        {findings.length === 0 && (
-          <p className="text-xs text-muted-foreground">No findings recorded yet.</p>
-        )}
-        <ul className="space-y-3">
-          {findings.map((finding) => (
-            <li key={finding.id} className="space-y-2 border-b border-border pb-3 last:border-0 last:pb-0">
-              <div className="flex items-start justify-between gap-3">
+      {grouped.map(([groupName, groupFindings]) => (
+        <div key={groupName} className="surface-panel space-y-3 p-4">
+          <h3 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">{groupName}</h3>
+          <ul className="space-y-3">
+            {groupFindings.map((finding) => (
+              <li key={finding.id} className="space-y-2 border-b border-border pb-3 last:border-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
