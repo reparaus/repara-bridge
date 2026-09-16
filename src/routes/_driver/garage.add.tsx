@@ -182,7 +182,6 @@ function AddVehicle() {
 
           {scannerOpen && (
             <VinScanner
-              open={scannerOpen}
               onClose={() => setScannerOpen(false)}
               onDetected={(scanned: string) => {
                 setScannerOpen(false);

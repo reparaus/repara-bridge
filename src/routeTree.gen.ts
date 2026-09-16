@@ -11,14 +11,18 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as DriverRouteRouteImport } from './routes/_driver/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CardRouteImport } from './routes/card'
+import { Route as SigninRouteImport } from './routes/signin'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminResetPasswordRouteImport } from './routes/admin.reset-password'
 import { Route as QuoteIndexRouteImport } from './routes/quote.index'
 import { Route as QuoteTokenRouteImport } from './routes/quote.$token'
 import { Route as ReplyTokenRouteImport } from './routes/reply.$token'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
+import { Route as DriverGarageIndexRouteImport } from './routes/_driver/garage.index'
+import { Route as DriverGarageAddRouteImport } from './routes/_driver/garage.add'
 import { Route as AuthenticatedAdminRequestsIndexRouteImport } from './routes/_authenticated/admin.requests.index'
 import { Route as AuthenticatedAdminRequestsIdRouteImport } from './routes/_authenticated/admin.requests.$id'
 
@@ -31,6 +35,10 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DriverRouteRoute = DriverRouteRouteImport.update({
+  id: '/_driver',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -39,6 +47,11 @@ const AuthRoute = AuthRouteImport.update({
 const CardRoute = CardRouteImport.update({
   id: '/card',
   path: '/card',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SigninRoute = SigninRouteImport.update({
+  id: '/signin',
+  path: '/signin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminLoginRoute = AdminLoginRouteImport.update({
@@ -71,6 +84,16 @@ const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   path: '/admin/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const DriverGarageIndexRoute = DriverGarageIndexRouteImport.update({
+  id: '/garage/',
+  path: '/garage/',
+  getParentRoute: () => DriverRouteRoute,
+} as any)
+const DriverGarageAddRoute = DriverGarageAddRouteImport.update({
+  id: '/garage/add',
+  path: '/garage/add',
+  getParentRoute: () => DriverRouteRoute,
+} as any)
 const AuthenticatedAdminRequestsIndexRoute =
   AuthenticatedAdminRequestsIndexRouteImport.update({
     id: '/admin/requests/',
@@ -88,12 +111,15 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/signin': typeof SigninRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/reply/$token': typeof ReplyTokenRoute
   '/quote/': typeof QuoteIndexRoute
+  '/garage/add': typeof DriverGarageAddRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
+  '/garage/': typeof DriverGarageIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
   '/admin/requests/': typeof AuthenticatedAdminRequestsIndexRoute
 }
@@ -101,12 +127,15 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/signin': typeof SigninRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/reply/$token': typeof ReplyTokenRoute
   '/quote': typeof QuoteIndexRoute
+  '/garage/add': typeof DriverGarageAddRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
+  '/garage': typeof DriverGarageIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
   '/admin/requests': typeof AuthenticatedAdminRequestsIndexRoute
 }
@@ -114,14 +143,18 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/_driver': typeof DriverRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/signin': typeof SigninRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/reply/$token': typeof ReplyTokenRoute
   '/quote/': typeof QuoteIndexRoute
+  '/_driver/garage/add': typeof DriverGarageAddRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
+  '/_driver/garage/': typeof DriverGarageIndexRoute
   '/_authenticated/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
   '/_authenticated/admin/requests/': typeof AuthenticatedAdminRequestsIndexRoute
 }
@@ -131,12 +164,15 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/card'
+    | '/signin'
     | '/admin/login'
     | '/admin/reset-password'
     | '/quote/$token'
     | '/reply/$token'
     | '/quote/'
+    | '/garage/add'
     | '/admin/'
+    | '/garage/'
     | '/admin/requests/$id'
     | '/admin/requests/'
   fileRoutesByTo: FileRoutesByTo
@@ -144,26 +180,33 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/card'
+    | '/signin'
     | '/admin/login'
     | '/admin/reset-password'
     | '/quote/$token'
     | '/reply/$token'
     | '/quote'
+    | '/garage/add'
     | '/admin'
+    | '/garage'
     | '/admin/requests/$id'
     | '/admin/requests'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/_driver'
     | '/auth'
     | '/card'
+    | '/signin'
     | '/admin/login'
     | '/admin/reset-password'
     | '/quote/$token'
     | '/reply/$token'
     | '/quote/'
+    | '/_driver/garage/add'
     | '/_authenticated/admin/'
+    | '/_driver/garage/'
     | '/_authenticated/admin/requests/$id'
     | '/_authenticated/admin/requests/'
   fileRoutesById: FileRoutesById
@@ -171,8 +214,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  DriverRouteRoute: typeof DriverRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   CardRoute: typeof CardRoute
+  SigninRoute: typeof SigninRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminResetPasswordRoute: typeof AdminResetPasswordRoute
   QuoteTokenRoute: typeof QuoteTokenRoute
@@ -196,6 +241,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_driver': {
+      id: '/_driver'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof DriverRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -208,6 +260,13 @@ declare module '@tanstack/react-router' {
       path: '/card'
       fullPath: '/card'
       preLoaderRoute: typeof CardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signin': {
+      id: '/signin'
+      path: '/signin'
+      fullPath: '/signin'
+      preLoaderRoute: typeof SigninRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/login': {
@@ -252,6 +311,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_driver/garage/': {
+      id: '/_driver/garage/'
+      path: '/garage'
+      fullPath: '/garage/'
+      preLoaderRoute: typeof DriverGarageIndexRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
+    '/_driver/garage/add': {
+      id: '/_driver/garage/add'
+      path: '/garage/add'
+      fullPath: '/garage/add'
+      preLoaderRoute: typeof DriverGarageAddRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
     '/_authenticated/admin/requests/': {
       id: '/_authenticated/admin/requests/'
       path: '/admin/requests'
@@ -284,11 +357,27 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface DriverRouteRouteChildren {
+  DriverGarageAddRoute: typeof DriverGarageAddRoute
+  DriverGarageIndexRoute: typeof DriverGarageIndexRoute
+}
+
+const DriverRouteRouteChildren: DriverRouteRouteChildren = {
+  DriverGarageAddRoute: DriverGarageAddRoute,
+  DriverGarageIndexRoute: DriverGarageIndexRoute,
+}
+
+const DriverRouteRouteWithChildren = DriverRouteRoute._addFileChildren(
+  DriverRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  DriverRouteRoute: DriverRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   CardRoute: CardRoute,
+  SigninRoute: SigninRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminResetPasswordRoute: AdminResetPasswordRoute,
   QuoteTokenRoute: QuoteTokenRoute,
