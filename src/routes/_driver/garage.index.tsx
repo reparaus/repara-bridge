@@ -32,7 +32,22 @@ function greeting() {
 
 function GarageHome() {
   const load = useServerFn(getGarageHome);
+  const claim = useServerFn(claimMyRequests);
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["garage-home"], queryFn: () => load({}) });
+
+  /**
+   * Links requests this driver submitted as a guest. Contact details must match
+   * the account, so a VIN alone never claims someone else's request.
+   */
+  useEffect(() => {
+    if (!data?.vehicles.length) return;
+    void claim({})
+      .then((result) => {
+        if (result.claimed > 0) void queryClient.invalidateQueries({ queryKey: ["garage-home"] });
+      })
+      .catch(() => undefined);
+  }, [claim, data?.vehicles.length, queryClient]);
 
   return (
     <GarageShell>
