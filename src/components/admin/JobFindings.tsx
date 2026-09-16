@@ -290,6 +290,16 @@ export function JobFindings({
     setRecPriority(finding.severity === "informational" ? "monitor" : finding.severity);
   }
 
+  /** Findings grouped into a compact inspection sheet by vehicle system. */
+  const grouped: [string, JobFinding[]][] = (() => {
+    const map = new Map<string, JobFinding[]>();
+    for (const f of findings) {
+      const key = (f.system || "Other findings").toUpperCase();
+      map.set(key, [...(map.get(key) ?? []), f]);
+    }
+    return [...map.entries()];
+  })();
+
   const concernTitle = (id: string | null) =>
     concerns.find((c) => c.id === id)?.title ?? "";
 
