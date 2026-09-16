@@ -293,7 +293,8 @@ function QuoteFlow() {
   const discardPhotos = useServerFn(discardQuotePhotos);
   const askIntakeQuestions = useServerFn(requestIntakeQuestions);
   const summarizeIntakeAnswers = useServerFn(requestIntakeSummary);
-  const { service: preselectedService } = Route.useSearch();
+  const { service: preselectedService, v: garageVehicleId } = Route.useSearch();
+  const loadGaragePrefill = useServerFn(getServiceRequestPrefill);
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(EMPTY);
