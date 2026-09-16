@@ -431,6 +431,14 @@ export function JobFindings({
                 <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
+                    <span aria-hidden className="text-[11px]">
+                      {CONDITION_DOT[finding.condition] ?? "⚪"}
+                    </span>
+                    {finding.safetyConcern && (
+                      <span className="text-[10px] font-medium text-destructive">
+                        Safety — technician marked
+                      </span>
+                    )}
                     <span
                       className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${PRIORITY_STYLE[finding.severity] ?? ""}`}
                     >
