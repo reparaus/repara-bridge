@@ -852,174 +852,18 @@ function JobWorkspace() {
                 </div>
               )}
 
-              <div className="surface-panel space-y-4 p-4">
-                {lines.map((line, i) => (
-                  <div key={i} className="space-y-2 rounded-lg border border-border p-3">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={line.itemType}
-                        aria-label="Line type"
-                        onChange={(e) =>
-                          setLines((ls) =>
-                            ls.map((l, x) =>
-                              x === i ? { ...l, itemType: e.target.value as Line["itemType"] } : l,
-                            ),
-                          )
-                        }
-                        className="h-11 flex-1 rounded-md border border-input bg-surface px-2 text-xs"
-                      >
-                        <option value="labor">Labor</option>
-                        <option value="part">Part</option>
-                        <option value="fee">Fee</option>
-                        <option value="discount">Discount</option>
-                      </select>
-                      <p className="text-sm font-medium tabular-nums">
-                        {formatCurrency(numeric[i]?.total ?? 0)}
-                      </p>
-                      <button
-                        type="button"
-                        aria-label="Remove line"
-                        className="p-2 text-muted-foreground hover:text-destructive"
-                        onClick={() => setLines((ls) => ls.filter((_, x) => x !== i))}
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
-
-                    <Input
-                      value={line.description}
-                      placeholder="Description"
-                      className="h-11"
-                      onChange={(e) =>
-                        setLines((ls) =>
-                          ls.map((l, x) => (x === i ? { ...l, description: e.target.value } : l)),
-                        )
-                      }
-                    />
-                    <div className="grid grid-cols-3 gap-2">
-                      <Input
-                        value={line.quantity}
-                        inputMode="decimal"
-                        aria-label="Quantity"
-                        placeholder="Qty"
-                        className="h-11"
-                        onChange={(e) =>
-                          setLines((ls) =>
-                            ls.map((l, x) => (x === i ? { ...l, quantity: e.target.value } : l)),
-                          )
-                        }
-                      />
-                      <Input
-                        value={line.unitPrice}
-                        inputMode="decimal"
-                        aria-label="Customer price"
-                        placeholder="Price"
-                        className="h-11"
-                        onChange={(e) =>
-                          setLines((ls) =>
-                            ls.map((l, x) => (x === i ? { ...l, unitPrice: e.target.value } : l)),
-                          )
-                        }
-                      />
-                      <Input
-                        value={line.internalUnitCost}
-                        inputMode="decimal"
-                        aria-label="Internal unit cost"
-                        placeholder="Cost"
-                        className="h-11"
-                        onChange={(e) =>
-                          setLines((ls) =>
-                            ls.map((l, x) =>
-                              x === i ? { ...l, internalUnitCost: e.target.value } : l,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      className="text-xs text-muted-foreground underline underline-offset-4"
-                      onClick={() => setPartsOpen(partsOpen === i ? null : i)}
-                    >
-                      {partsOpen === i ? "Hide service & part details" : "Service & part details"}
-                    </button>
-                    {partsOpen === i && (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <Input
-                          value={line.groupLabel}
-                          placeholder="Service card (e.g. Front brakes)"
-                          className="h-11"
-                          onChange={(e) =>
-                            setLines((ls) =>
-                              ls.map((l, x) => (x === i ? { ...l, groupLabel: e.target.value } : l)),
-                            )
-                          }
-                        />
-                        <Input
-                          value={line.partBrand}
-                          placeholder="Part brand"
-                          className="h-11"
-                          onChange={(e) =>
-                            setLines((ls) =>
-                              ls.map((l, x) => (x === i ? { ...l, partBrand: e.target.value } : l)),
-                            )
-                          }
-                        />
-                        <Input
-                          value={line.partNumber}
-                          placeholder="Part number"
-                          className="h-11"
-                          onChange={(e) =>
-                            setLines((ls) =>
-                              ls.map((l, x) => (x === i ? { ...l, partNumber: e.target.value } : l)),
-                            )
-                          }
-                        />
-                        <Input
-                          value={line.supplier}
-                          placeholder="Supplier"
-                          className="h-11"
-                          onChange={(e) =>
-                            setLines((ls) =>
-                              ls.map((l, x) => (x === i ? { ...l, supplier: e.target.value } : l)),
-                            )
-                          }
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-11 border-border bg-transparent"
-                  onClick={() => setLines((ls) => [...ls, { ...EMPTY_LINE }])}
-                >
-                  <Plus className="mr-2 size-4" /> Add line item
-                </Button>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Tax" optional htmlFor="tax" hint="Enter a flat tax amount if applicable.">
-                  <Input
-                    id="tax"
-                    inputMode="decimal"
-                    value={tax}
-                    onChange={(e) => setTax(e.target.value)}
-                    className="h-11"
-                  />
-                </Field>
-                <Field label="Expiration date" optional htmlFor="exp">
-                  <Input
-                    id="exp"
-                    type="date"
-                    value={expirationDate}
-                    onChange={(e) => setExpirationDate(e.target.value)}
-                    className="h-11"
-                  />
-                </Field>
-              </div>
+              <QuoteBuilder
+                lines={lines}
+                setLines={setLines}
+                tax={tax}
+                setTax={setTax}
+                expirationDate={expirationDate}
+                setExpirationDate={setExpirationDate}
+                customerNotes={customerNotes}
+                setCustomerNotes={setCustomerNotes}
+                internalNotes={internalNotes}
+                setInternalNotes={setInternalNotes}
+              />
 
               <PriceSummary
                 parts={parts}
@@ -1033,23 +877,13 @@ function JobWorkspace() {
                 Internal only — part cost {formatCurrency(internalCost)} · estimated margin{" "}
                 {formatCurrency(margin)}
               </p>
+              {quoteRow?.status === "sent" && (
+                <p className="text-xs font-medium">🟡 Awaiting customer approval</p>
+              )}
+              {quoteRow?.status === "accepted" && (
+                <p className="text-xs font-medium">🟢 Approved by the customer</p>
+              )}
 
-              <Field label="Customer-facing notes" optional htmlFor="cnotes">
-                <Textarea
-                  id="cnotes"
-                  rows={3}
-                  value={customerNotes}
-                  onChange={(e) => setCustomerNotes(e.target.value)}
-                />
-              </Field>
-              <Field label="Technician notes (internal)" optional htmlFor="inotes">
-                <Textarea
-                  id="inotes"
-                  rows={3}
-                  value={internalNotes}
-                  onChange={(e) => setInternalNotes(e.target.value)}
-                />
-              </Field>
 
               <div className="flex flex-wrap gap-3">
                 <Button
