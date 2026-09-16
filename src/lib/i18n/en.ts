@@ -38,6 +38,8 @@ export const en = {
     title2: "Made Clear.",
     sub: "Tell us what your car is doing. We ask the right questions up front, explain what we actually find, and quote the work line by line before anything is approved.",
     ctaQuote: "GET A QUOTE",
+    ctaGarage: "ADD MY CAR",
+    garageTagline: "Your car, understood. Keep track of maintenance, service history and vehicle information — and get help when something doesn't feel right.",
     ctaServices: "VIEW SERVICES",
     trust: {
       years: { value: "5 Years", label: "Dealer-Trained Experience" },

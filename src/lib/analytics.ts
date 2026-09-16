@@ -9,6 +9,7 @@
 export type AnalyticsEvent =
   | "landing_view"
   | "quote_started"
+  | "garage_started"
   | "vehicle_added"
   | "vin_entered"
   | "vin_decoded"

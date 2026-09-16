@@ -130,14 +130,20 @@ function Landing() {
               {t("home.sub")}
             </p>
 
+            <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground sm:text-base">
+              {t("home.garageTagline")}
+            </p>
+
+            {/* Two entry points, on purpose: a driver who wants their car
+                tracked, and a guest who simply needs service right now. */}
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Button
                 asChild
                 size="lg"
                 className="h-13 rounded-full px-8 text-sm tracking-[0.12em]"
               >
-                <Link to="/quote" onClick={() => track("quote_started", { source: "hero" })}>
-                  {t("home.ctaQuote")} <ArrowRight className="ml-1 size-4" />
+                <Link to="/garage" onClick={() => track("garage_started", { source: "hero" })}>
+                  {t("home.ctaGarage")} <ArrowRight className="ml-1 size-4" />
                 </Link>
               </Button>
               <Button
@@ -146,7 +152,9 @@ function Landing() {
                 variant="outline"
                 className="h-13 rounded-full border-border bg-transparent px-8 text-sm tracking-[0.12em]"
               >
-                <a href="#services">{t("home.ctaServices")}</a>
+                <Link to="/quote" onClick={() => track("quote_started", { source: "hero" })}>
+                  {t("home.ctaQuote")}
+                </Link>
               </Button>
             </div>
 

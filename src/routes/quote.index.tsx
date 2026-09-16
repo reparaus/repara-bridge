@@ -79,6 +79,7 @@ import {
 import { VinScanner } from "@/components/quote/VinScanner";
 import { ComboboxInput } from "@/components/quote/ComboboxInput";
 import { MAKES, trimSuggestions, yearOptions } from "@/lib/vehicle-data";
+import { getServiceRequestPrefill } from "@/lib/garage.functions";
 import { useModelSuggestions } from "@/lib/use-model-suggestions";
 
 
@@ -88,9 +89,15 @@ export const Route = createFileRoute("/quote/")({
    * cards to preselect a category in the existing flow. Unknown values are
    * ignored so the flow behaves exactly as before.
    */
-  validateSearch: (search: Record<string, unknown>): { service?: ServiceKey } => {
+  validateSearch: (search: Record<string, unknown>): { service?: ServiceKey; v?: string } => {
     const raw = typeof search.service === "string" ? search.service : undefined;
-    return raw && isServiceKey(raw) ? { service: raw } : {};
+    // `?v=<vehicleId>` comes from a signed-in driver's Garage: the vehicle and
+    // contact details are prefilled so nothing is entered twice.
+    const vehicle = typeof search.v === "string" ? search.v : undefined;
+    return {
+      ...(raw && isServiceKey(raw) ? { service: raw } : {}),
+      ...(vehicle ? { v: vehicle } : {}),
+    };
   },
   head: () => ({
     meta: [
@@ -287,7 +294,8 @@ function QuoteFlow() {
   const discardPhotos = useServerFn(discardQuotePhotos);
   const askIntakeQuestions = useServerFn(requestIntakeQuestions);
   const summarizeIntakeAnswers = useServerFn(requestIntakeSummary);
-  const { service: preselectedService } = Route.useSearch();
+  const { service: preselectedService, v: garageVehicleId } = Route.useSearch();
+  const loadGaragePrefill = useServerFn(getServiceRequestPrefill);
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -318,6 +326,43 @@ function QuoteFlow() {
     setHydrated(!draft);
     track("quote_started");
   }, [preselectedService]);
+
+  /**
+   * Garage prefill. A signed-in driver arriving from their Garage never re-enters
+   * VIN / year / make / model / mileage / contact details. Guests are unaffected:
+   * without `?v=` (or without a session) this does nothing.
+   */
+  useEffect(() => {
+    if (!garageVehicleId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const prefill = await loadGaragePrefill({ data: { vehicleId: garageVehicleId } });
+        if (cancelled) return;
+        setForm((f) => ({
+          ...f,
+          vehicleMode: prefill.year && prefill.make && prefill.model ? "manual" : f.vehicleMode,
+          vin: prefill.vin || f.vin,
+          year: prefill.year || f.year,
+          make: prefill.make || f.make,
+          model: prefill.model || f.model,
+          trim: prefill.trim || f.trim,
+          mileage: prefill.mileage || f.mileage,
+          firstName: prefill.firstName || f.firstName,
+          lastName: prefill.lastName || f.lastName,
+          phone: prefill.phone || f.phone,
+          email: prefill.email || f.email,
+        }));
+        setPendingDraft(null);
+        setHydrated(true);
+      } catch {
+        // Not signed in, or not their vehicle — the normal flow still works.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [garageVehicleId, loadGaragePrefill]);
 
   function continueDraft() {
     if (!pendingDraft) return;
@@ -1780,6 +1825,18 @@ function Confirmation({
               {t("quote.confirm.maskedNote")}
             </p>
           </div>
+        </div>
+
+        {/* No account was needed to get here. Offering one now is optional, and
+            a request is only linked to an account when the contact details match. */}
+        <div className="surface-panel mt-6 p-5 text-left">
+          <p className="text-sm font-medium">Save this vehicle to your garage</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Create your free Repara account to track this repair, maintenance and service history.
+          </p>
+          <Button asChild variant="secondary" className="mt-3 h-12 w-full">
+            <Link to="/signin">Create account</Link>
+          </Button>
         </div>
 
         <div className="mt-8 space-y-3">
