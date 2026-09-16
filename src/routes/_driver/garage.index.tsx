@@ -1,12 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, Plus } from "lucide-react";
+import { useEffect } from "react";
 
 import { GarageShell, SectionTitle, StatusDot } from "@/components/garage/GarageShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getGarageHome } from "@/lib/garage.functions";
+import { claimMyRequests, getGarageHome } from "@/lib/garage.functions";
 
 export const Route = createFileRoute("/_driver/garage/")({
   head: () => ({
