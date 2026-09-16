@@ -327,6 +327,43 @@ function QuoteFlow() {
     track("quote_started");
   }, [preselectedService]);
 
+  /**
+   * Garage prefill. A signed-in driver arriving from their Garage never re-enters
+   * VIN / year / make / model / mileage / contact details. Guests are unaffected:
+   * without `?v=` (or without a session) this does nothing.
+   */
+  useEffect(() => {
+    if (!garageVehicleId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const prefill = await loadGaragePrefill({ data: { vehicleId: garageVehicleId } });
+        if (cancelled) return;
+        setForm((f) => ({
+          ...f,
+          vehicleMode: prefill.year && prefill.make && prefill.model ? "manual" : f.vehicleMode,
+          vin: prefill.vin || f.vin,
+          year: prefill.year || f.year,
+          make: prefill.make || f.make,
+          model: prefill.model || f.model,
+          trim: prefill.trim || f.trim,
+          mileage: prefill.mileage || f.mileage,
+          firstName: prefill.firstName || f.firstName,
+          lastName: prefill.lastName || f.lastName,
+          phone: prefill.phone || f.phone,
+          email: prefill.email || f.email,
+        }));
+        setPendingDraft(null);
+        setHydrated(true);
+      } catch {
+        // Not signed in, or not their vehicle — the normal flow still works.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [garageVehicleId, loadGaragePrefill]);
+
   function continueDraft() {
     if (!pendingDraft) return;
     setForm((current) => ({
