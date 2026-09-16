@@ -508,6 +508,10 @@ export const saveFinding = createServerFn({ method: "POST" })
         source: z.enum(["technician", "ai"]).default("technician"),
         status: z.enum(["open", "converted", "resolved", "dismissed"]).optional(),
         aiDrafted: z.boolean().optional(),
+        /** Inspection sheet fields (0013). */
+        condition: z.enum(["good", "monitor", "needs_attention", "not_inspected"]).optional(),
+        system: optionalText(60),
+        safetyConcern: z.boolean().optional(),
         /** True when a human is confirming an AI-drafted finding. */
         approve: z.boolean().optional(),
       })
