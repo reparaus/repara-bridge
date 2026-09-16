@@ -535,6 +535,9 @@ export const saveFinding = createServerFn({ method: "POST" })
       ...(data.evidence ? { evidence: data.evidence } : {}),
       ...(data.confidence ? { confidence: data.confidence } : {}),
       ...(data.aiDrafted === undefined ? {} : { ai_drafted: data.aiDrafted }),
+      ...(data.condition ? { condition: data.condition } : {}),
+      ...(data.system ? { system: data.system } : {}),
+      ...(data.safetyConcern === undefined ? {} : { safety_concern: data.safetyConcern }),
       ...(data.approve
         ? { approved_at: new Date().toISOString(), approved_by: context.userId }
         : {}),
