@@ -25,7 +25,7 @@ export const Route = createFileRoute("/_driver/garage/profile")({
       { property: "og:description", content: "Manage your Repara account and garage." },
     ],
   }),
-  component: Profile;
+  component: Profile,
 });
 
 function Profile() {
