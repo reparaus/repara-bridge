@@ -103,10 +103,15 @@ export function JobFindings({
   const removeRecommendation = useServerFn(deleteRecommendation);
   const runRecommendationDrafts = useServerFn(draftFindingRecommendations);
 
+  const cleanupNote = useServerFn(cleanupFindingNote);
+
+  // Inspection sheet entry: one condition, one natural note.
+  const [note, setNote] = useState("");
   const [title, setTitle] = useState("");
   const [measurement, setMeasurement] = useState("");
-  const [severity, setSeverity] = useState<JobFinding["severity"]>("recommended");
-  const [detail, setDetail] = useState("");
+  const [condition, setCondition] = useState<Condition>("needs_attention");
+  const [system, setSystem] = useState("");
+  const [safety, setSafety] = useState(false);
   const [concernId, setConcernId] = useState("");
   const [converting, setConverting] = useState<JobFinding | null>(null);
   const [recTitle, setRecTitle] = useState("");
