@@ -13,6 +13,7 @@ import { JobDiagnosis } from "@/components/admin/JobDiagnosis";
 import { JobFindings } from "@/components/admin/JobFindings";
 import { JobConcerns } from "@/components/admin/JobConcerns";
 import { JobCloseout } from "@/components/admin/JobCloseout";
+import { EMPTY_LINE, type Line, QuoteBuilder } from "@/components/admin/QuoteBuilder";
 import { QuotePreview } from "@/components/admin/QuotePreview";
 import { VehicleKnowledge } from "@/components/admin/VehicleKnowledge";
 
@@ -55,36 +56,8 @@ export const Route = createFileRoute("/_authenticated/admin/requests/$id")({
   component: JobWorkspace,
 });
 
-/**
- * One editable quote line. The parts fields are supplier-agnostic on purpose so a
- * future parts-catalog integration can fill them in without a UI rewrite.
- * `internalUnitCost` is admin-only and never shown to the customer.
- */
-type Line = {
-  itemType: "labor" | "part" | "fee" | "discount";
-  description: string;
-  quantity: string;
-  unitPrice: string;
-  groupLabel: string;
-  partBrand: string;
-  partNumber: string;
-  supplier: string;
-  internalUnitCost: string;
-  recommendationId: string | null;
-};
+/** Quote line shape lives with the builder so both stay in sync. */
 
-const EMPTY_LINE: Line = {
-  itemType: "labor",
-  description: "",
-  quantity: "1",
-  unitPrice: "0",
-  groupLabel: "",
-  partBrand: "",
-  partNumber: "",
-  supplier: "",
-  internalUnitCost: "",
-  recommendationId: null,
-};
 
 type TabKey = "overview" | "ai" | "diagnosis" | "findings" | "quote" | "messages" | "history";
 
