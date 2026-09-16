@@ -131,8 +131,8 @@ export async function askRepara(input: {
     .join("\n\n");
 
   try {
-    const result = await runJsonCompletion({ system: SYSTEM, prompt, maxOutputTokens: 700 });
-    const json = parseJsonObject(result.raw);
+    const result = await runJsonCompletion({ system: SYSTEM, user: prompt, maxOutputTokens: 700 });
+    const json = parseJsonObject(result.text);
     const followUp = json['follow_up'] as { question?: string; options?: string[] } | null | undefined;
 
     return {
