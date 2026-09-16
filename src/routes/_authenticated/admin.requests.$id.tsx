@@ -775,7 +775,17 @@ function JobWorkspace() {
                       authorized sources — they are never generated.
                     </p>
                   </Panel>
-                  <JobDiagnosis requestId={id} entries={diagnostics} />
+                  {/* Structured diagnostic activity stays fully available, just
+                      not competing with the workbench above. */}
+                  <details className="surface-panel p-4">
+                    <summary className="cursor-pointer text-xs tracking-[0.18em] text-muted-foreground uppercase">
+                      Diagnostic activity &amp; log
+                      {diagnostics.length ? ` (${diagnostics.length})` : ""}
+                    </summary>
+                    <div className="pt-4">
+                      <JobDiagnosis requestId={id} entries={diagnostics} />
+                    </div>
+                  </details>
                 </>
               )}
             </div>
