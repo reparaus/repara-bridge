@@ -1827,6 +1827,18 @@ function Confirmation({
           </div>
         </div>
 
+        {/* No account was needed to get here. Offering one now is optional, and
+            a request is only linked to an account when the contact details match. */}
+        <div className="surface-panel mt-6 p-5 text-left">
+          <p className="text-sm font-medium">Save this vehicle to your garage</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Create your free Repara account to track this repair, maintenance and service history.
+          </p>
+          <Button asChild variant="secondary" className="mt-3 h-12 w-full">
+            <Link to="/signin">Create account</Link>
+          </Button>
+        </div>
+
         <div className="mt-8 space-y-3">
           <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
             <Link to="/">{t("quote.confirm.backHome")}</Link>
