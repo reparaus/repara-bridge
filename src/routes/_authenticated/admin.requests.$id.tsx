@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Bot, Check, Copy, Eye, Loader2, Mail, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Bot, Check, Copy, Eye, Loader2, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { CopyValue } from "@/components/admin/CopyValue";
@@ -13,16 +13,15 @@ import { JobDiagnosis } from "@/components/admin/JobDiagnosis";
 import { JobFindings } from "@/components/admin/JobFindings";
 import { JobConcerns } from "@/components/admin/JobConcerns";
 import { JobCloseout } from "@/components/admin/JobCloseout";
+import { EMPTY_LINE, type Line, QuoteBuilder } from "@/components/admin/QuoteBuilder";
 import { QuotePreview } from "@/components/admin/QuotePreview";
 import { VehicleKnowledge } from "@/components/admin/VehicleKnowledge";
 
-import { Field } from "@/components/common/Field";
 import { LoadingState } from "@/components/common/LoadingState";
 import { formatCurrency, PriceSummary } from "@/components/common/PriceSummary";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   getRequestDetail,
@@ -55,36 +54,7 @@ export const Route = createFileRoute("/_authenticated/admin/requests/$id")({
   component: JobWorkspace,
 });
 
-/**
- * One editable quote line. The parts fields are supplier-agnostic on purpose so a
- * future parts-catalog integration can fill them in without a UI rewrite.
- * `internalUnitCost` is admin-only and never shown to the customer.
- */
-type Line = {
-  itemType: "labor" | "part" | "fee" | "discount";
-  description: string;
-  quantity: string;
-  unitPrice: string;
-  groupLabel: string;
-  partBrand: string;
-  partNumber: string;
-  supplier: string;
-  internalUnitCost: string;
-  recommendationId: string | null;
-};
-
-const EMPTY_LINE: Line = {
-  itemType: "labor",
-  description: "",
-  quantity: "1",
-  unitPrice: "0",
-  groupLabel: "",
-  partBrand: "",
-  partNumber: "",
-  supplier: "",
-  internalUnitCost: "",
-  recommendationId: null,
-};
+/** Quote line shape lives with the builder so both stay in sync. */
 
 type TabKey = "overview" | "ai" | "diagnosis" | "findings" | "quote" | "messages" | "history";
 
@@ -122,7 +92,6 @@ function JobWorkspace() {
   const [tax, setTax] = useState("0");
   const [publicToken, setPublicToken] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [partsOpen, setPartsOpen] = useState<number | null>(null);
 
   const detail = query.data?.found ? query.data : null;
 
@@ -139,19 +108,19 @@ function JobWorkspace() {
     if (items.length)
       setLines(
         items.map((i) => ({
-          itemType: i['item_type'] as Line["itemType"],
-          description: String(i['description'] ?? ""),
-          quantity: String(i['quantity'] ?? 0),
-          unitPrice: String(i['unit_price'] ?? 0),
-          groupLabel: String(i['group_label'] ?? ""),
-          partBrand: String(i['part_brand'] ?? ""),
-          partNumber: String(i['part_number'] ?? ""),
-          supplier: String(i['supplier'] ?? ""),
+          itemType: i["item_type"] as Line["itemType"],
+          description: String(i["description"] ?? ""),
+          quantity: String(i["quantity"] ?? 0),
+          unitPrice: String(i["unit_price"] ?? 0),
+          groupLabel: String(i["group_label"] ?? ""),
+          partBrand: String(i["part_brand"] ?? ""),
+          partNumber: String(i["part_number"] ?? ""),
+          supplier: String(i["supplier"] ?? ""),
           internalUnitCost:
-            i['internal_unit_cost'] === null || i['internal_unit_cost'] === undefined
+            i["internal_unit_cost"] === null || i["internal_unit_cost"] === undefined
               ? ""
-              : String(i['internal_unit_cost']),
-          recommendationId: i['recommendation_id'] ? String(i['recommendation_id']) : null,
+              : String(i["internal_unit_cost"]),
+          recommendationId: i["recommendation_id"] ? String(i["recommendation_id"]) : null,
         })),
       );
   }, [detail?.quotes]);
@@ -252,7 +221,8 @@ function JobWorkspace() {
   const customer = request.customers ?? {};
   const vehicle = request.vehicles ?? {};
   const vehicleTitle =
-    [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ") || "Vehicle";
+    [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ") ||
+    "Vehicle";
   const mileage = request.mileage || vehicle.mileage;
   const concern = String(request.details?.description ?? request.notes ?? "");
 
@@ -287,21 +257,21 @@ function JobWorkspace() {
   const requestedServices: { key: string; label: string; detail: string }[] = Array.isArray(
     request.services,
   )
-    ? (request.services as { key: string; label?: string; answers?: Record<string, unknown> }[]).map(
-        (s) => ({
-          key: s.key,
-          label: s.label ?? serviceLabel(s.key),
-          detail: Object.entries(s.answers ?? {})
-            .flatMap(([qid, v]) =>
-              Array.isArray(v)
-                ? v.map((x) => answerLabel(s.key, qid, String(x)))
-                : String(v ?? "").trim()
-                  ? [answerLabel(s.key, qid, String(v).trim())]
-                  : [],
-            )
-            .join(" · "),
-        }),
-      )
+    ? (
+        request.services as { key: string; label?: string; answers?: Record<string, unknown> }[]
+      ).map((s) => ({
+        key: s.key,
+        label: s.label ?? serviceLabel(s.key),
+        detail: Object.entries(s.answers ?? {})
+          .flatMap(([qid, v]) =>
+            Array.isArray(v)
+              ? v.map((x) => answerLabel(s.key, qid, String(x)))
+              : String(v ?? "").trim()
+                ? [answerLabel(s.key, qid, String(v).trim())]
+                : [],
+          )
+          .join(" · "),
+      }))
     : [];
 
   const quoteUrl = publicToken
@@ -420,7 +390,9 @@ function JobWorkspace() {
                 <option value={request.status}>{statusLabel(request.status)}</option>
               )}
             </select>
-            {statusMutation.isPending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+            {statusMutation.isPending && (
+              <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            )}
           </div>
         </div>
       </header>
@@ -484,7 +456,9 @@ function JobWorkspace() {
                               <summary className="cursor-pointer text-[11px] text-muted-foreground">
                                 View original{originalLanguage === "es" ? " (Spanish)" : ""}
                               </summary>
-                              <p className="pt-1 text-xs text-muted-foreground">{c.customerReport}</p>
+                              <p className="pt-1 text-xs text-muted-foreground">
+                                {c.customerReport}
+                              </p>
                             </details>
                           )}
                           {c.mergedReports.length > 0 && (
@@ -540,7 +514,9 @@ function JobWorkspace() {
                 </div>
               </details>
               <Panel title="Customer concern">
-                <p className="text-sm whitespace-pre-line">{concern || "No description provided."}</p>
+                <p className="text-sm whitespace-pre-line">
+                  {concern || "No description provided."}
+                </p>
                 {intake.summary && (
                   <div className="pt-2">
                     <p className="text-xs text-muted-foreground">
@@ -555,7 +531,9 @@ function JobWorkspace() {
                       <li key={s.key}>
                         <span className="text-sm font-medium">{s.label}</span>
                         {s.detail && (
-                          <span className="mt-0.5 block text-xs text-muted-foreground">{s.detail}</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {s.detail}
+                          </span>
                         )}
                       </li>
                     ))}
@@ -770,8 +748,8 @@ function JobWorkspace() {
                   <Panel title="Repair information">
                     <VehicleKnowledge requestId={id} initial={knowledge} variant="diagnosis" />
                     <p className="text-[11px] text-muted-foreground">
-                      Available now: bulletins &amp; recalls from public sources. Procedures, wiring,
-                      specs, fluids and reset/relearn become available here as Repara adds
+                      Available now: bulletins &amp; recalls from public sources. Procedures,
+                      wiring, specs, fluids and reset/relearn become available here as Repara adds
                       authorized sources — they are never generated.
                     </p>
                   </Panel>
@@ -852,174 +830,18 @@ function JobWorkspace() {
                 </div>
               )}
 
-              <div className="surface-panel space-y-4 p-4">
-                {lines.map((line, i) => (
-                  <div key={i} className="space-y-2 rounded-lg border border-border p-3">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={line.itemType}
-                        aria-label="Line type"
-                        onChange={(e) =>
-                          setLines((ls) =>
-                            ls.map((l, x) =>
-                              x === i ? { ...l, itemType: e.target.value as Line["itemType"] } : l,
-                            ),
-                          )
-                        }
-                        className="h-11 flex-1 rounded-md border border-input bg-surface px-2 text-xs"
-                      >
-                        <option value="labor">Labor</option>
-                        <option value="part">Part</option>
-                        <option value="fee">Fee</option>
-                        <option value="discount">Discount</option>
-                      </select>
-                      <p className="text-sm font-medium tabular-nums">
-                        {formatCurrency(numeric[i]?.total ?? 0)}
-                      </p>
-                      <button
-                        type="button"
-                        aria-label="Remove line"
-                        className="p-2 text-muted-foreground hover:text-destructive"
-                        onClick={() => setLines((ls) => ls.filter((_, x) => x !== i))}
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
-
-                    <Input
-                      value={line.description}
-                      placeholder="Description"
-                      className="h-11"
-                      onChange={(e) =>
-                        setLines((ls) =>
-                          ls.map((l, x) => (x === i ? { ...l, description: e.target.value } : l)),
-                        )
-                      }
-                    />
-                    <div className="grid grid-cols-3 gap-2">
-                      <Input
-                        value={line.quantity}
-                        inputMode="decimal"
-                        aria-label="Quantity"
-                        placeholder="Qty"
-                        className="h-11"
-                        onChange={(e) =>
-                          setLines((ls) =>
-                            ls.map((l, x) => (x === i ? { ...l, quantity: e.target.value } : l)),
-                          )
-                        }
-                      />
-                      <Input
-                        value={line.unitPrice}
-                        inputMode="decimal"
-                        aria-label="Customer price"
-                        placeholder="Price"
-                        className="h-11"
-                        onChange={(e) =>
-                          setLines((ls) =>
-                            ls.map((l, x) => (x === i ? { ...l, unitPrice: e.target.value } : l)),
-                          )
-                        }
-                      />
-                      <Input
-                        value={line.internalUnitCost}
-                        inputMode="decimal"
-                        aria-label="Internal unit cost"
-                        placeholder="Cost"
-                        className="h-11"
-                        onChange={(e) =>
-                          setLines((ls) =>
-                            ls.map((l, x) =>
-                              x === i ? { ...l, internalUnitCost: e.target.value } : l,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      className="text-xs text-muted-foreground underline underline-offset-4"
-                      onClick={() => setPartsOpen(partsOpen === i ? null : i)}
-                    >
-                      {partsOpen === i ? "Hide service & part details" : "Service & part details"}
-                    </button>
-                    {partsOpen === i && (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <Input
-                          value={line.groupLabel}
-                          placeholder="Service card (e.g. Front brakes)"
-                          className="h-11"
-                          onChange={(e) =>
-                            setLines((ls) =>
-                              ls.map((l, x) => (x === i ? { ...l, groupLabel: e.target.value } : l)),
-                            )
-                          }
-                        />
-                        <Input
-                          value={line.partBrand}
-                          placeholder="Part brand"
-                          className="h-11"
-                          onChange={(e) =>
-                            setLines((ls) =>
-                              ls.map((l, x) => (x === i ? { ...l, partBrand: e.target.value } : l)),
-                            )
-                          }
-                        />
-                        <Input
-                          value={line.partNumber}
-                          placeholder="Part number"
-                          className="h-11"
-                          onChange={(e) =>
-                            setLines((ls) =>
-                              ls.map((l, x) => (x === i ? { ...l, partNumber: e.target.value } : l)),
-                            )
-                          }
-                        />
-                        <Input
-                          value={line.supplier}
-                          placeholder="Supplier"
-                          className="h-11"
-                          onChange={(e) =>
-                            setLines((ls) =>
-                              ls.map((l, x) => (x === i ? { ...l, supplier: e.target.value } : l)),
-                            )
-                          }
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-11 border-border bg-transparent"
-                  onClick={() => setLines((ls) => [...ls, { ...EMPTY_LINE }])}
-                >
-                  <Plus className="mr-2 size-4" /> Add line item
-                </Button>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Tax" optional htmlFor="tax" hint="Enter a flat tax amount if applicable.">
-                  <Input
-                    id="tax"
-                    inputMode="decimal"
-                    value={tax}
-                    onChange={(e) => setTax(e.target.value)}
-                    className="h-11"
-                  />
-                </Field>
-                <Field label="Expiration date" optional htmlFor="exp">
-                  <Input
-                    id="exp"
-                    type="date"
-                    value={expirationDate}
-                    onChange={(e) => setExpirationDate(e.target.value)}
-                    className="h-11"
-                  />
-                </Field>
-              </div>
+              <QuoteBuilder
+                lines={lines}
+                setLines={setLines}
+                tax={tax}
+                setTax={setTax}
+                expirationDate={expirationDate}
+                setExpirationDate={setExpirationDate}
+                customerNotes={customerNotes}
+                setCustomerNotes={setCustomerNotes}
+                internalNotes={internalNotes}
+                setInternalNotes={setInternalNotes}
+              />
 
               <PriceSummary
                 parts={parts}
@@ -1033,23 +855,12 @@ function JobWorkspace() {
                 Internal only — part cost {formatCurrency(internalCost)} · estimated margin{" "}
                 {formatCurrency(margin)}
               </p>
-
-              <Field label="Customer-facing notes" optional htmlFor="cnotes">
-                <Textarea
-                  id="cnotes"
-                  rows={3}
-                  value={customerNotes}
-                  onChange={(e) => setCustomerNotes(e.target.value)}
-                />
-              </Field>
-              <Field label="Technician notes (internal)" optional htmlFor="inotes">
-                <Textarea
-                  id="inotes"
-                  rows={3}
-                  value={internalNotes}
-                  onChange={(e) => setInternalNotes(e.target.value)}
-                />
-              </Field>
+              {quoteRow?.status === "sent" && (
+                <p className="text-xs font-medium">🟡 Awaiting customer approval</p>
+              )}
+              {quoteRow?.status === "accepted" && (
+                <p className="text-xs font-medium">🟢 Approved by the customer</p>
+              )}
 
               <div className="flex flex-wrap gap-3">
                 <Button
@@ -1067,8 +878,13 @@ function JobWorkspace() {
                 >
                   SAVE DRAFT
                 </Button>
-                <Button className="h-12" disabled={save.isPending} onClick={() => save.mutate(true)}>
-                  {save.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} SEND QUOTE
+                <Button
+                  className="h-12"
+                  disabled={save.isPending}
+                  onClick={() => save.mutate(true)}
+                >
+                  {save.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} SEND
+                  QUOTE
                 </Button>
                 {quoteUrl && quoteRow?.status !== "draft" && (
                   <Button
@@ -1085,7 +901,10 @@ function JobWorkspace() {
               </div>
 
               <Panel title="Approval status">
-                <Row label="Quote status" value={quoteRow ? statusLabel(String(quoteRow.status)) : "Not created"} />
+                <Row
+                  label="Quote status"
+                  value={quoteRow ? statusLabel(String(quoteRow.status)) : "Not created"}
+                />
                 <Row
                   label="Sent"
                   value={quoteRow?.sent_at ? new Date(quoteRow.sent_at).toLocaleString() : "—"}

@@ -300,8 +300,7 @@ export function JobFindings({
     return [...map.entries()];
   })();
 
-  const concernTitle = (id: string | null) =>
-    concerns.find((c) => c.id === id)?.title ?? "";
+  const concernTitle = (id: string | null) => concerns.find((c) => c.id === id)?.title ?? "";
 
   return (
     <section className="space-y-4">
@@ -427,96 +426,101 @@ export function JobFindings({
           <h3 className="text-xs tracking-[0.18em] text-muted-foreground uppercase">{groupName}</h3>
           <ul className="space-y-3">
             {groupFindings.map((finding) => (
-              <li key={finding.id} className="space-y-2 border-b border-border pb-3 last:border-0 last:pb-0">
+              <li
+                key={finding.id}
+                className="space-y-2 border-b border-border pb-3 last:border-0 last:pb-0"
+              >
                 <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span aria-hidden className="text-[11px]">
-                      {CONDITION_DOT[finding.condition] ?? "⚪"}
-                    </span>
-                    {finding.safetyConcern && (
-                      <span className="text-[10px] font-medium text-destructive">
-                        Safety — technician marked
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span aria-hidden className="text-[11px]">
+                        {CONDITION_DOT[finding.condition] ?? "⚪"}
                       </span>
-                    )}
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${PRIORITY_STYLE[finding.severity] ?? ""}`}
-                    >
-                      {finding.severity}
-                    </span>
-                    {finding.aiDrafted && !finding.approvedAt && (
-                      <span className="text-[10px] text-warning">AI-drafted — confirm it</span>
-                    )}
-                    {finding.approvedAt && (
-                      <span className="text-[10px] text-muted-foreground">Confirmed</span>
-                    )}
-                    {finding.confidence === "suspected" && (
-                      <span className="text-[10px] text-muted-foreground">suspected</span>
-                    )}
-                    {concernTitle(finding.concernId) && (
-                      <span className="text-[10px] text-muted-foreground">
-                        {concernTitle(finding.concernId)}
+                      {finding.safetyConcern && (
+                        <span className="text-[10px] font-medium text-destructive">
+                          Safety — technician marked
+                        </span>
+                      )}
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${PRIORITY_STYLE[finding.severity] ?? ""}`}
+                      >
+                        {finding.severity}
                       </span>
+                      {finding.aiDrafted && !finding.approvedAt && (
+                        <span className="text-[10px] text-warning">AI-drafted — confirm it</span>
+                      )}
+                      {finding.approvedAt && (
+                        <span className="text-[10px] text-muted-foreground">Confirmed</span>
+                      )}
+                      {finding.confidence === "suspected" && (
+                        <span className="text-[10px] text-muted-foreground">suspected</span>
+                      )}
+                      {concernTitle(finding.concernId) && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {concernTitle(finding.concernId)}
+                        </span>
+                      )}
+                      {finding.status === "converted" && (
+                        <span className="text-[10px] text-muted-foreground">→ recommended</span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm font-medium break-words">{finding.title}</p>
+                    {finding.measurement && <p className="text-xs">{finding.measurement}</p>}
+                    {finding.detail && (
+                      <p className="text-xs whitespace-pre-line text-muted-foreground">
+                        {finding.detail}
+                      </p>
                     )}
-                    {finding.status === "converted" && (
-                      <span className="text-[10px] text-muted-foreground">→ recommended</span>
+                    {finding.evidence && (
+                      <p className="text-xs text-muted-foreground">Evidence: {finding.evidence}</p>
                     )}
                   </div>
-                  <p className="mt-1 text-sm font-medium break-words">{finding.title}</p>
-                  {finding.measurement && <p className="text-xs">{finding.measurement}</p>}
-                  {finding.detail && (
-                    <p className="text-xs whitespace-pre-line text-muted-foreground">{finding.detail}</p>
-                  )}
-                  {finding.evidence && (
-                    <p className="text-xs text-muted-foreground">Evidence: {finding.evidence}</p>
-                  )}
+                  <button
+                    type="button"
+                    aria-label="Remove finding"
+                    className="p-2 text-muted-foreground hover:text-destructive"
+                    onClick={() => delFinding.mutate(finding.id)}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  aria-label="Remove finding"
-                  className="p-2 text-muted-foreground hover:text-destructive"
-                  onClick={() => delFinding.mutate(finding.id)}
-                >
-                  <Trash2 className="size-4" />
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {finding.aiDrafted && !finding.approvedAt && (
+                <div className="flex flex-wrap gap-2">
+                  {finding.aiDrafted && !finding.approvedAt && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-10 text-xs"
+                      disabled={confirmFinding.isPending}
+                      onClick={() => confirmFinding.mutate(finding)}
+                    >
+                      <Check className="mr-1.5 size-3.5" /> Confirm
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     size="sm"
-                    className="h-10 text-xs"
-                    disabled={confirmFinding.isPending}
-                    onClick={() => confirmFinding.mutate(finding)}
+                    variant="outline"
+                    className="h-10 border-border bg-transparent text-xs"
+                    onClick={() => startConvert(finding)}
                   >
-                    <Check className="mr-1.5 size-3.5" /> Confirm
+                    Make recommendation <ArrowRight className="ml-1.5 size-3.5" />
                   </Button>
-                )}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-10 border-border bg-transparent text-xs"
-                  onClick={() => startConvert(finding)}
-                >
-                  Make recommendation <ArrowRight className="ml-1.5 size-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-10 border-border bg-transparent text-xs"
-                  disabled={draftRecs.isPending}
-                  onClick={() => draftRecs.mutate(finding)}
-                >
-                  {draftRecs.isPending ? (
-                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="mr-1.5 size-3.5" />
-                  )}
-                  Draft with AI
-                </Button>
-              </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-10 border-border bg-transparent text-xs"
+                    disabled={draftRecs.isPending}
+                    onClick={() => draftRecs.mutate(finding)}
+                  >
+                    {draftRecs.isPending ? (
+                      <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-1.5 size-3.5" />
+                    )}
+                    Draft with AI
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
@@ -529,7 +533,6 @@ export function JobFindings({
           too.
         </p>
       )}
-
 
       {converting && (
         <div className="surface-panel space-y-3 p-4">
@@ -638,7 +641,10 @@ export function JobFindings({
         )}
         <ul className="space-y-3">
           {recommendations.map((rec) => (
-            <li key={rec.id} className="space-y-2 border-b border-border pb-3 last:border-0 last:pb-0">
+            <li
+              key={rec.id}
+              className="space-y-2 border-b border-border pb-3 last:border-0 last:pb-0"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
