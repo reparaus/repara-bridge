@@ -27,7 +27,45 @@ import {
  * until a human approves them.
  */
 
-const SEVERITIES: JobFinding["severity"][] = ["urgent", "recommended", "monitor", "informational"];
+type Condition = "good" | "monitor" | "needs_attention" | "not_inspected";
+
+/**
+ * Inspection sheet conditions. Deliberately separate from severity: a red
+ * condition is not by itself a safety or emergency claim.
+ */
+const CONDITIONS: { value: Condition; label: string; dot: string }[] = [
+  { value: "good", label: "Good", dot: "🟢" },
+  { value: "monitor", label: "Monitor", dot: "🟡" },
+  { value: "needs_attention", label: "Needs attention", dot: "🔴" },
+  { value: "not_inspected", label: "Not inspected", dot: "⚪" },
+];
+
+const CONDITION_DOT: Record<string, string> = Object.fromEntries(
+  CONDITIONS.map((c) => [c.value, c.dot]),
+);
+
+const SYSTEMS = [
+  "Brakes",
+  "Electrical",
+  "Tires & Wheels",
+  "Engine",
+  "Transmission & Driveline",
+  "Suspension & Steering",
+  "HVAC",
+  "Cooling",
+  "Fuel",
+  "Exhaust",
+  "Body & Interior",
+  "Fluids & Maintenance",
+  "Other",
+];
+
+/** Condition drives severity; safety is only ever opted into by a human. */
+function severityFor(condition: Condition, safety: boolean): JobFinding["severity"] {
+  if (condition === "good" || condition === "not_inspected") return "informational";
+  if (condition === "monitor") return "monitor";
+  return safety ? "urgent" : "recommended";
+}
 
 const PRIORITY_STYLE: Record<string, string> = {
   urgent: "border-destructive/40 bg-destructive/10 text-destructive",
