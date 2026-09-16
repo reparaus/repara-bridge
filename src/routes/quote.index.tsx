@@ -88,9 +88,15 @@ export const Route = createFileRoute("/quote/")({
    * cards to preselect a category in the existing flow. Unknown values are
    * ignored so the flow behaves exactly as before.
    */
-  validateSearch: (search: Record<string, unknown>): { service?: ServiceKey } => {
+  validateSearch: (search: Record<string, unknown>): { service?: ServiceKey; v?: string } => {
     const raw = typeof search.service === "string" ? search.service : undefined;
-    return raw && isServiceKey(raw) ? { service: raw } : {};
+    // `?v=<vehicleId>` comes from a signed-in driver's Garage: the vehicle and
+    // contact details are prefilled so nothing is entered twice.
+    const vehicle = typeof search.v === "string" ? search.v : undefined;
+    return {
+      ...(raw && isServiceKey(raw) ? { service: raw } : {}),
+      ...(vehicle ? { v: vehicle } : {}),
+    };
   },
   head: () => ({
     meta: [
