@@ -130,22 +130,45 @@ export function JobFindings({
         data: {
           id: requestId,
           concernId: concernId || null,
-          title: title.trim(),
+          // The cleaned-up title is used when Repara AI produced one; otherwise
+          // the technician's own words become the title verbatim.
+          title: (title.trim() || note.trim()).slice(0, 200),
           measurement: measurement.trim(),
-          detail: detail.trim(),
-          severity,
+          detail: title.trim() ? note.trim() : "",
+          severity: severityFor(condition, safety),
+          condition,
+          system: system || "",
+          safetyConcern: safety,
           source: "technician",
-        },
+        } as never,
       }),
     onSuccess: () => {
+      setNote("");
       setTitle("");
       setMeasurement("");
-      setDetail("");
+      setSafety(false);
       toast.success("Finding saved.");
       void refresh();
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Could not save this finding."),
+  });
+
+  /** Tidies the note into a sheet entry. Nothing is saved until Save finding. */
+  const cleanup = useMutation({
+    mutationFn: () => cleanupNote({ data: { id: requestId, note: note.trim(), condition } }),
+    onSuccess: (res) => {
+      const d = res.draft;
+      if (d.title) setTitle(d.title);
+      if (d.detail) setNote(d.detail);
+      if (d.measurement && !measurement.trim()) setMeasurement(d.measurement);
+      if (d.system && !system) setSystem(d.system);
+      if (d.suggestedCondition) setCondition(d.suggestedCondition as Condition);
+      if (d.safetySupported) setSafety(true);
+      toast.success("Cleaned up — review it, then save.");
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Repara AI could not clean this up."),
   });
 
   /** Confirms an AI-drafted finding — the human gate before it counts as fact. */
