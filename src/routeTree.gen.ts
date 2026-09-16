@@ -23,6 +23,9 @@ import { Route as ReplyTokenRouteImport } from './routes/reply.$token'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as DriverGarageIndexRouteImport } from './routes/_driver/garage.index'
 import { Route as DriverGarageAddRouteImport } from './routes/_driver/garage.add'
+import { Route as DriverGarageAskRouteImport } from './routes/_driver/garage.ask'
+import { Route as DriverGarageProfileRouteImport } from './routes/_driver/garage.profile'
+import { Route as DriverGarageServiceRouteImport } from './routes/_driver/garage.service'
 import { Route as AuthenticatedAdminRequestsIndexRouteImport } from './routes/_authenticated/admin.requests.index'
 import { Route as AuthenticatedAdminRequestsIdRouteImport } from './routes/_authenticated/admin.requests.$id'
 import { Route as DriverGarageVehicleIdRouteImport } from './routes/_driver/garage.vehicle.$id'
@@ -95,6 +98,21 @@ const DriverGarageAddRoute = DriverGarageAddRouteImport.update({
   path: '/garage/add',
   getParentRoute: () => DriverRouteRoute,
 } as any)
+const DriverGarageAskRoute = DriverGarageAskRouteImport.update({
+  id: '/garage/ask',
+  path: '/garage/ask',
+  getParentRoute: () => DriverRouteRoute,
+} as any)
+const DriverGarageProfileRoute = DriverGarageProfileRouteImport.update({
+  id: '/garage/profile',
+  path: '/garage/profile',
+  getParentRoute: () => DriverRouteRoute,
+} as any)
+const DriverGarageServiceRoute = DriverGarageServiceRouteImport.update({
+  id: '/garage/service',
+  path: '/garage/service',
+  getParentRoute: () => DriverRouteRoute,
+} as any)
 const AuthenticatedAdminRequestsIndexRoute =
   AuthenticatedAdminRequestsIndexRouteImport.update({
     id: '/admin/requests/',
@@ -124,6 +142,9 @@ export interface FileRoutesByFullPath {
   '/reply/$token': typeof ReplyTokenRoute
   '/quote/': typeof QuoteIndexRoute
   '/garage/add': typeof DriverGarageAddRoute
+  '/garage/ask': typeof DriverGarageAskRoute
+  '/garage/profile': typeof DriverGarageProfileRoute
+  '/garage/service': typeof DriverGarageServiceRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/garage/': typeof DriverGarageIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
@@ -141,6 +162,9 @@ export interface FileRoutesByTo {
   '/reply/$token': typeof ReplyTokenRoute
   '/quote': typeof QuoteIndexRoute
   '/garage/add': typeof DriverGarageAddRoute
+  '/garage/ask': typeof DriverGarageAskRoute
+  '/garage/profile': typeof DriverGarageProfileRoute
+  '/garage/service': typeof DriverGarageServiceRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/garage': typeof DriverGarageIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
@@ -161,6 +185,9 @@ export interface FileRoutesById {
   '/reply/$token': typeof ReplyTokenRoute
   '/quote/': typeof QuoteIndexRoute
   '/_driver/garage/add': typeof DriverGarageAddRoute
+  '/_driver/garage/ask': typeof DriverGarageAskRoute
+  '/_driver/garage/profile': typeof DriverGarageProfileRoute
+  '/_driver/garage/service': typeof DriverGarageServiceRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_driver/garage/': typeof DriverGarageIndexRoute
   '/_authenticated/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
@@ -180,6 +207,9 @@ export interface FileRouteTypes {
     | '/reply/$token'
     | '/quote/'
     | '/garage/add'
+    | '/garage/ask'
+    | '/garage/profile'
+    | '/garage/service'
     | '/admin/'
     | '/garage/'
     | '/admin/requests/$id'
@@ -197,6 +227,9 @@ export interface FileRouteTypes {
     | '/reply/$token'
     | '/quote'
     | '/garage/add'
+    | '/garage/ask'
+    | '/garage/profile'
+    | '/garage/service'
     | '/admin'
     | '/garage'
     | '/admin/requests/$id'
@@ -216,6 +249,9 @@ export interface FileRouteTypes {
     | '/reply/$token'
     | '/quote/'
     | '/_driver/garage/add'
+    | '/_driver/garage/ask'
+    | '/_driver/garage/profile'
+    | '/_driver/garage/service'
     | '/_authenticated/admin/'
     | '/_driver/garage/'
     | '/_authenticated/admin/requests/$id'
@@ -337,6 +373,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DriverGarageAddRouteImport
       parentRoute: typeof DriverRouteRoute
     }
+    '/_driver/garage/ask': {
+      id: '/_driver/garage/ask'
+      path: '/garage/ask'
+      fullPath: '/garage/ask'
+      preLoaderRoute: typeof DriverGarageAskRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
+    '/_driver/garage/profile': {
+      id: '/_driver/garage/profile'
+      path: '/garage/profile'
+      fullPath: '/garage/profile'
+      preLoaderRoute: typeof DriverGarageProfileRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
+    '/_driver/garage/service': {
+      id: '/_driver/garage/service'
+      path: '/garage/service'
+      fullPath: '/garage/service'
+      preLoaderRoute: typeof DriverGarageServiceRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
     '/_authenticated/admin/requests/': {
       id: '/_authenticated/admin/requests/'
       path: '/admin/requests'
@@ -378,12 +435,18 @@ const AuthenticatedRouteRouteWithChildren =
 
 interface DriverRouteRouteChildren {
   DriverGarageAddRoute: typeof DriverGarageAddRoute
+  DriverGarageAskRoute: typeof DriverGarageAskRoute
+  DriverGarageProfileRoute: typeof DriverGarageProfileRoute
+  DriverGarageServiceRoute: typeof DriverGarageServiceRoute
   DriverGarageIndexRoute: typeof DriverGarageIndexRoute
   DriverGarageVehicleIdRoute: typeof DriverGarageVehicleIdRoute
 }
 
 const DriverRouteRouteChildren: DriverRouteRouteChildren = {
   DriverGarageAddRoute: DriverGarageAddRoute,
+  DriverGarageAskRoute: DriverGarageAskRoute,
+  DriverGarageProfileRoute: DriverGarageProfileRoute,
+  DriverGarageServiceRoute: DriverGarageServiceRoute,
   DriverGarageIndexRoute: DriverGarageIndexRoute,
   DriverGarageVehicleIdRoute: DriverGarageVehicleIdRoute,
 }
