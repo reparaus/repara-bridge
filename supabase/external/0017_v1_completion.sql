@@ -12,6 +12,8 @@ alter table public.job_outcomes
 comment on column public.job_outcomes.customer_summary is
   'Human-approved customer-facing summary of completed work. Never an internal technician note.';
 
+alter type public.history_provenance add value if not exists 'provider_verified';
+
 alter table public.service_records
   add column if not exists provider_id uuid references public.service_providers(id) on delete set null;
 
