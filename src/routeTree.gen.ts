@@ -33,6 +33,7 @@ import { Route as DriverProviderOnboardingRouteImport } from './routes/_driver/p
 import { Route as DriverProviderProfileRouteImport } from './routes/_driver/provider.profile'
 import { Route as DriverProviderRequestsRouteImport } from './routes/_driver/provider.requests'
 import { Route as DriverProviderSettingsRouteImport } from './routes/_driver/provider.settings'
+import { Route as AuthenticatedAdminProvidersIndexRouteImport } from './routes/_authenticated/admin.providers.index'
 import { Route as AuthenticatedAdminRequestsIndexRouteImport } from './routes/_authenticated/admin.requests.index'
 import { Route as AuthenticatedAdminRequestsIdRouteImport } from './routes/_authenticated/admin.requests.$id'
 import { Route as DriverGarageVehicleIdRouteImport } from './routes/_driver/garage.vehicle.$id'
@@ -156,6 +157,12 @@ const DriverProviderSettingsRoute = DriverProviderSettingsRouteImport.update({
   path: '/provider/settings',
   getParentRoute: () => DriverRouteRoute,
 } as any)
+const AuthenticatedAdminProvidersIndexRoute =
+  AuthenticatedAdminProvidersIndexRouteImport.update({
+    id: '/admin/providers/',
+    path: '/admin/providers/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAdminRequestsIndexRoute =
   AuthenticatedAdminRequestsIndexRouteImport.update({
     id: '/admin/requests/',
@@ -199,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/provider/': typeof DriverProviderIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
   '/garage/vehicle/$id': typeof DriverGarageVehicleIdRoute
+  '/admin/providers/': typeof AuthenticatedAdminProvidersIndexRoute
   '/admin/requests/': typeof AuthenticatedAdminRequestsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -226,6 +234,7 @@ export interface FileRoutesByTo {
   '/provider': typeof DriverProviderIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
   '/garage/vehicle/$id': typeof DriverGarageVehicleIdRoute
+  '/admin/providers': typeof AuthenticatedAdminProvidersIndexRoute
   '/admin/requests': typeof AuthenticatedAdminRequestsIndexRoute
 }
 export interface FileRoutesById {
@@ -256,6 +265,7 @@ export interface FileRoutesById {
   '/_driver/provider/': typeof DriverProviderIndexRoute
   '/_authenticated/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
   '/_driver/garage/vehicle/$id': typeof DriverGarageVehicleIdRoute
+  '/_authenticated/admin/providers/': typeof AuthenticatedAdminProvidersIndexRoute
   '/_authenticated/admin/requests/': typeof AuthenticatedAdminRequestsIndexRoute
 }
 export interface FileRouteTypes {
@@ -285,6 +295,7 @@ export interface FileRouteTypes {
     | '/provider/'
     | '/admin/requests/$id'
     | '/garage/vehicle/$id'
+    | '/admin/providers/'
     | '/admin/requests/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -312,6 +323,7 @@ export interface FileRouteTypes {
     | '/provider'
     | '/admin/requests/$id'
     | '/garage/vehicle/$id'
+    | '/admin/providers'
     | '/admin/requests'
   id:
     | '__root__'
@@ -341,6 +353,7 @@ export interface FileRouteTypes {
     | '/_driver/provider/'
     | '/_authenticated/admin/requests/$id'
     | '/_driver/garage/vehicle/$id'
+    | '/_authenticated/admin/providers/'
     | '/_authenticated/admin/requests/'
   fileRoutesById: FileRoutesById
 }
@@ -529,6 +542,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DriverProviderSettingsRouteImport
       parentRoute: typeof DriverRouteRoute
     }
+    '/_authenticated/admin/providers/': {
+      id: '/_authenticated/admin/providers/'
+      path: '/admin/providers'
+      fullPath: '/admin/providers/'
+      preLoaderRoute: typeof AuthenticatedAdminProvidersIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/requests/': {
       id: '/_authenticated/admin/requests/'
       path: '/admin/requests'
@@ -556,12 +576,14 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedAdminRequestsIdRoute: typeof AuthenticatedAdminRequestsIdRoute
+  AuthenticatedAdminProvidersIndexRoute: typeof AuthenticatedAdminProvidersIndexRoute
   AuthenticatedAdminRequestsIndexRoute: typeof AuthenticatedAdminRequestsIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedAdminRequestsIdRoute: AuthenticatedAdminRequestsIdRoute,
+  AuthenticatedAdminProvidersIndexRoute: AuthenticatedAdminProvidersIndexRoute,
   AuthenticatedAdminRequestsIndexRoute: AuthenticatedAdminRequestsIndexRoute,
 }
 
