@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Car, MessageCircle, User, Wrench } from "lucide-react";
+import { Bell, Car, MessageCircle, User, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Logo } from "@/components/brand/Logo";
@@ -26,9 +26,10 @@ export function GarageShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-20 border-b border-border/50 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-5">
-          <Link to="/garage" aria-label="Repara Garage">
-            <Logo className="h-7 w-auto" />
-          </Link>
+          <Link to="/garage" aria-label="Repara Garage"><Logo className="h-7 w-auto" /></Link>
+          <Button asChild size="icon" variant="ghost" className="ml-auto mr-2 sm:ml-0" aria-label="Notifications">
+            <Link to="/garage/notifications"><Bell className="size-5" /></Link>
+          </Button>
           <nav className="hidden gap-1 sm:flex">
             {TABS.map((tab) => (
               <Link

@@ -42,6 +42,18 @@ export const getGarageHome = createServerFn({ method: "POST" })
       db,
       vehicles.map((v) => v.id),
     );
+    let notifications: Array<Record<string, unknown>> = [];
+    try {
+      const { data } = await db
+        .from("notifications")
+        .select("id, event_type, title, body, vehicle_id, service_request_id, provider_id, read_at, created_at")
+        .eq("user_id", context.userId)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      notifications = (data ?? []) as Array<Record<string, unknown>>;
+    } catch {
+      // Migration 0017 may not be applied yet; Garage remains usable.
+    }
     return {
       profile: {
         firstName: profile['first_name'] ?? null,
@@ -53,7 +65,30 @@ export const getGarageHome = createServerFn({ method: "POST" })
       },
       vehicles,
       recentActivity,
+      notifications: notifications.map((row) => ({
+        id: String(row['id']),
+        type: String(row['event_type']),
+        title: String(row['title']),
+        body: row['body'] ? String(row['body']) : null,
+        vehicleId: row['vehicle_id'] ? String(row['vehicle_id']) : null,
+        requestId: row['service_request_id'] ? String(row['service_request_id']) : null,
+        readAt: row['read_at'] ? String(row['read_at']) : null,
+        createdAt: String(row['created_at']),
+      })),
     };
+  });
+
+export const markNotificationRead = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("id", data.id)
+      .eq("user_id", context.userId);
+    if (error) throw new Error("Could not update this notification.");
+    return { ok: true };
   });
 
 /**
@@ -86,7 +121,7 @@ export const findProviders = createServerFn({ method: "POST" })
       .eq("is_demo", false)
       .limit(20);
 
-    if (error) return { providers: [] as Provider[] };
+    if (error) return { providers: [] as Provider[], error: "Provider availability could not be loaded." };
 
     const providers = ((rows ?? []) as Record<string, any>[]).filter((p) => {
       if (!data.categoryKey) return true;
@@ -107,7 +142,7 @@ export const findProviders = createServerFn({ method: "POST" })
       specialties: (p['specialties'] ?? []) as string[],
     }));
 
-    return { providers: mapped };
+    return { providers: mapped, error: null as string | null };
   });
 
 export const saveProfile = createServerFn({ method: "POST" })

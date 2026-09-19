@@ -54,7 +54,7 @@ function ServiceArea() {
   const vehicles = data?.vehicles ?? [];
   const activeVehicle = vehicles.find((v) => v.id === vehicleId) ?? vehicles.find((v) => v.isPrimary) ?? vehicles[0];
 
-  const { data: providerData } = useQuery({
+  const providerQuery = useQuery({
     queryKey: ["providers", selected],
     queryFn: () => lookupProviders({ data: { categoryKey: selected ?? undefined } }),
     enabled: Boolean(selected),
@@ -224,9 +224,14 @@ function ServiceArea() {
       {/* Providers: only real, active providers ever appear here. */}
       <section className="mt-8">
         <SectionTitle>Who does the work</SectionTitle>
-        {providerData?.providers.length ? (
+        {providerQuery.data?.error ? (
+          <div className="border border-border bg-card p-5">
+            <p className="text-sm text-foreground">Provider availability could not be loaded.</p>
+            <Button variant="outline" className="mt-3" onClick={() => void providerQuery.refetch()}>Try again</Button>
+          </div>
+        ) : providerQuery.data?.providers.length ? (
           <div className="space-y-3">
-            {providerData.providers.map((provider) => (
+            {providerQuery.data.providers.map((provider) => (
               <Link
                 key={provider.id}
                 to="/providers/$id"
