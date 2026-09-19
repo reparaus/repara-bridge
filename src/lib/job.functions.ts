@@ -811,6 +811,24 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
         /* status enum extension (0010) not applied yet */
       }
       await logActivity(client, data.id, "job_closed", "Job closed with repair outcome", context.userId);
+
+      // Completed repair work becomes Repara-verified vehicle history so the
+      // driver never uploads anything. Only closed jobs with a recorded repair.
+      try {
+        const { syncJobToServiceHistory } = await import("@/lib/job/history-sync.server");
+        const result = await syncJobToServiceHistory(data.id);
+        if (result.created) {
+          await logActivity(
+            client,
+            data.id,
+            "history_recorded",
+            "Completed work added to the vehicle's service history",
+            context.userId,
+          );
+        }
+      } catch (error) {
+        console.error("[job] history sync failed", (error as Error).message);
+      }
     } else {
       await logActivity(client, data.id, "outcome_updated", "Repair outcome updated", context.userId);
     }
