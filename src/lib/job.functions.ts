@@ -155,7 +155,7 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => idSchema.parse(data))
   .handler(async ({ data, context }) => {
-    await assertRecordJobAccess(context, "job_diagnostics", data.entryId);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
 
     const diagnostics: JobDiagnostic[] = (
@@ -353,7 +353,7 @@ export const syncJobKnowledge = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => idSchema.extend({ force: z.boolean().optional() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertRecordJobAccess(context, "job_findings", data.findingId);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const { listJobKnowledge, matchKnowledgeToJob, upsertKnowledge } = await import(
       "@/lib/knowledge/knowledge.server"
@@ -485,7 +485,7 @@ export const addDiagnosticEntry = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertRecordJobAccess(context, "job_recommendations", data.recommendationId);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const { data: row, error } = await client
       .from("job_diagnostics")
@@ -515,7 +515,7 @@ export const deleteDiagnosticEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ entryId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    await assertRecordJobAccess(context, "job_diagnostics", data.entryId);
     const client = context.supabase as unknown as Client;
     await client.from("job_diagnostics").delete().eq("id", data.entryId);
     return { ok: true };
@@ -549,7 +549,7 @@ export const saveFinding = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    await assertRecordJobAccess(context, "job_findings", data.findingId);
     const client = context.supabase as unknown as Client;
     const payload: Record<string, unknown> = {
       title: data.title,
@@ -605,7 +605,7 @@ export const deleteFinding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ findingId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    await assertRecordJobAccess(context, "job_recommendations", data.recommendationId);
     const client = context.supabase as unknown as Client;
     await client.from("job_findings").delete().eq("id", data.findingId);
     return { ok: true };
