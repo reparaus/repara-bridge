@@ -38,7 +38,7 @@ create table if not exists public.notifications (
   unique (user_id, event_key)
 );
 
-grant select, update on public.notifications to authenticated;
+grant select, update, delete on public.notifications to authenticated;
 grant all on public.notifications to service_role;
 alter table public.notifications enable row level security;
 
@@ -55,6 +55,10 @@ drop policy if exists "users mark own notifications read" on public.notification
 create policy "users mark own notifications read" on public.notifications
   for update to authenticated using (user_id = auth.uid())
   with check (user_id = auth.uid());
+
+drop policy if exists "users delete own notifications" on public.notifications;
+create policy "users delete own notifications" on public.notifications
+  for delete to authenticated using (user_id = auth.uid());
 
 -- ------------------------------------------------------ provider job scope
 create or replace function public.is_request_provider(_request_id uuid)
@@ -78,6 +82,15 @@ grant execute on function public.is_request_provider(uuid) to authenticated;
 drop policy if exists "provider owner reads assigned requests" on public.service_requests;
 create policy "provider owner reads assigned requests" on public.service_requests
   for select to authenticated using (public.is_request_provider(id));
+
+-- Providers need to move their assigned work through the existing job-close
+-- path. The application still validates every transition and RLS confines the
+-- row to the provider profile owned by the signed-in identity.
+grant update on public.service_requests to authenticated;
+drop policy if exists "provider owner updates assigned requests" on public.service_requests;
+create policy "provider owner updates assigned requests" on public.service_requests
+  for update to authenticated using (public.is_request_provider(id))
+  with check (public.is_request_provider(id));
 
 do $$
 declare t text;
