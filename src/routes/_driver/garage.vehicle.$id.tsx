@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { VehicleVisual } from "@/components/garage/VehicleVisual";
 import { GarageShell, SectionTitle, StatusDot } from "@/components/garage/GarageShell";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -225,19 +226,45 @@ function VehicleProfile() {
         {/* ---------------------------------------------------- maintenance */}
         <TabsContent value="maintenance" className="mt-6">
           {data.maintenance.length ? (
-            <div className="space-y-3">
-              {data.maintenance.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between rounded-2xl border border-border/70 bg-card p-4"
-                >
-                  <span className="text-sm text-foreground">{item.label}</span>
-                  <span className="text-sm text-muted-foreground">
-                    {MAINTENANCE_LABEL[item.status] ?? item.status}
-                    {item.dueMileage ? ` · ≈${item.dueMileage.toLocaleString()} mi` : ""}
-                  </span>
-                </div>
-              ))}
+            <div className="space-y-6">
+              {(
+                [
+                  { key: "upcoming", label: "Upcoming" },
+                  { key: "completed", label: "Completed" },
+                  { key: "unknown", label: "Unknown" },
+                ] as const
+              ).map((group) => {
+                const items = data.maintenance.filter((item) => {
+                  if (group.key === "completed") return item.status === "up_to_date";
+                  if (group.key === "unknown") return item.status === "unknown";
+                  return item.status !== "up_to_date" && item.status !== "unknown";
+                });
+                if (!items.length) return null;
+                return (
+                  <div key={group.key}>
+                    <SectionTitle>{group.label}</SectionTitle>
+                    <div className="space-y-3">
+                      {items.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between rounded-2xl border border-border/70 bg-card p-4"
+                        >
+                          <span className="text-sm text-foreground">{item.label}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {MAINTENANCE_LABEL[item.status] ?? item.status}
+                            {item.dueMileage ? ` · ≈${item.dueMileage.toLocaleString()} mi` : ""}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {group.key === "unknown" && (
+                      <p className="mt-2 px-1 text-xs text-muted-foreground">
+                        "Unknown" means Repara doesn't have the record — not that the service wasn't done.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-2xl border border-border/70 bg-card p-5 text-sm text-muted-foreground">
