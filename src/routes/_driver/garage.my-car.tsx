@@ -1,17 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect } from "react";
 
 import { GarageShell } from "@/components/garage/GarageShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getGarageHome } from "@/lib/garage.functions";
 
-/**
- * "My Car" tab. Opens the driver's primary vehicle directly, so the tab bar can
- * stay static while the destination follows whichever vehicle is primary.
- */
 export const Route = createFileRoute("/_driver/garage/my-car")({
   head: () => ({
     meta: [
@@ -29,20 +24,21 @@ export const Route = createFileRoute("/_driver/garage/my-car")({
 
 function MyCar() {
   const load = useServerFn(getGarageHome);
-  const navigate = useNavigate();
-  const { data, isLoading } = useQuery({ queryKey: ["garage-home"], queryFn: () => load({}) });
-
-  const primary = data?.vehicles.find((v) => v.isPrimary) ?? data?.vehicles[0];
-
-  useEffect(() => {
-    if (primary) void navigate({ to: "/garage/vehicle/$id", params: { id: primary.id }, replace: true });
-  }, [navigate, primary]);
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["garage-home"], queryFn: () => load({}) });
+  const vehicles = data?.vehicles ?? [];
 
   return (
     <GarageShell>
-      {isLoading || primary ? (
-        <Skeleton className="h-48 w-full rounded-3xl" />
-      ) : (
+      <h1 className="text-2xl font-semibold text-foreground">My Car</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Choose a vehicle to see its maintenance, history, and details.</p>
+      {isLoading ? <Skeleton className="mt-6 h-48 w-full rounded-lg" /> : null}
+      {isError ? (
+        <div className="mt-6 border border-border bg-card p-5 text-center">
+          <p className="text-sm text-foreground">Your vehicles could not be loaded.</p>
+          <Button variant="outline" className="mt-3" onClick={() => void refetch()}>Try again</Button>
+        </div>
+      ) : null}
+      {!isLoading && !isError && !vehicles.length ? (
         <div className="rounded-3xl border border-border/60 bg-card p-6 text-center">
           <p className="text-base font-medium text-foreground">No vehicle yet.</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -52,7 +48,17 @@ function MyCar() {
             <Link to="/garage/add">Add my car</Link>
           </Button>
         </div>
-      )}
+      ) : null}
+      <div className="mt-6 space-y-3">
+        {vehicles.map((vehicle) => (
+          <Link key={vehicle.id} to="/garage/vehicle/$id" params={{ id: vehicle.id }} className="block border border-border bg-card p-5 transition-colors hover:border-primary">
+            <div className="flex items-center justify-between gap-3">
+              <div><p className="font-semibold text-foreground">{vehicle.nickname ?? vehicle.label}</p><p className="mt-1 text-sm text-muted-foreground">{vehicle.currentMileage ? `${vehicle.currentMileage.toLocaleString()} mi` : "Mileage unknown"}</p></div>
+              {vehicle.isPrimary ? <span className="text-xs text-primary">Primary</span> : null}
+            </div>
+          </Link>
+        ))}
+      </div>
     </GarageShell>
   );
 }

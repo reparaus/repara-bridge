@@ -1,0 +1,13 @@
+{
+  "name": "Repara",
+  "short_name": "Repara",
+  "description": "Your car, understood.",
+  "start_url": "/garage",
+  "display": "standalone",
+  "background_color": "#121315",
+  "theme_color": "#121315",
+  "icons": [
+    { "src": "/favicon.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/favicon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

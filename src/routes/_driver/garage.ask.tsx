@@ -56,6 +56,7 @@ function AskRepara() {
   const [suggestService, setSuggestService] = useState(false);
   /** Service categories Repara recognised in the driver's own words. */
   const [categories, setCategories] = useState<string[]>([]);
+  const [failedMessage, setFailedMessage] = useState<string | null>(null);
 
   const vehicles = data?.vehicles ?? [];
   const vehicleId = selected ?? vehicles.find((v) => v.isPrimary)?.id ?? vehicles[0]?.id ?? null;
@@ -68,6 +69,7 @@ function AskRepara() {
     const nextTurns: Turn[] = [...turns, { role: "driver", content: clean }];
     setTurns(nextTurns);
     setBusy(true);
+    setFailedMessage(null);
     try {
       const answer = await ask({
         data: { vehicleId, message: clean, turns: nextTurns.slice(-8), language: lang },
@@ -77,6 +79,7 @@ function AskRepara() {
       setSuggestService(answer.suggestService);
       setCategories(answer.categories ?? []);
     } catch (error) {
+      setFailedMessage(clean);
       toast.error((error as Error).message || "Repara couldn't answer just now.");
     } finally {
       setBusy(false);
@@ -152,6 +155,12 @@ function AskRepara() {
           </div>
         ))}
         {busy && <p className="text-sm text-muted-foreground">Repara is thinking…</p>}
+        {failedMessage && !busy ? (
+          <div className="border border-border bg-card p-4">
+            <p className="text-sm text-foreground">Repara couldn't answer just now.</p>
+            <Button variant="outline" className="mt-3" onClick={() => void send(failedMessage)}>Try again</Button>
+          </div>
+        ) : null}
       </div>
 
       {followUp && (
