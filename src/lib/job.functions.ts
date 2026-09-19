@@ -549,7 +549,7 @@ export const saveFinding = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertRecordJobAccess(context, "job_findings", data.findingId);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const payload: Record<string, unknown> = {
       title: data.title,
@@ -605,7 +605,7 @@ export const deleteFinding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ findingId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertRecordJobAccess(context, "job_recommendations", data.recommendationId);
+    await assertRecordJobAccess(context, "job_findings", data.findingId);
     const client = context.supabase as unknown as Client;
     await client.from("job_findings").delete().eq("id", data.findingId);
     return { ok: true };
@@ -636,7 +636,7 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    await assertRecordJobAccess(context, "job_recommendations", data.recommendationId);
     const client = context.supabase as unknown as Client;
 
     // Approving a recommendation is the human gate before anything AI-drafted
