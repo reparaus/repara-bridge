@@ -85,14 +85,32 @@ drop policy if exists "provider owner reads assigned requests" on public.service
 create policy "provider owner reads assigned requests" on public.service_requests
   for select to authenticated using (public.is_request_provider(id));
 
--- Providers need to move their assigned work through the existing job-close
--- path. The application still validates every transition and RLS confines the
--- row to the provider profile owned by the signed-in identity.
+-- Authenticated staff already have the table-level grant from the base schema.
+-- Providers close only their assigned job through this narrow function rather
+-- than receiving broad UPDATE access to every request column.
 grant update on public.service_requests to authenticated;
 drop policy if exists "provider owner updates assigned requests" on public.service_requests;
-create policy "provider owner updates assigned requests" on public.service_requests
-  for update to authenticated using (public.is_request_provider(id))
-  with check (public.is_request_provider(id));
+
+create or replace function public.close_assigned_request(_request_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_request_provider(_request_id) then
+    return false;
+  end if;
+
+  update public.service_requests
+     set status = 'closed', updated_at = now()
+   where id = _request_id;
+  return found;
+end;
+$$;
+
+revoke all on function public.close_assigned_request(uuid) from public, anon;
+grant execute on function public.close_assigned_request(uuid) to authenticated;
 
 do $$
 declare t text;

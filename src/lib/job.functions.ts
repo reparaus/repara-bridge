@@ -40,14 +40,15 @@ async function assertVerifiedAdmin(context: { supabase: unknown; userId: string;
 async function assertJobAccess(
   context: { supabase: unknown; userId: string; claims: unknown },
   requestId: string,
-) {
+): Promise<"admin" | "provider"> {
   try {
     await assertVerifiedAdmin(context);
-    return;
+    return "admin";
   } catch {
     const client = context.supabase as unknown as Client;
     const { data } = await client.rpc("is_request_provider", { _request_id: requestId });
     if (!data) throw new Error("You do not have access to this job.");
+    return "provider";
   }
 }
 
@@ -485,7 +486,7 @@ export const addDiagnosticEntry = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    const access = await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const { data: row, error } = await client
       .from("job_diagnostics")
@@ -842,11 +843,18 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
 
     // Closing a job is an explicit human action, never an AI decision.
     if (data.close) {
-      const { error: closeError } = await client
-        .from("service_requests")
-        .update({ status: "closed" })
-        .eq("id", data.id);
-      if (closeError) throw new Error("The outcome was saved, but the job could not be closed.");
+      if (access === "admin") {
+        const { error: closeError } = await client
+          .from("service_requests")
+          .update({ status: "closed" })
+          .eq("id", data.id);
+        if (closeError) throw new Error("The outcome was saved, but the job could not be closed.");
+      } else {
+        const { data: closed } = await client.rpc("close_assigned_request", {
+          _request_id: data.id,
+        });
+        if (!closed) throw new Error("The outcome was saved, but the job could not be closed.");
+      }
       await logActivity(client, data.id, "job_closed", "Job closed with repair outcome", context.userId);
 
     } else {
