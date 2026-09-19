@@ -67,7 +67,7 @@ export async function syncJobToServiceHistory(requestId: string) {
       .from("service_records")
       .select("id")
       .eq("service_request_id", requestId)
-      .in("source", ["repara_verified", "provider_verified"])
+      .eq("source", "repara_verified")
       .maybeSingle();
     if (stale?.id) await db.from("service_records").delete().eq("id", stale.id);
     return { created: false as const };
@@ -92,8 +92,6 @@ export async function syncJobToServiceHistory(requestId: string) {
   const providerName = String(provider?.['business_name'] ?? "").trim() || "Repara";
   const summary = String(outcomeRow?.['customer_summary'] ?? "").trim() || completedWork.join("; ") || repairPerformed;
   const closingMileage = Number(outcomeRow?.['completion_mileage'] ?? request.mileage) || null;
-  const providerFulfilled = Boolean(request.provider_id);
-  const source = providerFulfilled ? "provider_verified" : "repara_verified";
 
   const payload: Row = {
     customer_id: request.customer_id ?? null,
@@ -108,7 +106,7 @@ export async function syncJobToServiceHistory(requestId: string) {
     service_date: serviceDate,
     provider_name: providerName,
     provider_type: provider?.['provider_kind'] ?? "repara_shop",
-    source,
+    source: "repara_verified",
     verification_status: "verified",
     summary: summary.slice(0, 1000),
     labor_total: accepted ? (quoteRow?.['labor_total'] ?? 0) : 0,
@@ -122,7 +120,7 @@ export async function syncJobToServiceHistory(requestId: string) {
     .from("service_records")
     .select("id")
     .eq("service_request_id", requestId)
-    .in("source", ["repara_verified", "provider_verified"])
+    .eq("source", "repara_verified")
     .maybeSingle();
 
   let recordId = existing?.id ? String(existing.id) : null;

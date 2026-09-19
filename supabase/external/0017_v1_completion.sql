@@ -15,18 +15,12 @@ comment on column public.job_outcomes.customer_summary is
 alter table public.service_records
   add column if not exists provider_id uuid references public.service_providers(id) on delete set null;
 
-alter type public.history_provenance add value if not exists 'provider_verified';
-
 create index if not exists idx_service_records_provider
   on public.service_records(provider_id);
 
 create unique index if not exists uq_mileage_history_vehicle_source_reference
   on public.vehicle_mileage_history(vehicle_id, source, source_reference)
   where source_reference is not null;
-
-create unique index if not exists uq_service_records_provider_job
-  on public.service_records(service_request_id)
-  where source = 'provider_verified';
 
 -- ---------------------------------------------------------- notifications
 create table if not exists public.notifications (
@@ -89,7 +83,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'job_diagnostics','job_findings','job_recommendations','job_ai_messages',
+    'job_diagnostics','job_findings','job_recommendations',
     'job_activity','job_outcomes','job_concerns'
   ] loop
     execute format('drop policy if exists "provider owner reads %1$s" on public.%1$I', t);
@@ -133,3 +127,12 @@ create policy "provider reads assigned communications" on public.request_communi
 drop policy if exists "provider writes assigned communications" on public.request_communications;
 create policy "provider writes assigned communications" on public.request_communications
   for insert to authenticated with check (public.is_request_provider(service_request_id));
+
+drop policy if exists "provider owner reads attributed service records" on public.service_records;
+create policy "provider owner reads attributed service records" on public.service_records
+  for select to authenticated using (
+    exists (
+      select 1 from public.service_providers p
+       where p.id = provider_id and p.owner_user_id = auth.uid()
+    )
+  );

@@ -840,11 +840,11 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
 
     // Closing a job is an explicit human action, never an AI decision.
     if (data.close) {
-      try {
-        await client.from("service_requests").update({ status: "closed" }).eq("id", data.id);
-      } catch {
-        /* status enum extension (0010) not applied yet */
-      }
+      const { error: closeError } = await client
+        .from("service_requests")
+        .update({ status: "closed" })
+        .eq("id", data.id);
+      if (closeError) throw new Error("The outcome was saved, but the job could not be closed.");
       await logActivity(client, data.id, "job_closed", "Job closed with repair outcome", context.userId);
 
     } else {
@@ -943,7 +943,11 @@ export const saveConcern = createServerFn({ method: "POST" })
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await client.from("job_concerns").update(payload).eq("id", data.concernId);
+    const { error } = await client
+      .from("job_concerns")
+      .update(payload)
+      .eq("id", data.concernId)
+      .eq("service_request_id", data.id);
     if (error) throw new Error("Could not save this concern.");
 
     if (data.approveStory)
@@ -970,7 +974,7 @@ export const addConcern = createServerFn({ method: "POST" })
     idSchema.extend({ title: z.string().trim().min(2).max(160) }).parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const { data: row, error } = await client
       .from("job_concerns")
