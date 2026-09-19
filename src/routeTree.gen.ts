@@ -26,6 +26,7 @@ import { Route as DriverGarageIndexRouteImport } from './routes/_driver/garage.i
 import { Route as DriverGarageAddRouteImport } from './routes/_driver/garage.add'
 import { Route as DriverGarageAskRouteImport } from './routes/_driver/garage.ask'
 import { Route as DriverGarageMyCarRouteImport } from './routes/_driver/garage.my-car'
+import { Route as DriverGarageNotificationsRouteImport } from './routes/_driver/garage.notifications'
 import { Route as DriverGarageProfileRouteImport } from './routes/_driver/garage.profile'
 import { Route as DriverGarageServiceRouteImport } from './routes/_driver/garage.service'
 import { Route as DriverProviderIndexRouteImport } from './routes/_driver/provider.index'
@@ -121,6 +122,12 @@ const DriverGarageMyCarRoute = DriverGarageMyCarRouteImport.update({
   path: '/garage/my-car',
   getParentRoute: () => DriverRouteRoute,
 } as any)
+const DriverGarageNotificationsRoute =
+  DriverGarageNotificationsRouteImport.update({
+    id: '/garage/notifications',
+    path: '/garage/notifications',
+    getParentRoute: () => DriverRouteRoute,
+  } as any)
 const DriverGarageProfileRoute = DriverGarageProfileRouteImport.update({
   id: '/garage/profile',
   path: '/garage/profile',
@@ -195,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/garage/add': typeof DriverGarageAddRoute
   '/garage/ask': typeof DriverGarageAskRoute
   '/garage/my-car': typeof DriverGarageMyCarRoute
+  '/garage/notifications': typeof DriverGarageNotificationsRoute
   '/garage/profile': typeof DriverGarageProfileRoute
   '/garage/service': typeof DriverGarageServiceRoute
   '/provider/onboarding': typeof DriverProviderOnboardingRoute
@@ -223,6 +231,7 @@ export interface FileRoutesByTo {
   '/garage/add': typeof DriverGarageAddRoute
   '/garage/ask': typeof DriverGarageAskRoute
   '/garage/my-car': typeof DriverGarageMyCarRoute
+  '/garage/notifications': typeof DriverGarageNotificationsRoute
   '/garage/profile': typeof DriverGarageProfileRoute
   '/garage/service': typeof DriverGarageServiceRoute
   '/provider/onboarding': typeof DriverProviderOnboardingRoute
@@ -254,6 +263,7 @@ export interface FileRoutesById {
   '/_driver/garage/add': typeof DriverGarageAddRoute
   '/_driver/garage/ask': typeof DriverGarageAskRoute
   '/_driver/garage/my-car': typeof DriverGarageMyCarRoute
+  '/_driver/garage/notifications': typeof DriverGarageNotificationsRoute
   '/_driver/garage/profile': typeof DriverGarageProfileRoute
   '/_driver/garage/service': typeof DriverGarageServiceRoute
   '/_driver/provider/onboarding': typeof DriverProviderOnboardingRoute
@@ -284,6 +294,7 @@ export interface FileRouteTypes {
     | '/garage/add'
     | '/garage/ask'
     | '/garage/my-car'
+    | '/garage/notifications'
     | '/garage/profile'
     | '/garage/service'
     | '/provider/onboarding'
@@ -312,6 +323,7 @@ export interface FileRouteTypes {
     | '/garage/add'
     | '/garage/ask'
     | '/garage/my-car'
+    | '/garage/notifications'
     | '/garage/profile'
     | '/garage/service'
     | '/provider/onboarding'
@@ -342,6 +354,7 @@ export interface FileRouteTypes {
     | '/_driver/garage/add'
     | '/_driver/garage/ask'
     | '/_driver/garage/my-car'
+    | '/_driver/garage/notifications'
     | '/_driver/garage/profile'
     | '/_driver/garage/service'
     | '/_driver/provider/onboarding'
@@ -493,6 +506,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DriverGarageMyCarRouteImport
       parentRoute: typeof DriverRouteRoute
     }
+    '/_driver/garage/notifications': {
+      id: '/_driver/garage/notifications'
+      path: '/garage/notifications'
+      fullPath: '/garage/notifications'
+      preLoaderRoute: typeof DriverGarageNotificationsRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
     '/_driver/garage/profile': {
       id: '/_driver/garage/profile'
       path: '/garage/profile'
@@ -594,6 +614,7 @@ interface DriverRouteRouteChildren {
   DriverGarageAddRoute: typeof DriverGarageAddRoute
   DriverGarageAskRoute: typeof DriverGarageAskRoute
   DriverGarageMyCarRoute: typeof DriverGarageMyCarRoute
+  DriverGarageNotificationsRoute: typeof DriverGarageNotificationsRoute
   DriverGarageProfileRoute: typeof DriverGarageProfileRoute
   DriverGarageServiceRoute: typeof DriverGarageServiceRoute
   DriverProviderOnboardingRoute: typeof DriverProviderOnboardingRoute
@@ -609,6 +630,7 @@ const DriverRouteRouteChildren: DriverRouteRouteChildren = {
   DriverGarageAddRoute: DriverGarageAddRoute,
   DriverGarageAskRoute: DriverGarageAskRoute,
   DriverGarageMyCarRoute: DriverGarageMyCarRoute,
+  DriverGarageNotificationsRoute: DriverGarageNotificationsRoute,
   DriverGarageProfileRoute: DriverGarageProfileRoute,
   DriverGarageServiceRoute: DriverGarageServiceRoute,
   DriverProviderOnboardingRoute: DriverProviderOnboardingRoute,

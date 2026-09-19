@@ -3,6 +3,7 @@ import { Bell, Car, MessageCircle, User, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Logo } from "@/components/brand/Logo";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
