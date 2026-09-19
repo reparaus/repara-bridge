@@ -80,6 +80,8 @@ function ServiceArea() {
       search: {
         ...(isServiceKey(serviceKey) ? { service: serviceKey } : {}),
         ...(activeVehicle ? { v: activeVehicle.id } : {}),
+        // The shared taxonomy key travels with the request (0015).
+        cat: categoryKey,
       },
     });
   }
