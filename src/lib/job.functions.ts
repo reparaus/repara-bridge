@@ -636,7 +636,7 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertRecordJobAccess(context, "job_recommendations", data.recommendationId);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
 
     // Approving a recommendation is the human gate before anything AI-drafted
@@ -718,7 +718,7 @@ export const deleteRecommendation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ recommendationId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    await assertRecordJobAccess(context, "job_recommendations", data.recommendationId);
     const client = context.supabase as unknown as Client;
     await client.from("job_recommendations").delete().eq("id", data.recommendationId);
     return { ok: true };
