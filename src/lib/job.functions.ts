@@ -486,7 +486,7 @@ export const addDiagnosticEntry = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    const access = await assertJobAccess(context, data.id);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const { data: row, error } = await client
       .from("job_diagnostics")
@@ -818,7 +818,7 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    const access = await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
 
     const payload = {
