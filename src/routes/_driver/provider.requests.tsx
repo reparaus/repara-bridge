@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_driver/provider/requests")({
       { property: "og:description", content: "Requests sent to you, with the vehicle details already attached." },
     ],
   }),
-  component: ProviderRequests;
+  component: ProviderRequests,
 });
 
 function ProviderRequests() {
