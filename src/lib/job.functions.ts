@@ -241,6 +241,8 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
       verification: string | null;
       technicianNotes: string | null;
       remainingRecommendations: string | null;
+      customerSummary: string | null;
+      completionMileage: number | null;
       completedAt: string | null;
     } | null = null;
     try {
@@ -259,6 +261,8 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
             verification: s(o['verification']),
             technicianNotes: s(o['technician_notes']),
             remainingRecommendations: s(o['remaining_recommendations']),
+            customerSummary: s(o['customer_summary']),
+            completionMileage: o['completion_mileage'] == null ? null : Number(o['completion_mileage']),
             completedAt: s(o['completed_at']),
           }
         : null;
@@ -777,6 +781,8 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
         verification: optionalText(1000),
         technicianNotes: optionalText(2000),
         remainingRecommendations: optionalText(2000),
+        customerSummary: optionalText(2000),
+        completionMileage: z.number().int().min(0).max(2_000_000).nullable().optional(),
         close: z.boolean().default(false),
       })
       .parse(data),
@@ -794,6 +800,8 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
       verification: data.verification || null,
       technician_notes: data.technicianNotes || null,
       remaining_recommendations: data.remainingRecommendations || null,
+      customer_summary: data.customerSummary || null,
+      completion_mileage: data.completionMileage ?? null,
       ...(data.close ? { completed_at: new Date().toISOString(), closed_by: context.userId } : {}),
       updated_at: new Date().toISOString(),
     };
@@ -812,8 +820,19 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
       }
       await logActivity(client, data.id, "job_closed", "Job closed with repair outcome", context.userId);
 
-      // Completed repair work becomes Repara-verified vehicle history so the
-      // driver never uploads anything. Only closed jobs with a recorded repair.
+    } else {
+      await logActivity(client, data.id, "outcome_updated", "Repair outcome updated", context.userId);
+    }
+
+    // Keep customer history aligned when a closed job is corrected. The helper
+    // independently verifies closed status and completed work.
+    try {
+      const { data: request } = await client
+        .from("service_requests")
+        .select("status")
+        .eq("id", data.id)
+        .maybeSingle();
+      if (data.close || request?.status === "closed") {
       try {
         const { syncJobToServiceHistory } = await import("@/lib/job/history-sync.server");
         const result = await syncJobToServiceHistory(data.id);
@@ -829,8 +848,9 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
       } catch (error) {
         console.error("[job] history sync failed", (error as Error).message);
       }
-    } else {
-      await logActivity(client, data.id, "outcome_updated", "Repair outcome updated", context.userId);
+      }
+    } catch {
+      /* history sync remains best-effort */
     }
     return { ok: true };
   });
