@@ -16,6 +16,7 @@ import {
   ensureProfile,
   getVehicleDetail,
   listGarage,
+  listRecentActivity,
   normalizeVin,
   recordMileage,
   removeVehicleFromGarage,
@@ -37,6 +38,10 @@ export const getGarageHome = createServerFn({ method: "POST" })
       email: (context.claims as Record<string, unknown>)['email'] as string | undefined,
     });
     const vehicles = await listGarage(db, context.userId);
+    const recentActivity = await listRecentActivity(
+      db,
+      vehicles.map((v) => v.id),
+    );
     return {
       profile: {
         firstName: profile['first_name'] ?? null,
@@ -47,6 +52,51 @@ export const getGarageHome = createServerFn({ method: "POST" })
         notificationPreferences: (profile['notification_preferences'] ?? {}) as Record<string, boolean>,
       },
       vehicles,
+      recentActivity,
+    };
+  });
+
+/**
+ * Providers eligible for a service category. Returns ONLY real, active,
+ * non-demo providers — today that list is usually empty, and the UI says so
+ * instead of inventing shops, ratings or availability.
+ */
+export const findProviders = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ categoryKey: z.string().max(60).optional() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as unknown as Db;
+    let query = db
+      .from("service_providers")
+      .select(
+        "id, business_name, provider_kind, description, city, region, offers_mobile, offers_in_shop, specialties, provider_services(category_key)",
+      )
+      .eq("status", "active")
+      .eq("is_demo", false)
+      .limit(20);
+
+    const { data: rows, error } = await query;
+    if (error) return { providers: [] as Record<string, unknown>[] };
+
+    const providers = ((rows ?? []) as Record<string, any>[]).filter((p) => {
+      if (!data.categoryKey) return true;
+      const keys = ((p['provider_services'] ?? []) as Record<string, any>[]).map((s) =>
+        String(s['category_key']),
+      );
+      return keys.includes(data.categoryKey);
+    });
+
+    return {
+      providers: providers.map((p) => ({
+        id: String(p['id']),
+        name: String(p['business_name']),
+        kind: String(p['provider_kind']),
+        description: p['description'] ? String(p['description']) : null,
+        location: [p['city'], p['region']].filter(Boolean).join(", ") || null,
+        offersMobile: Boolean(p['offers_mobile']),
+        offersInShop: Boolean(p['offers_in_shop']),
+        specialties: (p['specialties'] ?? []) as string[],
+      })),
     };
   });
 
