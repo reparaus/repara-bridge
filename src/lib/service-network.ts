@@ -120,3 +120,22 @@ export function groupedCategories(language: string) {
     })),
   }));
 }
+
+/**
+ * Bridge to the EXISTING service-request form. The intake flow keeps its own
+ * (deliberately smaller) service list, so anything outside it starts as "other"
+ * and the driver's own words carry the detail.
+ */
+const REQUEST_SERVICE_KEY: Record<string, string> = {
+  brakes: "brakes",
+  maintenance: "maintenance",
+  diagnostics: "diagnostics",
+  electrical: "diagnostics",
+  engine: "diagnostics",
+  transmission: "diagnostics",
+  ac: "diagnostics",
+};
+
+export function requestServiceKeyFor(categoryKey: string | null | undefined): string {
+  return (categoryKey && REQUEST_SERVICE_KEY[categoryKey]) || "other";
+}
