@@ -28,6 +28,8 @@ import { Route as DriverGarageMyCarRouteImport } from './routes/_driver/garage.m
 import { Route as DriverGarageProfileRouteImport } from './routes/_driver/garage.profile'
 import { Route as DriverGarageServiceRouteImport } from './routes/_driver/garage.service'
 import { Route as DriverProviderIndexRouteImport } from './routes/_driver/provider.index'
+import { Route as DriverProviderOnboardingRouteImport } from './routes/_driver/provider.onboarding'
+import { Route as DriverProviderProfileRouteImport } from './routes/_driver/provider.profile'
 import { Route as DriverProviderRequestsRouteImport } from './routes/_driver/provider.requests'
 import { Route as AuthenticatedAdminRequestsIndexRouteImport } from './routes/_authenticated/admin.requests.index'
 import { Route as AuthenticatedAdminRequestsIdRouteImport } from './routes/_authenticated/admin.requests.$id'
@@ -126,6 +128,17 @@ const DriverProviderIndexRoute = DriverProviderIndexRouteImport.update({
   path: '/provider/',
   getParentRoute: () => DriverRouteRoute,
 } as any)
+const DriverProviderOnboardingRoute =
+  DriverProviderOnboardingRouteImport.update({
+    id: '/provider/onboarding',
+    path: '/provider/onboarding',
+    getParentRoute: () => DriverRouteRoute,
+  } as any)
+const DriverProviderProfileRoute = DriverProviderProfileRouteImport.update({
+  id: '/provider/profile',
+  path: '/provider/profile',
+  getParentRoute: () => DriverRouteRoute,
+} as any)
 const DriverProviderRequestsRoute = DriverProviderRequestsRouteImport.update({
   id: '/provider/requests',
   path: '/provider/requests',
@@ -164,6 +177,8 @@ export interface FileRoutesByFullPath {
   '/garage/my-car': typeof DriverGarageMyCarRoute
   '/garage/profile': typeof DriverGarageProfileRoute
   '/garage/service': typeof DriverGarageServiceRoute
+  '/provider/onboarding': typeof DriverProviderOnboardingRoute
+  '/provider/profile': typeof DriverProviderProfileRoute
   '/provider/requests': typeof DriverProviderRequestsRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/garage/': typeof DriverGarageIndexRoute
@@ -187,6 +202,8 @@ export interface FileRoutesByTo {
   '/garage/my-car': typeof DriverGarageMyCarRoute
   '/garage/profile': typeof DriverGarageProfileRoute
   '/garage/service': typeof DriverGarageServiceRoute
+  '/provider/onboarding': typeof DriverProviderOnboardingRoute
+  '/provider/profile': typeof DriverProviderProfileRoute
   '/provider/requests': typeof DriverProviderRequestsRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/garage': typeof DriverGarageIndexRoute
@@ -213,6 +230,8 @@ export interface FileRoutesById {
   '/_driver/garage/my-car': typeof DriverGarageMyCarRoute
   '/_driver/garage/profile': typeof DriverGarageProfileRoute
   '/_driver/garage/service': typeof DriverGarageServiceRoute
+  '/_driver/provider/onboarding': typeof DriverProviderOnboardingRoute
+  '/_driver/provider/profile': typeof DriverProviderProfileRoute
   '/_driver/provider/requests': typeof DriverProviderRequestsRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_driver/garage/': typeof DriverGarageIndexRoute
@@ -238,6 +257,8 @@ export interface FileRouteTypes {
     | '/garage/my-car'
     | '/garage/profile'
     | '/garage/service'
+    | '/provider/onboarding'
+    | '/provider/profile'
     | '/provider/requests'
     | '/admin/'
     | '/garage/'
@@ -261,6 +282,8 @@ export interface FileRouteTypes {
     | '/garage/my-car'
     | '/garage/profile'
     | '/garage/service'
+    | '/provider/onboarding'
+    | '/provider/profile'
     | '/provider/requests'
     | '/admin'
     | '/garage'
@@ -286,6 +309,8 @@ export interface FileRouteTypes {
     | '/_driver/garage/my-car'
     | '/_driver/garage/profile'
     | '/_driver/garage/service'
+    | '/_driver/provider/onboarding'
+    | '/_driver/provider/profile'
     | '/_driver/provider/requests'
     | '/_authenticated/admin/'
     | '/_driver/garage/'
@@ -444,6 +469,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DriverProviderIndexRouteImport
       parentRoute: typeof DriverRouteRoute
     }
+    '/_driver/provider/onboarding': {
+      id: '/_driver/provider/onboarding'
+      path: '/provider/onboarding'
+      fullPath: '/provider/onboarding'
+      preLoaderRoute: typeof DriverProviderOnboardingRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
+    '/_driver/provider/profile': {
+      id: '/_driver/provider/profile'
+      path: '/provider/profile'
+      fullPath: '/provider/profile'
+      preLoaderRoute: typeof DriverProviderProfileRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
     '/_driver/provider/requests': {
       id: '/_driver/provider/requests'
       path: '/provider/requests'
@@ -496,6 +535,8 @@ interface DriverRouteRouteChildren {
   DriverGarageMyCarRoute: typeof DriverGarageMyCarRoute
   DriverGarageProfileRoute: typeof DriverGarageProfileRoute
   DriverGarageServiceRoute: typeof DriverGarageServiceRoute
+  DriverProviderOnboardingRoute: typeof DriverProviderOnboardingRoute
+  DriverProviderProfileRoute: typeof DriverProviderProfileRoute
   DriverProviderRequestsRoute: typeof DriverProviderRequestsRoute
   DriverGarageIndexRoute: typeof DriverGarageIndexRoute
   DriverProviderIndexRoute: typeof DriverProviderIndexRoute
@@ -508,6 +549,8 @@ const DriverRouteRouteChildren: DriverRouteRouteChildren = {
   DriverGarageMyCarRoute: DriverGarageMyCarRoute,
   DriverGarageProfileRoute: DriverGarageProfileRoute,
   DriverGarageServiceRoute: DriverGarageServiceRoute,
+  DriverProviderOnboardingRoute: DriverProviderOnboardingRoute,
+  DriverProviderProfileRoute: DriverProviderProfileRoute,
   DriverProviderRequestsRoute: DriverProviderRequestsRoute,
   DriverGarageIndexRoute: DriverGarageIndexRoute,
   DriverProviderIndexRoute: DriverProviderIndexRoute,
