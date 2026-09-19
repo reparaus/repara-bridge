@@ -15,9 +15,7 @@ comment on column public.job_outcomes.customer_summary is
 alter table public.service_records
   add column if not exists provider_id uuid references public.service_providers(id) on delete set null;
 
-alter table public.service_records drop constraint if exists service_records_source_check;
-alter table public.service_records add constraint service_records_source_check
-  check (source in ('repara_verified','provider_verified','owner_provided','imported','connected_vehicle','document'));
+alter type public.history_provenance add value if not exists 'provider_verified';
 
 create index if not exists idx_service_records_provider
   on public.service_records(provider_id);
