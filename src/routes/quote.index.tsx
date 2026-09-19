@@ -89,14 +89,22 @@ export const Route = createFileRoute("/quote/")({
    * cards to preselect a category in the existing flow. Unknown values are
    * ignored so the flow behaves exactly as before.
    */
-  validateSearch: (search: Record<string, unknown>): { service?: ServiceKey; v?: string } => {
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { service?: ServiceKey; v?: string; p?: string; cat?: string } => {
     const raw = typeof search.service === "string" ? search.service : undefined;
     // `?v=<vehicleId>` comes from a signed-in driver's Garage: the vehicle and
     // contact details are prefilled so nothing is entered twice.
     const vehicle = typeof search.v === "string" ? search.v : undefined;
+    // `?p=<providerId>` and `?cat=<categoryKey>` come from a provider profile or
+    // the Service area, so the request records who the driver chose.
+    const provider = typeof search.p === "string" ? search.p : undefined;
+    const category = typeof search.cat === "string" ? search.cat : undefined;
     return {
       ...(raw && isServiceKey(raw) ? { service: raw } : {}),
       ...(vehicle ? { v: vehicle } : {}),
+      ...(provider ? { p: provider } : {}),
+      ...(category ? { cat: category } : {}),
     };
   },
   head: () => ({
@@ -294,7 +302,12 @@ function QuoteFlow() {
   const discardPhotos = useServerFn(discardQuotePhotos);
   const askIntakeQuestions = useServerFn(requestIntakeQuestions);
   const summarizeIntakeAnswers = useServerFn(requestIntakeSummary);
-  const { service: preselectedService, v: garageVehicleId } = Route.useSearch();
+  const {
+    service: preselectedService,
+    v: garageVehicleId,
+    p: chosenProviderId,
+    cat: chosenCategoryKey,
+  } = Route.useSearch();
   const loadGaragePrefill = useServerFn(getServiceRequestPrefill);
 
   const [step, setStep] = useState(0);
@@ -434,6 +447,8 @@ function QuoteFlow() {
       },
       submissionId: form.submissionId || undefined,
       preferredLanguage: lang,
+      ...(chosenProviderId ? { providerId: chosenProviderId } : {}),
+      ...(chosenCategoryKey ? { serviceCategoryKey: chosenCategoryKey } : {}),
       intakeFollowups: collectFollowups(form),
       contact: {
         firstName: form.firstName,
