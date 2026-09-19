@@ -51,6 +51,17 @@ export const getMyProviderFn = createServerFn({ method: "POST" })
     return { provider: profile, completion: profileCompletion(profile), requests };
   });
 
+/** Used by the shared Job Workspace route guard; RLS and the RPC both verify ownership. */
+export const canAccessProviderRequestFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ requestId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { data: allowed } = await context.supabase.rpc("is_request_provider", {
+      _request_id: data.requestId,
+    });
+    return { allowed: Boolean(allowed) };
+  });
+
 export const saveMyProviderFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => providerInput.parse(data))

@@ -36,6 +36,21 @@ async function assertVerifiedAdmin(context: { supabase: unknown; userId: string;
   if (data?.role !== "admin") throw new Error("Admin access is required.");
 }
 
+/** Shared workspace boundary: MFA admin, or owner of the provider selected on this request. */
+async function assertJobAccess(
+  context: { supabase: unknown; userId: string; claims: unknown },
+  requestId: string,
+) {
+  try {
+    await assertVerifiedAdmin(context);
+    return;
+  } catch {
+    const client = context.supabase as unknown as Client;
+    const { data } = await client.rpc("is_request_provider", { _request_id: requestId });
+    if (!data) throw new Error("You do not have access to this job.");
+  }
+}
+
 type Client = { from: (t: string) => any };
 
 /** Appends one auditable job-timeline event. Never fails the caller. */
@@ -128,7 +143,7 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => idSchema.parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
 
     const diagnostics: JobDiagnostic[] = (
@@ -326,7 +341,7 @@ export const syncJobKnowledge = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => idSchema.extend({ force: z.boolean().optional() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const { listJobKnowledge, matchKnowledgeToJob, upsertKnowledge } = await import(
       "@/lib/knowledge/knowledge.server"
@@ -405,7 +420,7 @@ export const setKnowledgeMatchState = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.requestId);
     const client = context.supabase as unknown as Client;
     const patch =
       data.action === "dismiss"
@@ -458,7 +473,7 @@ export const addDiagnosticEntry = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const { data: row, error } = await client
       .from("job_diagnostics")
@@ -488,7 +503,7 @@ export const deleteDiagnosticEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ entryId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     await client.from("job_diagnostics").delete().eq("id", data.entryId);
     return { ok: true };
@@ -522,7 +537,7 @@ export const saveFinding = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const payload: Record<string, unknown> = {
       title: data.title,
@@ -578,7 +593,7 @@ export const deleteFinding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ findingId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     await client.from("job_findings").delete().eq("id", data.findingId);
     return { ok: true };
@@ -609,7 +624,7 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
 
     // Approving a recommendation is the human gate before anything AI-drafted
@@ -691,7 +706,7 @@ export const deleteRecommendation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ recommendationId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     await client.from("job_recommendations").delete().eq("id", data.recommendationId);
     return { ok: true };
@@ -724,7 +739,7 @@ export const askJobCopilot = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const { runCopilot } = await import("@/lib/job/copilot.server");
     return runCopilot({
       client: context.supabase as unknown as Client,
@@ -740,7 +755,7 @@ export const listJobCopilot = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => idSchema.parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const { listCopilotMessages } = await import("@/lib/job/copilot.server");
     return {
       messages: await listCopilotMessages(context.supabase as unknown as Client, data.id),
@@ -752,7 +767,7 @@ export const getJobContextPreview = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => idSchema.parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const { assembleJobContext, FULL_SCOPE } = await import("@/lib/job/job-context.server");
     const ctx = await assembleJobContext(
       context.supabase as unknown as Client,
@@ -788,7 +803,7 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
 
     const payload = {
@@ -895,7 +910,7 @@ export const saveConcern = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
 
     const set = (key: string, value: string | undefined) =>

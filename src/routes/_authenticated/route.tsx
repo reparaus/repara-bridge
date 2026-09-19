@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
 import { supabase } from "@/integrations/supabase/client";
 import { getAdminContext } from "@/lib/admin.functions";
+import { canAccessProviderRequestFn } from "@/lib/provider.functions";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -24,9 +25,17 @@ export const Route = createFileRoute("/_authenticated")({
     } catch {
       isAdmin = false;
     }
-    if (!isAdmin) throw redirect({ to: "/admin/login", search: { denied: true, next } });
+    if (!isAdmin) {
+      const providerMatch = location.pathname.match(/^\/admin\/requests\/([0-9a-f-]{36})$/i);
+      const providerAccess = providerMatch?.[1]
+        ? await canAccessProviderRequestFn({ data: { requestId: providerMatch[1] } }).catch(() => ({ allowed: false }))
+        : { allowed: false };
+      if (!providerAccess.allowed)
+        throw redirect({ to: "/admin/login", search: { denied: true, next } });
+      return { user: data.user, isAdmin: false, isProvider: true };
+    }
 
-    return { user: data.user, isAdmin };
+    return { user: data.user, isAdmin, isProvider: false };
   },
   component: () => <Outlet />,
 });
