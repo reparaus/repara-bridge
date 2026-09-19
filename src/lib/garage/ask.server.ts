@@ -10,6 +10,7 @@
  */
 
 import { isAiConfigured, runJsonCompletion, parseJsonObject } from "@/lib/ai/provider.server";
+import { detectServiceCategories } from "@/lib/service-network";
 
 type Detail = {
   vehicle: {
@@ -31,6 +32,12 @@ export type AskAnswer = {
   followUp: { question: string; options: string[] } | null;
   suggestService: boolean;
   concernSummary: string | null;
+  /**
+   * Likely service categories, so a driver never has to classify their own
+   * problem. Detected from the driver's own wording — a category is an intent,
+   * never a diagnosis.
+   */
+  categories: string[];
 };
 
 function renderContext(detail: Detail, language: string): string {
@@ -114,6 +121,7 @@ export async function askRepara(input: {
       followUp: null,
       suggestService: true,
       concernSummary: input.message.slice(0, 200),
+      categories: detectServiceCategories(input.message),
     };
   }
 
@@ -146,6 +154,9 @@ export async function askRepara(input: {
           : null,
       suggestService: Boolean(json['suggest_service']),
       concernSummary: json['concern_summary'] ? String(json['concern_summary']) : null,
+      categories: detectServiceCategories(
+        `${input.message} ${String(json['concern_summary'] ?? "")}`,
+      ),
     };
   } catch (error) {
     console.error("[ask-repara] failed", (error as Error).message);
@@ -155,6 +166,7 @@ export async function askRepara(input: {
       followUp: null,
       suggestService: true,
       concernSummary: input.message.slice(0, 200),
+      categories: detectServiceCategories(input.message),
     };
   }
 }
