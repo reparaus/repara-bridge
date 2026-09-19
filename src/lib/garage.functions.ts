@@ -65,8 +65,19 @@ export const findProviders = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ categoryKey: z.string().max(60).optional() }).parse(data))
   .handler(async ({ data, context }) => {
+    type Provider = {
+      id: string;
+      name: string;
+      kind: string;
+      description: string | null;
+      location: string | null;
+      offersMobile: boolean;
+      offersInShop: boolean;
+      specialties: string[];
+    };
+
     const db = context.supabase as unknown as Db;
-    let query = db
+    const { data: rows, error } = await db
       .from("service_providers")
       .select(
         "id, business_name, provider_kind, description, city, region, offers_mobile, offers_in_shop, specialties, provider_services(category_key)",
@@ -75,8 +86,7 @@ export const findProviders = createServerFn({ method: "POST" })
       .eq("is_demo", false)
       .limit(20);
 
-    const { data: rows, error } = await query;
-    if (error) return { providers: [] as Record<string, unknown>[] };
+    if (error) return { providers: [] as Provider[] };
 
     const providers = ((rows ?? []) as Record<string, any>[]).filter((p) => {
       if (!data.categoryKey) return true;
@@ -86,18 +96,18 @@ export const findProviders = createServerFn({ method: "POST" })
       return keys.includes(data.categoryKey);
     });
 
-    return {
-      providers: providers.map((p) => ({
-        id: String(p['id']),
-        name: String(p['business_name']),
-        kind: String(p['provider_kind']),
-        description: p['description'] ? String(p['description']) : null,
-        location: [p['city'], p['region']].filter(Boolean).join(", ") || null,
-        offersMobile: Boolean(p['offers_mobile']),
-        offersInShop: Boolean(p['offers_in_shop']),
-        specialties: (p['specialties'] ?? []) as string[],
-      })),
-    };
+    const mapped: Provider[] = providers.map((p) => ({
+      id: String(p['id']),
+      name: String(p['business_name']),
+      kind: String(p['provider_kind']),
+      description: p['description'] ? String(p['description']) : null,
+      location: [p['city'], p['region']].filter(Boolean).join(", ") || null,
+      offersMobile: Boolean(p['offers_mobile']),
+      offersInShop: Boolean(p['offers_in_shop']),
+      specialties: (p['specialties'] ?? []) as string[],
+    }));
+
+    return { providers: mapped };
   });
 
 export const saveProfile = createServerFn({ method: "POST" })
