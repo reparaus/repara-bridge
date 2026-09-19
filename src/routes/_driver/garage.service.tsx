@@ -20,6 +20,10 @@ import {
 import { isServiceKey } from "@/lib/services";
 
 export const Route = createFileRoute("/_driver/garage/service")({
+  validateSearch: (search: Record<string, unknown>): { vehicle?: string; category?: string } => ({
+    ...(typeof search.vehicle === "string" ? { vehicle: search.vehicle } : {}),
+    ...(typeof search.category === "string" ? { category: search.category } : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Service — Repara" },
@@ -35,15 +39,16 @@ export const Route = createFileRoute("/_driver/garage/service")({
 });
 
 function ServiceArea() {
+  const { vehicle: vehicleParam, category: categoryParam } = Route.useSearch();
   const load = useServerFn(getGarageHome);
   const lookupProviders = useServerFn(findProviders);
   const navigate = useNavigate();
   const { data, isLoading } = useQuery({ queryKey: ["garage-home"], queryFn: () => load({}) });
 
-  const [vehicleId, setVehicleId] = useState<string | null>(null);
+  const [vehicleId, setVehicleId] = useState<string | null>(vehicleParam ?? null);
   const [query, setQuery] = useState("");
   const [openGroup, setOpenGroup] = useState<ServiceGroupKey | null>("repair");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(categoryParam ?? null);
 
   const language = data?.profile.preferredLanguage ?? "en";
   const vehicles = data?.vehicles ?? [];
