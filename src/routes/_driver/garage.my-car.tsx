@@ -17,6 +17,8 @@ export const Route = createFileRoute("/_driver/garage/my-car")({
       },
       { property: "og:title", content: "My Car — Repara" },
       { property: "og:description", content: "Your car, understood." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: MyCar,

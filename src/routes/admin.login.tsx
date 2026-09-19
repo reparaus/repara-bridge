@@ -30,6 +30,8 @@ export const Route = createFileRoute("/admin/login")({
         content: "Repara internal admin sign in with authenticator app multi-factor auth.",
       },
       { name: "robots", content: "noindex" },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AdminLoginPage,

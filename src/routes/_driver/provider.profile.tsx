@@ -28,6 +28,8 @@ export const Route = createFileRoute("/_driver/provider/profile")({
       },
       { property: "og:title", content: "Edit provider profile — Repara" },
       { property: "og:description", content: "You decide exactly what drivers see." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: ProviderProfileEditor,

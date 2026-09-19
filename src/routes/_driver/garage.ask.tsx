@@ -24,6 +24,8 @@ export const Route = createFileRoute("/_driver/garage/ask")({
       },
       { property: "og:title", content: "Ask Repara" },
       { property: "og:description", content: "Anything going on with your car? Repara can help." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AskRepara,

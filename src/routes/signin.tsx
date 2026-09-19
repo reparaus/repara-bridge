@@ -31,6 +31,8 @@ export const Route = createFileRoute("/signin")({
         property: "og:description",
         content: "Your car, understood. Sign in to your free Repara garage.",
       },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SignIn,

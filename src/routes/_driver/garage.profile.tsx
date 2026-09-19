@@ -23,6 +23,8 @@ export const Route = createFileRoute("/_driver/garage/profile")({
       },
       { property: "og:title", content: "Profile — Repara" },
       { property: "og:description", content: "Manage your Repara account and garage." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Profile,

@@ -33,6 +33,8 @@ export const Route = createFileRoute("/quote/$token")({
       { property: "og:title", content: "Your Quote — Repara" },
       { property: "og:description", content: "Review and approve your Repara service quote." },
       { name: "robots", content: "noindex" },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: PublicQuote,

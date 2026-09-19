@@ -20,6 +20,8 @@ export const Route = createFileRoute("/_driver/garage/")({
       },
       { property: "og:title", content: "My Garage — Repara" },
       { property: "og:description", content: "Your car, understood." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: GarageHome,

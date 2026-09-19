@@ -26,6 +26,8 @@ export const Route = createFileRoute("/_driver/provider/onboarding")({
       },
       { property: "og:title", content: "Become a Repara provider" },
       { property: "og:description", content: "A short guided setup — then drivers can send you requests." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: ProviderOnboarding,

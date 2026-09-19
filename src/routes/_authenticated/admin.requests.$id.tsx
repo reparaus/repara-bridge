@@ -49,6 +49,8 @@ export const Route = createFileRoute("/_authenticated/admin/requests/$id")({
         content: "Follow one repair end to end: concern, diagnosis, findings, quote and outcome.",
       },
       { name: "robots", content: "noindex" },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: JobWorkspace,

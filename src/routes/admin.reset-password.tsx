@@ -24,6 +24,8 @@ export const Route = createFileRoute("/admin/reset-password")({
         content: "Set a new password for your Repara admin account.",
       },
       { name: "robots", content: "noindex" },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: ResetPasswordPage,
