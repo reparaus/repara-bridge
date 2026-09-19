@@ -51,7 +51,19 @@ async function assertJobAccess(
   }
 }
 
-type Client = { from: (t: string) => any };
+type Client = { from: (t: string) => any; rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown }> };
+
+async function assertRecordJobAccess(
+  context: { supabase: unknown; userId: string; claims: unknown },
+  table: string,
+  recordId: string,
+) {
+  const client = context.supabase as unknown as Client;
+  const { data } = await client.from(table).select("service_request_id").eq("id", recordId).maybeSingle();
+  const requestId = String(data?.service_request_id ?? "");
+  if (!requestId) throw new Error("Job record not found.");
+  await assertJobAccess(context, requestId);
+}
 
 /** Appends one auditable job-timeline event. Never fails the caller. */
 async function logActivity(
@@ -143,7 +155,7 @@ export const getJobWorkspace = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => idSchema.parse(data))
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    await assertRecordJobAccess(context, "job_diagnostics", data.entryId);
     const client = context.supabase as unknown as Client;
 
     const diagnostics: JobDiagnostic[] = (
@@ -341,7 +353,7 @@ export const syncJobKnowledge = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => idSchema.extend({ force: z.boolean().optional() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    await assertRecordJobAccess(context, "job_findings", data.findingId);
     const client = context.supabase as unknown as Client;
     const { listJobKnowledge, matchKnowledgeToJob, upsertKnowledge } = await import(
       "@/lib/knowledge/knowledge.server"
@@ -473,7 +485,7 @@ export const addDiagnosticEntry = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    await assertRecordJobAccess(context, "job_recommendations", data.recommendationId);
     const client = context.supabase as unknown as Client;
     const { data: row, error } = await client
       .from("job_diagnostics")

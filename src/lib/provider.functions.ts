@@ -56,7 +56,8 @@ export const canAccessProviderRequestFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ requestId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    const { data: allowed } = await context.supabase.rpc("is_request_provider", {
+    const client = context.supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown }> };
+    const { data: allowed } = await client.rpc("is_request_provider", {
       _request_id: data.requestId,
     });
     return { allowed: Boolean(allowed) };
