@@ -118,10 +118,22 @@ function VehicleProfile() {
   return (
     <GarageShell>
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+        <VehicleVisual
+          size="hero"
+          year={vehicle.year}
+          make={vehicle.make}
+          model={vehicle.model}
+          trim={vehicle.trim}
+        />
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
           {vehicle.nickname ?? vehicle.label}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        {(vehicle.trim || vehicle.engine) && (
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {[vehicle.trim, vehicle.engine].filter(Boolean).join(" · ")}
+          </p>
+        )}
+        <p className="mt-0.5 text-sm text-muted-foreground">
           {vehicle.currentMileage ? `${vehicle.currentMileage.toLocaleString()} miles` : "Mileage not added yet"}
           {vehicle.vinMasked ? ` · VIN ${vehicle.vinMasked}` : ""}
         </p>
