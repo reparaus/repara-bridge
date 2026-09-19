@@ -33,6 +33,8 @@ export const Route = createFileRoute("/_driver/garage/service")({
       },
       { property: "og:title", content: "Service — Repara" },
       { property: "og:description", content: "Find someone to take care of it." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: ServiceArea,

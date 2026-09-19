@@ -23,6 +23,8 @@ export const Route = createFileRoute("/_authenticated/admin/requests/")({
       { property: "og:title", content: "Service Requests — Repara Admin" },
       { property: "og:description", content: "Repara internal dashboard for customer service requests." },
       { name: "robots", content: "noindex" },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: RequestsDashboard,

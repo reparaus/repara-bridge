@@ -120,6 +120,8 @@ export const Route = createFileRoute("/quote/")({
         property: "og:description",
         content: "Request a personalized mobile automotive service quote in under a minute.",
       },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: QuoteFlow,

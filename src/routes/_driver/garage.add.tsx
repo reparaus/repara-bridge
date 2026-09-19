@@ -21,6 +21,8 @@ export const Route = createFileRoute("/_driver/garage/add")({
       },
       { property: "og:title", content: "Add my car — Repara" },
       { property: "og:description", content: "Your car, understood — add it in under a minute." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AddVehicle,

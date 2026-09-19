@@ -18,6 +18,8 @@ export const Route = createFileRoute("/_driver/provider/requests")({
       },
       { property: "og:title", content: "Provider requests — Repara" },
       { property: "og:description", content: "Requests sent to you, with the vehicle details already attached." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: ProviderRequests,

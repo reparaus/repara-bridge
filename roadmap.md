@@ -2,5 +2,6 @@
 
 - [x] Audit driver, provider, history, homepage, security, and existing migrations
 - [x] Finalize a scoped implementation plan for approval
-- [ ] Implement approved consolidation changes
-- [ ] Verify critical public, driver, provider, admin, and guest flows
+- [x] Implement approved consolidation changes
+- [x] Verify public homepage, guest quote entry, card redirect, app manifest, and signed-out access gates
+- [ ] Verify signed-in driver, provider, admin, and exact-once history flows — blocked until `0017_v1_completion.sql` is applied and an authenticated external-project test session is available

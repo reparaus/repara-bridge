@@ -12,6 +12,8 @@ alter table public.job_outcomes
 comment on column public.job_outcomes.customer_summary is
   'Human-approved customer-facing summary of completed work. Never an internal technician note.';
 
+alter type public.history_provenance add value if not exists 'provider_verified';
+
 alter table public.service_records
   add column if not exists provider_id uuid references public.service_providers(id) on delete set null;
 
@@ -38,7 +40,7 @@ create table if not exists public.notifications (
   unique (user_id, event_key)
 );
 
-grant select, update on public.notifications to authenticated;
+grant select, update, delete on public.notifications to authenticated;
 grant all on public.notifications to service_role;
 alter table public.notifications enable row level security;
 
@@ -55,6 +57,10 @@ drop policy if exists "users mark own notifications read" on public.notification
 create policy "users mark own notifications read" on public.notifications
   for update to authenticated using (user_id = auth.uid())
   with check (user_id = auth.uid());
+
+drop policy if exists "users delete own notifications" on public.notifications;
+create policy "users delete own notifications" on public.notifications
+  for delete to authenticated using (user_id = auth.uid());
 
 -- ------------------------------------------------------ provider job scope
 create or replace function public.is_request_provider(_request_id uuid)
@@ -78,6 +84,33 @@ grant execute on function public.is_request_provider(uuid) to authenticated;
 drop policy if exists "provider owner reads assigned requests" on public.service_requests;
 create policy "provider owner reads assigned requests" on public.service_requests
   for select to authenticated using (public.is_request_provider(id));
+
+-- Authenticated staff already have the table-level grant from the base schema.
+-- Providers close only their assigned job through this narrow function rather
+-- than receiving broad UPDATE access to every request column.
+grant update on public.service_requests to authenticated;
+drop policy if exists "provider owner updates assigned requests" on public.service_requests;
+
+create or replace function public.close_assigned_request(_request_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_request_provider(_request_id) then
+    return false;
+  end if;
+
+  update public.service_requests
+     set status = 'closed', updated_at = now()
+   where id = _request_id;
+  return found;
+end;
+$$;
+
+revoke all on function public.close_assigned_request(uuid) from public, anon;
+grant execute on function public.close_assigned_request(uuid) to authenticated;
 
 do $$
 declare t text;

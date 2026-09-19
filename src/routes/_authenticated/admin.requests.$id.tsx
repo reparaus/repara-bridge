@@ -49,6 +49,8 @@ export const Route = createFileRoute("/_authenticated/admin/requests/$id")({
         content: "Follow one repair end to end: concern, diagnosis, findings, quote and outcome.",
       },
       { name: "robots", content: "noindex" },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: JobWorkspace,
@@ -495,8 +497,8 @@ function JobWorkspace() {
                   <VehicleKnowledge requestId={id} initial={knowledge} />
                 </div>
               </Panel>
-              {/* Assignment is a one-line control until it needs attention. */}
-              <details className="rounded-lg border border-border px-3 py-2">
+              {/* Assignment stays admin-only; a provider cannot re-route work. */}
+              {isAdmin ? <details className="rounded-lg border border-border px-3 py-2">
                 <summary className="cursor-pointer text-xs">
                   Technician:{" "}
                   <span className="font-medium">
@@ -512,7 +514,7 @@ function JobWorkspace() {
                     onSaved={() => void query.refetch()}
                   />
                 </div>
-              </details>
+              </details> : null}
               <Panel title="Customer concern">
                 <p className="text-sm whitespace-pre-line">
                   {concern || "No description provided."}
@@ -677,8 +679,8 @@ function JobWorkspace() {
                 <Row label="Submitted" value={new Date(request.created_at).toLocaleString()} />
               </Panel>
 
-              {/* Email plumbing is support detail, not a primary job surface. */}
-              <details className="space-y-3 rounded-lg border border-border px-3 py-2 [&>*+*]:mt-3">
+              {/* Email retry controls stay admin-only. */}
+              {isAdmin ? <details className="space-y-3 rounded-lg border border-border px-3 py-2 [&>*+*]:mt-3">
                 <summary className="cursor-pointer text-xs font-medium">
                   Confirmation emails
                   {request.email_last_error ? " — needs attention" : ""}
@@ -720,7 +722,7 @@ function JobWorkspace() {
                     {request.email_last_error ? "RETRY EMAILS" : "RESEND CONFIRMATION"}
                   </Button>
                 </div>
-              </details>
+              </details> : null}
             </div>
           </TabsContent>
 
@@ -967,17 +969,17 @@ function JobWorkspace() {
       </Tabs>
 
       {/* Sticky mobile entry point into the copilot — a technician's most used action. */}
-      {tab !== "ai" && (
-        <button
+      {isAdmin && tab !== "ai" && (
+        <Button
           type="button"
           onClick={() => setTab("ai")}
           className="fixed right-4 bottom-5 z-30 flex h-14 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground shadow-lg lg:hidden"
         >
           <Bot className="size-5" /> Repara AI
-        </button>
+        </Button>
       )}
 
-      <QuotePreview
+      {isAdmin ? <QuotePreview
         open={previewOpen}
         onOpenChange={setPreviewOpen}
         requestNumber={String(request.request_number ?? "")}
@@ -1004,7 +1006,7 @@ function JobWorkspace() {
         expirationDate={expirationDate}
         internalCost={internalCost}
         margin={margin}
-      />
+      /> : null}
     </div>
   );
 }

@@ -24,6 +24,8 @@ export const Route = createFileRoute("/_driver/garage/vehicle/$id")({
       },
       { property: "og:title", content: "My vehicle — Repara" },
       { property: "og:description", content: "Everything Repara knows about your car." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: VehicleProfile,

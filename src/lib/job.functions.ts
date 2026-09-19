@@ -40,14 +40,15 @@ async function assertVerifiedAdmin(context: { supabase: unknown; userId: string;
 async function assertJobAccess(
   context: { supabase: unknown; userId: string; claims: unknown },
   requestId: string,
-) {
+): Promise<"admin" | "provider"> {
   try {
     await assertVerifiedAdmin(context);
-    return;
+    return "admin";
   } catch {
     const client = context.supabase as unknown as Client;
     const { data } = await client.rpc("is_request_provider", { _request_id: requestId });
     if (!data) throw new Error("You do not have access to this job.");
+    return "provider";
   }
 }
 
@@ -575,8 +576,8 @@ export const saveFinding = createServerFn({ method: "POST" })
     };
 
     if (data.findingId) {
-      let { error } = await client.from("job_findings").update(extended).eq("id", data.findingId);
-      if (error) ({ error } = await client.from("job_findings").update(payload).eq("id", data.findingId));
+      let { error } = await client.from("job_findings").update(extended).eq("id", data.findingId).eq("service_request_id", data.id);
+      if (error) ({ error } = await client.from("job_findings").update(payload).eq("id", data.findingId).eq("service_request_id", data.id));
       if (error) throw new Error("Could not update this finding.");
       if (data.approve)
         await logActivity(
@@ -662,12 +663,14 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       let { error } = await client
         .from("job_recommendations")
         .update(extended)
-        .eq("id", data.recommendationId);
+        .eq("id", data.recommendationId)
+        .eq("service_request_id", data.id);
       if (error)
         ({ error } = await client
           .from("job_recommendations")
           .update(payload)
-          .eq("id", data.recommendationId));
+          .eq("id", data.recommendationId)
+          .eq("service_request_id", data.id));
       if (error) throw new Error("Could not update this recommendation.");
       if (approving)
         await logActivity(
@@ -698,7 +701,7 @@ export const saveRecommendation = createServerFn({ method: "POST" })
     // A finding that became a recommendation is marked converted, not deleted.
     if (data.findingId) {
       try {
-        await client.from("job_findings").update({ status: "converted" }).eq("id", data.findingId);
+        await client.from("job_findings").update({ status: "converted" }).eq("id", data.findingId).eq("service_request_id", data.id);
       } catch {
         /* ignore */
       }
@@ -815,7 +818,7 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertJobAccess(context, data.id);
+    const access = await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
 
     const payload = {
@@ -840,11 +843,18 @@ export const saveJobOutcome = createServerFn({ method: "POST" })
 
     // Closing a job is an explicit human action, never an AI decision.
     if (data.close) {
-      const { error: closeError } = await client
-        .from("service_requests")
-        .update({ status: "closed" })
-        .eq("id", data.id);
-      if (closeError) throw new Error("The outcome was saved, but the job could not be closed.");
+      if (access === "admin") {
+        const { error: closeError } = await client
+          .from("service_requests")
+          .update({ status: "closed" })
+          .eq("id", data.id);
+        if (closeError) throw new Error("The outcome was saved, but the job could not be closed.");
+      } else {
+        const { data: closed } = await client.rpc("close_assigned_request", {
+          _request_id: data.id,
+        });
+        if (!closed) throw new Error("The outcome was saved, but the job could not be closed.");
+      }
       await logActivity(client, data.id, "job_closed", "Job closed with repair outcome", context.userId);
 
     } else {
@@ -1025,9 +1035,9 @@ export const draftConcernStory = createServerFn({ method: "POST" })
     z.object({ concernId: z.string().uuid(), shorthand: z.string().trim().min(3).max(4000) }).parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
     const client = context.supabase as unknown as Client;
     const { requestId, concern } = await loadConcern(client, data.concernId);
+    await assertJobAccess(context, requestId);
     const { draftStoryFromShorthand } = await import("@/lib/job/authoring.server");
     const draft = await draftStoryFromShorthand({
       client,
@@ -1043,9 +1053,9 @@ export const draftConcernFindings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ concernId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
     const client = context.supabase as unknown as Client;
     const { requestId, concern } = await loadConcern(client, data.concernId);
+    await assertJobAccess(context, requestId);
 
     const entries = await safeSelect(() =>
       client
@@ -1088,7 +1098,7 @@ export const cleanupFindingNote = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const { draftFindingFromNote } = await import("@/lib/job/authoring.server");
     return {
@@ -1114,7 +1124,7 @@ export const draftFindingRecommendations = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
 
     const rows = await safeSelect(() =>
@@ -1150,9 +1160,9 @@ export const draftConcernCloseout = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ concernId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
     const client = context.supabase as unknown as Client;
     const { requestId, concern } = await loadConcern(client, data.concernId);
+    await assertJobAccess(context, requestId);
 
     const recs = await safeSelect(() =>
       client

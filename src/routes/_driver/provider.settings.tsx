@@ -19,6 +19,8 @@ export const Route = createFileRoute("/_driver/provider/settings")({
       },
       { property: "og:title", content: "Provider settings — Repara" },
       { property: "og:description", content: "Control whether drivers can see your profile." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: ProviderSettings,

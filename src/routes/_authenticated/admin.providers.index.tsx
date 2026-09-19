@@ -21,6 +21,8 @@ export const Route = createFileRoute("/_authenticated/admin/providers/")({
       },
       { property: "og:title", content: "Providers — Repara Admin" },
       { property: "og:description", content: "Provider review and status management." },
+          { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AdminProviders,
