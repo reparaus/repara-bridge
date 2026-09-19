@@ -458,7 +458,7 @@ function QuoteFlow() {
         preferredContactMethod: form.contactMethod,
       },
     }),
-    [form, lang],
+    [form, lang, chosenProviderId, chosenCategoryKey],
   );
 
   const mutation = useMutation({

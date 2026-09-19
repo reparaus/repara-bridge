@@ -559,3 +559,80 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+
+// ============================================================== providers
+/**
+ * Admin provider management. Reads/writes run as the signed-in admin, so the
+ * verified-admin RLS policies from 0016 are the boundary. Nothing here creates
+ * providers or implies verification badges.
+ */
+type ProviderDb = { from: (table: string) => any };
+
+export const listProvidersAdmin = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z
+      .object({
+        status: z
+          .enum(["all", "draft", "pending_review", "active", "paused", "archived"])
+          .default("all"),
+        search: z.string().trim().max(120).optional(),
+      })
+      .parse(data ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as unknown as ProviderDb;
+    let query = db
+      .from("service_providers")
+      .select(
+        "id, business_name, provider_kind, status, city, region, postal_code, service_radius_miles, offers_mobile, offers_in_shop, phone, email, website, description, created_at, provider_services(category_key)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (data.status !== "all") query = query.eq("status", data.status);
+    if (data.search) query = query.ilike("business_name", `%${data.search}%`);
+
+    const { data: rows, error } = await query;
+    if (error) throw new Error(error.message);
+
+    return {
+      providers: ((rows ?? []) as Record<string, any>[]).map((row) => ({
+        id: String(row['id']),
+        businessName: String(row['business_name'] ?? ""),
+        providerKind: String(row['provider_kind'] ?? ""),
+        status: String(row['status'] ?? "draft"),
+        location: [row['city'], row['region'], row['postal_code']].filter(Boolean).join(", ") || null,
+        serviceRadiusMiles: row['service_radius_miles'] ?? null,
+        offersMobile: Boolean(row['offers_mobile']),
+        offersInShop: Boolean(row['offers_in_shop']),
+        phone: row['phone'] ?? null,
+        email: row['email'] ?? null,
+        website: row['website'] ?? null,
+        description: row['description'] ?? null,
+        createdAt: String(row['created_at'] ?? ""),
+        categories: ((row['provider_services'] ?? []) as Record<string, any>[]).map((s) =>
+          String(s['category_key']),
+        ),
+      })),
+    };
+  });
+
+export const setProviderStatusAdmin = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        status: z.enum(["draft", "pending_review", "active", "paused", "archived"]),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as unknown as ProviderDb;
+    const { error } = await db
+      .from("service_providers")
+      .update({ status: data.status })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { status: data.status };
+  });
