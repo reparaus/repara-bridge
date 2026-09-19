@@ -575,8 +575,8 @@ export const saveFinding = createServerFn({ method: "POST" })
     };
 
     if (data.findingId) {
-      let { error } = await client.from("job_findings").update(extended).eq("id", data.findingId);
-      if (error) ({ error } = await client.from("job_findings").update(payload).eq("id", data.findingId));
+      let { error } = await client.from("job_findings").update(extended).eq("id", data.findingId).eq("service_request_id", data.id);
+      if (error) ({ error } = await client.from("job_findings").update(payload).eq("id", data.findingId).eq("service_request_id", data.id));
       if (error) throw new Error("Could not update this finding.");
       if (data.approve)
         await logActivity(
@@ -662,12 +662,14 @@ export const saveRecommendation = createServerFn({ method: "POST" })
       let { error } = await client
         .from("job_recommendations")
         .update(extended)
-        .eq("id", data.recommendationId);
+        .eq("id", data.recommendationId)
+        .eq("service_request_id", data.id);
       if (error)
         ({ error } = await client
           .from("job_recommendations")
           .update(payload)
-          .eq("id", data.recommendationId));
+          .eq("id", data.recommendationId)
+          .eq("service_request_id", data.id));
       if (error) throw new Error("Could not update this recommendation.");
       if (approving)
         await logActivity(
@@ -698,7 +700,7 @@ export const saveRecommendation = createServerFn({ method: "POST" })
     // A finding that became a recommendation is marked converted, not deleted.
     if (data.findingId) {
       try {
-        await client.from("job_findings").update({ status: "converted" }).eq("id", data.findingId);
+        await client.from("job_findings").update({ status: "converted" }).eq("id", data.findingId).eq("service_request_id", data.id);
       } catch {
         /* ignore */
       }
@@ -1025,9 +1027,9 @@ export const draftConcernStory = createServerFn({ method: "POST" })
     z.object({ concernId: z.string().uuid(), shorthand: z.string().trim().min(3).max(4000) }).parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
     const client = context.supabase as unknown as Client;
     const { requestId, concern } = await loadConcern(client, data.concernId);
+    await assertJobAccess(context, requestId);
     const { draftStoryFromShorthand } = await import("@/lib/job/authoring.server");
     const draft = await draftStoryFromShorthand({
       client,
@@ -1043,9 +1045,9 @@ export const draftConcernFindings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ concernId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
     const client = context.supabase as unknown as Client;
     const { requestId, concern } = await loadConcern(client, data.concernId);
+    await assertJobAccess(context, requestId);
 
     const entries = await safeSelect(() =>
       client
@@ -1088,7 +1090,7 @@ export const cleanupFindingNote = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
     const { draftFindingFromNote } = await import("@/lib/job/authoring.server");
     return {
@@ -1114,7 +1116,7 @@ export const draftFindingRecommendations = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
+    await assertJobAccess(context, data.id);
     const client = context.supabase as unknown as Client;
 
     const rows = await safeSelect(() =>
@@ -1150,9 +1152,9 @@ export const draftConcernCloseout = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ concernId: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    await assertVerifiedAdmin(context);
     const client = context.supabase as unknown as Client;
     const { requestId, concern } = await loadConcern(client, data.concernId);
+    await assertJobAccess(context, requestId);
 
     const recs = await safeSelect(() =>
       client
