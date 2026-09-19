@@ -215,14 +215,18 @@ export const getRequestDetail = createServerFn({ method: "POST" })
   .inputValidator((data) => idSchema.parse(data))
   .handler(async ({ data, context }) => {
     const claims = context.claims as { aal?: string } | null;
-    const { data: adminRow } = await context.supabase
+    const accessClient = context.supabase as unknown as {
+      from: (table: string) => any;
+      rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown }>;
+    };
+    const { data: adminRow } = await accessClient
       .from("admin_users")
       .select("role")
       .eq("user_id", context.userId)
       .maybeSingle();
     const isAdmin = claims?.aal === "aal2" && adminRow?.role === "admin";
     if (!isAdmin) {
-      const { data: providerAllowed } = await context.supabase.rpc("is_request_provider", {
+      const { data: providerAllowed } = await accessClient.rpc("is_request_provider", {
         _request_id: data.id,
       });
       if (!providerAllowed) throw new Error("You do not have access to this request.");
