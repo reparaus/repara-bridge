@@ -60,6 +60,7 @@ type TabKey = "overview" | "ai" | "diagnosis" | "findings" | "quote" | "messages
 
 function JobWorkspace() {
   const { id } = Route.useParams();
+  const { isAdmin } = Route.useRouteContext();
   const fetchDetail = useServerFn(getRequestDetail);
   const fetchJob = useServerFn(getJobWorkspace);
   const persistQuote = useServerFn(saveQuote);
@@ -80,8 +81,8 @@ function JobWorkspace() {
 
   // Opening a request clears it from the "new requests" badge.
   useEffect(() => {
-    void markViewed({ data: { id } }).catch(() => undefined);
-  }, [id, markViewed]);
+    if (isAdmin) void markViewed({ data: { id } }).catch(() => undefined);
+  }, [id, isAdmin, markViewed]);
 
   const [tab, setTab] = useState<TabKey>("overview");
   const [quoteId, setQuoteId] = useState<string | null>(null);
@@ -359,10 +360,10 @@ function JobWorkspace() {
         <div className="mx-auto max-w-6xl px-4 sm:px-5">
           <div className="flex h-14 items-center justify-between gap-3">
             <Link
-              to="/admin"
+              to={isAdmin ? "/admin" : "/provider/requests"}
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
             >
-              <ArrowLeft className="size-4" /> <span className="hidden sm:inline">Dashboard</span>
+              <ArrowLeft className="size-4" /> <span className="hidden sm:inline">{isAdmin ? "Dashboard" : "Requests"}</span>
             </Link>
             <div className="min-w-0 flex-1 text-center">
               <p className="truncate font-display text-sm font-bold">{vehicleTitle}</p>
@@ -373,7 +374,7 @@ function JobWorkspace() {
             </div>
             <StatusBadge status={request.status} />
           </div>
-          <div className="flex items-center gap-2 pb-2">
+          {isAdmin ? <div className="flex items-center gap-2 pb-2">
             <select
               value={request.status}
               disabled={statusMutation.isPending}
@@ -393,7 +394,7 @@ function JobWorkspace() {
             {statusMutation.isPending && (
               <Loader2 className="size-4 animate-spin text-muted-foreground" />
             )}
-          </div>
+          </div> : null}
         </div>
       </header>
 
@@ -404,11 +405,10 @@ function JobWorkspace() {
               {(
                 [
                   ["overview", "Overview"],
-                  ["ai", "Repara AI"],
+                  ...(isAdmin ? [["ai", "Repara AI"]] : []),
                   ["diagnosis", "Diagnosis"],
                   ["findings", `Findings${openRecommendations ? ` (${openRecommendations})` : ""}`],
-                  ["quote", "Quote"],
-                  ["messages", "Messages"],
+                  ...(isAdmin ? [["quote", "Quote"], ["messages", "Messages"]] : []),
                   ["history", "History"],
                 ] as [TabKey, string][]
               ).map(([key, label]) => (

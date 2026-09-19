@@ -65,7 +65,12 @@ function ProviderRequests() {
       ) : (
         <div className="mt-6 space-y-3">
           {requests.map((request) => (
-            <div key={request.id} className="rounded-2xl border border-border/70 bg-card p-5">
+            <Link
+              key={request.id}
+              to="/admin/requests/$id"
+              params={{ id: request.id }}
+              className="block rounded-2xl border border-border/70 bg-card p-5 transition-colors hover:border-border"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold text-foreground">
@@ -92,7 +97,8 @@ function ProviderRequests() {
               {request.concern && (
                 <p className="mt-1 text-sm text-muted-foreground">{request.concern}</p>
               )}
-            </div>
+              <p className="mt-4 text-xs font-medium text-primary">Open Job Workspace</p>
+            </Link>
           ))}
         </div>
       )}

@@ -48,6 +48,8 @@ export function JobCloseout({
     verification: string | null;
     technicianNotes: string | null;
     remainingRecommendations: string | null;
+    customerSummary: string | null;
+    completionMileage: number | null;
     completedAt: string | null;
   } | null;
   concerns: JobConcern[];
@@ -61,6 +63,10 @@ export function JobCloseout({
   const [verification, setVerification] = useState(outcome?.verification ?? "");
   const [technicianNotes, setTechnicianNotes] = useState(outcome?.technicianNotes ?? "");
   const [remaining, setRemaining] = useState(outcome?.remainingRecommendations ?? "");
+  const [customerSummary, setCustomerSummary] = useState(outcome?.customerSummary ?? "");
+  const [completionMileage, setCompletionMileage] = useState(
+    outcome?.completionMileage ? String(outcome.completionMileage) : "",
+  );
 
   const save = useMutation({
     mutationFn: (close: boolean) =>
@@ -74,6 +80,8 @@ export function JobCloseout({
           verification,
           technicianNotes,
           remainingRecommendations: remaining,
+          customerSummary,
+          completionMileage: completionMileage.trim() ? Number(completionMileage) : null,
           close,
         },
       }),
@@ -168,6 +176,23 @@ export function JobCloseout({
       <Field label="Remaining recommendations">
         <Textarea rows={2} value={remaining} onChange={(e) => setRemaining(e.target.value)} />
       </Field>
+      <Field label="Customer completion summary">
+        <Textarea
+          rows={3}
+          value={customerSummary}
+          onChange={(e) => setCustomerSummary(e.target.value)}
+          placeholder="A clear, customer-safe summary of completed work"
+        />
+      </Field>
+      <Field label="Mileage at completion">
+        <input
+          value={completionMileage}
+          onChange={(e) => setCompletionMileage(e.target.value.replace(/[^0-9]/g, ""))}
+          inputMode="numeric"
+          className="h-11 w-full rounded-md border border-input bg-surface px-3 text-sm"
+          placeholder="Optional"
+        />
+      </Field>
       <Field label="Technician notes (internal)">
         <Textarea rows={2} value={technicianNotes} onChange={(e) => setTechnicianNotes(e.target.value)} />
       </Field>
@@ -185,7 +210,7 @@ export function JobCloseout({
         <Button
           type="button"
           className="h-12"
-          disabled={save.isPending || !repairPerformed.trim()}
+          disabled={save.isPending || !customerSummary.trim() || (!repairPerformed.trim() && !concerns.some((c) => c.repairPerformed?.trim() && ["resolved", "not_resolved", "unable_to_verify", "monitor"].includes(c.outcome ?? "")))}
           onClick={() => save.mutate(true)}
         >
           Save &amp; close job

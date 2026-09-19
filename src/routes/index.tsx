@@ -7,7 +7,6 @@ import { Logo } from "@/components/brand/Logo";
 import { LanguageToggle } from "@/components/common/LanguageToggle";
 import { ServiceCard } from "@/components/common/ServiceCard";
 import { Reviews } from "@/components/marketing/Reviews";
-import { TechnicianProfile, type Technician } from "@/components/marketing/TechnicianProfile";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { localizedServiceBlurb, localizedServiceLabel } from "@/lib/i18n/catalog";
@@ -18,18 +17,20 @@ import { track } from "@/lib/analytics";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Repara — Toyota & Lexus Service, Dealer-Level Care" },
+      { title: "Repara — Your car, understood." },
       {
         name: "description",
         content:
-          "Toyota & Lexus service backed by dealership experience, with transparent pricing and a simpler way to get your car serviced. Request a quote in under a minute.",
+          "Keep your vehicle, maintenance, service history, trusted guidance, and real service requests connected in one place.",
       },
-      { property: "og:title", content: "Repara — Toyota & Lexus Service, Dealer-Level Care" },
+      { property: "og:title", content: "Repara — Your car, understood." },
       {
         property: "og:description",
         content:
-          "Dealership-trained, ASE Certified service with transparent pricing and direct communication.",
+          "A connected home for your vehicle, service history, guidance, and care.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Landing,
@@ -62,17 +63,6 @@ function Landing() {
   useEffect(() => {
     track("landing_view");
   }, []);
-
-  const carlos: Technician = {
-    name: "Carlos",
-    role: t("home.techRole"),
-    bio: t("home.techBio"),
-    credentials: [
-      { value: t("home.creds.c1v"), label: t("home.creds.c1l") },
-      { value: t("home.creds.c2v"), label: t("home.creds.c2l") },
-      { value: t("home.creds.c3v"), label: t("home.creds.c3l") },
-    ],
-  };
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background">
@@ -245,23 +235,19 @@ function Landing() {
           </div>
         </section>
 
-        {/* MEET YOUR TECHNICIAN */}
+        {/* REAL PROVIDERS */}
         <section className="border-t border-border py-14 sm:py-16">
           <div className="mx-auto max-w-6xl px-5">
-            <SectionLabel>{t("home.techTitle")}</SectionLabel>
-            <div className="mt-6">
-              <TechnicianProfile technician={carlos} />
-            </div>
-
-            <div className="mt-8 flex flex-col items-start gap-4 rounded-xl border border-border bg-surface/60 p-5 hairline-top sm:flex-row sm:items-center sm:justify-between sm:p-6">
-              <p className="font-display text-lg font-semibold">{t("home.bannerTitle")}</p>
+            <SectionLabel>{t("home.providerTitle")}</SectionLabel>
+            <div className="mt-6 flex flex-col items-start gap-4 border-y border-border py-6 sm:flex-row sm:items-center sm:justify-between">
+              <div><p className="font-display text-lg font-semibold">{t("home.providerHeading")}</p><p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t("home.providerCopy")}</p></div>
               <Button
                 asChild
                 size="lg"
                 className="h-12 w-full shrink-0 rounded-full px-7 text-sm tracking-[0.12em] sm:w-auto"
               >
-                <Link to="/quote" onClick={() => track("quote_started", { source: "technician" })}>
-                  {t("home.ctaQuote")}
+                <Link to="/provider/onboarding">
+                  {t("home.providerCta")}
                 </Link>
               </Button>
             </div>
