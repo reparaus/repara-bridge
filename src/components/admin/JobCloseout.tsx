@@ -210,7 +210,7 @@ export function JobCloseout({
         <Button
           type="button"
           className="h-12"
-          disabled={save.isPending || (!repairPerformed.trim() && !concerns.some((c) => c.repairPerformed?.trim()))}
+          disabled={save.isPending || !customerSummary.trim() || (!repairPerformed.trim() && !concerns.some((c) => c.repairPerformed?.trim() && ["resolved", "not_resolved", "unable_to_verify", "monitor"].includes(c.outcome ?? "")))}
           onClick={() => save.mutate(true)}
         >
           Save &amp; close job

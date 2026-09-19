@@ -15,12 +15,20 @@ comment on column public.job_outcomes.customer_summary is
 alter table public.service_records
   add column if not exists provider_id uuid references public.service_providers(id) on delete set null;
 
+alter table public.service_records drop constraint if exists service_records_source_check;
+alter table public.service_records add constraint service_records_source_check
+  check (source in ('repara_verified','provider_verified','owner_provided','imported','connected_vehicle','document'));
+
 create index if not exists idx_service_records_provider
   on public.service_records(provider_id);
 
 create unique index if not exists uq_mileage_history_vehicle_source_reference
   on public.vehicle_mileage_history(vehicle_id, source, source_reference)
   where source_reference is not null;
+
+create unique index if not exists uq_service_records_provider_job
+  on public.service_records(service_request_id)
+  where source = 'provider_verified';
 
 -- ---------------------------------------------------------- notifications
 create table if not exists public.notifications (

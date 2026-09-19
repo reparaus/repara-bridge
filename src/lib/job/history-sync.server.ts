@@ -1,7 +1,7 @@
 /**
  * Completed Repara job → vehicle service history (SERVER ONLY).
  *
- * This is the FIRST automatic history source, because Repara owns this data.
+ * This is the automatic history bridge for work completed inside Repara.
  * Rules that must not be relaxed:
  *  - Only an actually CLOSED job with a recorded repair creates history.
  *    Quoted, recommended or in-progress work never becomes history.
@@ -41,7 +41,7 @@ export async function syncJobToServiceHistory(requestId: string) {
     .order("sort_order", { ascending: true });
   const completedConcerns = ((concerns ?? []) as Row[]).filter((row) => {
     const work = String(row['repair_performed'] ?? "").trim();
-    return Boolean(work) && !["deferred", "inspection_only", "not_yet_known"].includes(String(row['outcome'] ?? ""));
+    return Boolean(work) && ["resolved", "not_resolved", "unable_to_verify", "monitor"].includes(String(row['outcome'] ?? ""));
   });
 
   const { data: recommendations } = await db
@@ -51,12 +51,27 @@ export async function syncJobToServiceHistory(requestId: string) {
     .eq("performed_status", "performed");
 
   const completedWork = [
-    ...completedConcerns.map((row) => String(row['repair_performed'] ?? "").trim()),
+    ...completedConcerns.map((row) => {
+      const title = String(row['title'] ?? "").trim();
+      const work = String(row['repair_performed'] ?? "").trim();
+      return title ? `${title}: ${work}` : work;
+    }),
     ...((recommendations ?? []) as Row[]).map((row) =>
       String(row['customer_description'] ?? row['title'] ?? "").trim(),
     ),
   ].filter(Boolean);
-  if (!repairPerformed && !completedWork.length) return { created: false as const };
+  if (!repairPerformed && !completedWork.length) {
+    // If closeout is corrected to inspection-only/no performed work, remove the
+    // previously generated record rather than leaving inaccurate history.
+    const { data: stale } = await db
+      .from("service_records")
+      .select("id")
+      .eq("service_request_id", requestId)
+      .in("source", ["repara_verified", "provider_verified"])
+      .maybeSingle();
+    if (stale?.id) await db.from("service_records").delete().eq("id", stale.id);
+    return { created: false as const };
+  }
 
   const completedAt = outcomeRow?.['completed_at'] ?? new Date().toISOString();
   const serviceDate = String(completedAt).slice(0, 10);
@@ -75,8 +90,10 @@ export async function syncJobToServiceHistory(requestId: string) {
 
   const provider = (request.service_providers ?? null) as Row | null;
   const providerName = String(provider?.['business_name'] ?? "").trim() || "Repara";
-  const summary = String(outcomeRow?.['customer_summary'] ?? "").trim() || repairPerformed;
+  const summary = String(outcomeRow?.['customer_summary'] ?? "").trim() || completedWork.join("; ") || repairPerformed;
   const closingMileage = Number(outcomeRow?.['completion_mileage'] ?? request.mileage) || null;
+  const providerFulfilled = Boolean(request.provider_id);
+  const source = providerFulfilled ? "provider_verified" : "repara_verified";
 
   const payload: Row = {
     customer_id: request.customer_id ?? null,
@@ -84,13 +101,14 @@ export async function syncJobToServiceHistory(requestId: string) {
     service_request_id: requestId,
     quote_id: quoteRow?.['id'] ?? null,
     shop_id: request.provider_id ?? null,
+    provider_id: request.provider_id ?? null,
     source_record_id: requestId,
     mileage: closingMileage,
     performed_at: completedAt,
     service_date: serviceDate,
     provider_name: providerName,
     provider_type: provider?.['provider_kind'] ?? "repara_shop",
-    source: "repara_verified",
+    source,
     verification_status: "verified",
     summary: summary.slice(0, 1000),
     labor_total: accepted ? (quoteRow?.['labor_total'] ?? 0) : 0,
@@ -104,7 +122,7 @@ export async function syncJobToServiceHistory(requestId: string) {
     .from("service_records")
     .select("id")
     .eq("service_request_id", requestId)
-    .eq("source", "repara_verified")
+    .in("source", ["repara_verified", "provider_verified"])
     .maybeSingle();
 
   let recordId = existing?.id ? String(existing.id) : null;
