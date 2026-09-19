@@ -606,3 +606,92 @@ export async function addOwnerServiceRecord(
 
   return { ok: true as const, id: String(record.id) };
 }
+
+// -------------------------------------------------- recent activity (home)
+/**
+ * Meaningful OWNERSHIP activity across every vehicle in the garage: completed
+ * services, submitted requests and mileage updates. Internal workflow events
+ * are deliberately excluded.
+ */
+export async function listRecentActivity(db: Db, vehicleIds: string[]) {
+  if (!vehicleIds.length) return [];
+
+  const [{ data: records }, { data: requests }, { data: mileage }] = await Promise.all([
+    db
+      .from("service_records")
+      .select("id, vehicle_id, service_date, performed_at, mileage, provider_name, source, summary")
+      .in("vehicle_id", vehicleIds)
+      .order("performed_at", { ascending: false })
+      .limit(8),
+    db
+      .from("service_requests")
+      .select("id, vehicle_id, request_number, service_category, status, created_at")
+      .in("vehicle_id", vehicleIds)
+      .order("created_at", { ascending: false })
+      .limit(8),
+    db
+      .from("vehicle_mileage_history")
+      .select("id, vehicle_id, mileage, recorded_at, source")
+      .in("vehicle_id", vehicleIds)
+      .order("recorded_at", { ascending: false })
+      .limit(5),
+  ]);
+
+  type Activity = {
+    id: string;
+    vehicleId: string;
+    kind: "service" | "request" | "mileage";
+    date: string;
+    title: string;
+    detail: string | null;
+    /** Provenance label — owner records are never presented as verified. */
+    source: string | null;
+  };
+
+  const events: Activity[] = [];
+
+  for (const r of (records ?? []) as Row[]) {
+    events.push({
+      id: String(r['id']),
+      vehicleId: String(r['vehicle_id']),
+      kind: "service",
+      date: String(r['service_date'] ?? r['performed_at'] ?? "").slice(0, 10),
+      title: r['summary'] ? String(r['summary']).slice(0, 120) : "Service performed",
+      detail: [
+        r['provider_name'] ? String(r['provider_name']) : null,
+        r['mileage'] ? `${Number(r['mileage']).toLocaleString()} mi` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || null,
+      source: String(r['source'] ?? "owner_provided"),
+    });
+  }
+
+  for (const r of (requests ?? []) as Row[]) {
+    events.push({
+      id: String(r['id']),
+      vehicleId: String(r['vehicle_id']),
+      kind: "request",
+      date: String(r['created_at']).slice(0, 10),
+      title: "Service request submitted",
+      detail: [r['request_number'] ? String(r['request_number']) : null, String(r['status'] ?? "")]
+        .filter(Boolean)
+        .join(" · ") || null,
+      source: null,
+    });
+  }
+
+  for (const m of (mileage ?? []) as Row[]) {
+    events.push({
+      id: String(m['id']),
+      vehicleId: String(m['vehicle_id']),
+      kind: "mileage",
+      date: String(m['recorded_at']).slice(0, 10),
+      title: `Mileage updated to ${Number(m['mileage']).toLocaleString()} mi`,
+      detail: null,
+      source: null,
+    });
+  }
+
+  return events.sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
+}

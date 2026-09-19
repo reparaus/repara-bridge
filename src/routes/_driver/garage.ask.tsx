@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { askReparaFn, getGarageHome } from "@/lib/garage.functions";
 import { useI18n } from "@/lib/i18n";
+import { requestServiceKeyFor, serviceCategoryLabel } from "@/lib/service-network";
+import { isServiceKey } from "@/lib/services";
 
 export const Route = createFileRoute("/_driver/garage/ask")({
   validateSearch: (search: Record<string, unknown>): { vehicle?: string } =>
@@ -28,10 +30,12 @@ export const Route = createFileRoute("/_driver/garage/ask")({
 });
 
 const EXAMPLES = [
-  "It shakes when I brake.",
-  "My check engine light came on.",
-  "There's a clicking noise when I turn.",
-  "When should I change my transmission fluid?",
+  "My brakes are squeaking.",
+  "I need a windshield replaced.",
+  "I want 35% tint.",
+  "I need new tires.",
+  "I want my car detailed.",
+  "I don't know what's wrong.",
 ];
 
 type Turn = { role: "driver" | "repara"; content: string };
@@ -50,6 +54,8 @@ function AskRepara() {
   const [busy, setBusy] = useState(false);
   const [followUp, setFollowUp] = useState<{ question: string; options: string[] } | null>(null);
   const [suggestService, setSuggestService] = useState(false);
+  /** Service categories Repara recognised in the driver's own words. */
+  const [categories, setCategories] = useState<string[]>([]);
 
   const vehicles = data?.vehicles ?? [];
   const vehicleId = selected ?? vehicles.find((v) => v.isPrimary)?.id ?? vehicles[0]?.id ?? null;
@@ -69,6 +75,7 @@ function AskRepara() {
       setTurns([...nextTurns, { role: "repara", content: answer.reply }]);
       setFollowUp(answer.followUp);
       setSuggestService(answer.suggestService);
+      setCategories(answer.categories ?? []);
     } catch (error) {
       toast.error((error as Error).message || "Repara couldn't answer just now.");
     } finally {
@@ -203,9 +210,42 @@ function AskRepara() {
         </Button>
       </form>
 
-      {suggestService && vehicleId && (
+      {(suggestService || categories.length > 0) && vehicleId && (
         <div className="mt-6 rounded-2xl border border-border/70 bg-card p-5">
-          <p className="text-sm text-foreground">Want a technician to take a look?</p>
+          <p className="text-sm text-foreground">
+            {categories.length
+              ? "This sounds like it needs:"
+              : "Want a technician to take a look?"}
+          </p>
+
+          {/* An intent, not a diagnosis — the driver confirms before anything happens. */}
+          {categories.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {categories.map((key) => {
+                const serviceKey = requestServiceKeyFor(key);
+                return (
+                  <Button
+                    key={key}
+                    asChild
+                    variant="outline"
+                    className="h-12 w-full justify-between text-base"
+                  >
+                    <Link
+                      to="/quote"
+                      search={{
+                        ...(isServiceKey(serviceKey) ? { service: serviceKey } : {}),
+                        v: vehicleId,
+                      }}
+                    >
+                      {serviceCategoryLabel(key, lang) ?? key}
+                      <span className="text-xs font-normal text-muted-foreground">Request</span>
+                    </Link>
+                  </Button>
+                );
+              })}
+            </div>
+          )}
+
           <Button asChild className="mt-3 h-12 w-full">
             <Link to="/garage/service" search={{ vehicle: vehicleId }}>
               Find service
