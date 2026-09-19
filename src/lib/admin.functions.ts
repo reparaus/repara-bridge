@@ -214,6 +214,19 @@ export const getRequestDetail = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => idSchema.parse(data))
   .handler(async ({ data, context }) => {
+    const claims = context.claims as { aal?: string } | null;
+    const { data: adminRow } = await context.supabase
+      .from("admin_users")
+      .select("role")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const isAdmin = claims?.aal === "aal2" && adminRow?.role === "admin";
+    if (!isAdmin) {
+      const { data: providerAllowed } = await context.supabase.rpc("is_request_provider", {
+        _request_id: data.id,
+      });
+      if (!providerAllowed) throw new Error("You do not have access to this request.");
+    }
     const { data: request, error } = await context.supabase
       .from("service_requests")
       .select("*, customers(*), vehicles(*)")
@@ -280,7 +293,21 @@ export const getRequestDetail = createServerFn({ method: "POST" })
       statusEvents = [];
     }
 
-    return { found: true as const, request, photos, quotes: quotes ?? [], statusEvents };
+    const visibleQuotes = isAdmin
+      ? (quotes ?? [])
+      : (quotes ?? []).map((quote) => ({
+          ...quote,
+          internal_notes: null,
+          internal_cost_total: null,
+          quote_items: (quote.quote_items ?? []).map((item: Record<string, unknown>) => ({
+            ...item,
+            internal_unit_cost: null,
+            supplier: null,
+            supplier_location: null,
+            supplier_product_id: null,
+          })),
+        }));
+    return { found: true as const, request, photos, quotes: visibleQuotes, statusEvents };
   });
 
 /** Marks a request as seen by an admin, which clears it from the "new" badge. */
