@@ -80,6 +80,8 @@ function ServiceArea() {
       search: {
         ...(isServiceKey(serviceKey) ? { service: serviceKey } : {}),
         ...(activeVehicle ? { v: activeVehicle.id } : {}),
+        // The shared taxonomy key travels with the request (0015).
+        cat: categoryKey,
       },
     });
   }
@@ -222,28 +224,50 @@ function ServiceArea() {
       {/* Providers: only real, active providers ever appear here. */}
       <section className="mt-8">
         <SectionTitle>Who does the work</SectionTitle>
-        <div className="rounded-2xl border border-border/60 bg-card p-5">
-          {providerData?.providers.length ? (
-            <div className="space-y-3">
-              {providerData.providers.map((provider) => (
-                <div key={provider.id}>
-                  <p className="text-sm font-semibold text-foreground">{provider.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {[provider.location, provider.offersMobile ? "Mobile service" : null]
-                      .filter(Boolean)
-                      .join(" · ")}
+        {providerData?.providers.length ? (
+          <div className="space-y-3">
+            {providerData.providers.map((provider) => (
+              <Link
+                key={provider.id}
+                to="/providers/$id"
+                params={{ id: provider.id }}
+                search={activeVehicle ? { v: activeVehicle.id } : {}}
+                className="block rounded-2xl border border-border/70 bg-card p-5 transition-colors hover:border-border"
+              >
+                <p className="text-base font-semibold text-foreground">{provider.name}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {[
+                    provider.location,
+                    provider.offersMobile ? "Comes to you" : null,
+                    provider.offersInShop ? "In-shop" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                {provider.description && (
+                  <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+                    {provider.description}
                   </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Repara is building its network of participating providers. For now every request is handled
-              through Repara, and you'll hear back directly.
+                )}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-border/60 bg-card p-5">
+            <p className="text-sm text-foreground">No Repara providers are available here yet.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              You can still send the request — Repara handles it and you'll hear back directly.
             </p>
-          )}
-        </div>
+            <Button
+              className="mt-4 h-12 w-full"
+              onClick={() => startRequest(selected ?? "other")}
+            >
+              Request this service anyway
+            </Button>
+          </div>
+        )}
       </section>
+
     </GarageShell>
   );
 }

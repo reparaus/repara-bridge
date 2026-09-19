@@ -163,6 +163,19 @@ function Profile() {
         </section>
 
         <section>
+          <SectionTitle>Offer services</SectionTitle>
+          <Link
+            to="/provider"
+            className="block rounded-2xl border border-border/70 bg-card p-5"
+          >
+            <p className="text-sm font-medium text-foreground">Become a Repara Provider</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Do automotive work yourself? Create a provider profile so drivers can send you requests.
+            </p>
+          </Link>
+        </section>
+
+        <section>
           <SectionTitle>Notifications</SectionTitle>
           <div className="divide-y divide-border/60 rounded-2xl border border-border/70 bg-card px-5">
             {[

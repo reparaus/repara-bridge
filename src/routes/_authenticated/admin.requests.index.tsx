@@ -106,10 +106,15 @@ function RequestsDashboard() {
               </span>
             )}
           </div>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+              <Link to="/admin/providers">Providers</Link>
+            </Button>
           <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
             <LogOut className="size-4 sm:mr-2" />
             <span className="hidden sm:inline">Sign out</span>
           </Button>
+          </div>
         </div>
       </header>
 

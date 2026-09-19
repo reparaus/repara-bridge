@@ -31,6 +31,10 @@ export const quoteRequestSchema = z.object({
    * follow up in the same language the customer chose.
    */
   preferredLanguage: z.enum(["en", "es"]).default("en"),
+  /** Set when the driver requested service from a specific real provider. */
+  providerId: z.string().trim().uuid().optional(),
+  /** Shared service-taxonomy key (0015), when the driver picked one. */
+  serviceCategoryKey: z.string().trim().max(60).optional(),
   /**
    * Answers to the AI-assisted intake follow-up questions. Advisory only — the
    * AI never diagnoses or prices; these are the customer's own words.
