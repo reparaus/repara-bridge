@@ -103,9 +103,6 @@ export async function persistQuoteRequest(data: QuoteInput) {
     phone: data.contact.phone || "",
     email: data.contact.email || null,
     preferred_contact_method: data.contact.preferredContactMethod,
-    // 0015: an intentionally chosen provider and the shared category key.
-    ...(data.providerId ? { provider_id: data.providerId } : {}),
-    ...(data.serviceCategoryKey ? { service_category_key: data.serviceCategoryKey } : {}),
   };
 
   let createdCustomerId: string | null = null;
