@@ -6,6 +6,7 @@ import { useEffect } from "react";
 
 import { GarageShell, SectionTitle, StatusDot } from "@/components/garage/GarageShell";
 import { formatMileage, mileageBadge, mileageTone } from "@/lib/mileage";
+import { buildProgressLine, useBuilds } from "@/components/garage/BuildsPanel";
 import { VehicleVisual } from "@/components/garage/VehicleVisual";
 import { Button } from "@/components/ui/button";
 import { LoadError, RefreshingDot, RowSkeletons, VehicleHeroSkeleton } from "@/components/garage/GarageSkeletons";
@@ -153,6 +154,8 @@ function GarageHome() {
             </div>
           </Link>
 
+          <ActiveBuildLine vehicleId={primary.id} />
+
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <Link
               to="/garage/ask"
@@ -267,5 +270,29 @@ function GarageHome() {
         </Button>
       )}
     </GarageShell>
+  );
+}
+
+/** Active build at a glance; hidden until the driver has one. */
+function ActiveBuildLine({ vehicleId }: { vehicleId: string }) {
+  const { data } = useBuilds(vehicleId);
+  const active = data?.builds.find((b) => b.isActive);
+  if (!active) return null;
+  return (
+    <Link
+      to="/garage/build/$buildId"
+      params={{ buildId: active.id }}
+      className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card p-4 transition-colors hover:border-border animate-in fade-in duration-300"
+    >
+      <span className="min-w-0">
+        <span className="block text-xs text-muted-foreground">Active build</span>
+        <span className="block truncate text-sm font-semibold text-foreground">{active.name}</span>
+        <span className="block text-xs text-muted-foreground">
+          {buildProgressLine(active)}
+          {active.estimate ? "" : " · Estimate unavailable"}
+        </span>
+      </span>
+      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
+    </Link>
   );
 }

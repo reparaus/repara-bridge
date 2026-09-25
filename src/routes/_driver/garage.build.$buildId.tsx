@@ -19,7 +19,8 @@ import {
   updateBuild,
   updateModification,
 } from "@/lib/builds.functions";
-import { REQUEST_SERVICE_KEY, serviceCategoryLabel } from "@/lib/service-network";
+import { requestServiceKeyFor, serviceCategoryLabel } from "@/lib/service-network";
+import { isServiceKey } from "@/lib/services";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_driver/garage/build/$buildId")({
@@ -123,7 +124,8 @@ function BuildPage() {
   const requirements = serviceRequirements(open.map((m) => m.item));
   const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ") : "";
   const firstRequirement = requirements[0];
-  const requestService = firstRequirement ? (REQUEST_SERVICE_KEY[firstRequirement] ?? "other") : "other";
+  const rawService = requestServiceKeyFor(firstRequirement ?? null);
+  const requestService = isServiceKey(rawService) ? rawService : undefined;
 
   const grouped = BUILD_CATEGORIES.map((c) => ({ ...c, mods: build.modifications.filter((m) => m.category === c.key) })).filter(
     (c) => c.mods.length,
@@ -358,7 +360,7 @@ function BuildPage() {
               <Link
                 to="/quote"
                 search={{
-                  service: requestService,
+                  ...(requestService ? { service: requestService } : {}),
                   v: build.vehicleId,
                   b: build.id,
                   ...(firstRequirement ? { cat: firstRequirement } : {}),

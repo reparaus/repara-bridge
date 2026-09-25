@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BuildsPanel } from "@/components/garage/BuildsPanel";
 import { CardSkeletons, LoadError, VehicleHeroSkeleton } from "@/components/garage/GarageSkeletons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { addServiceRecord, getVehicle, updateMileage } from "@/lib/garage.functions";
@@ -173,6 +174,7 @@ function VehicleProfile() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="builds">Builds</TabsTrigger>
           <TabsTrigger value="info">Info</TabsTrigger>
         </TabsList>
 
@@ -356,6 +358,10 @@ function VehicleProfile() {
         </TabsContent>
 
         {/* ----------------------------------------------------------- info */}
+        <TabsContent value="builds" className="mt-6">
+          <BuildsPanel vehicleId={vehicle.id} />
+        </TabsContent>
+
         <TabsContent value="info" className="mt-6 space-y-8">
           <div>
             <SectionTitle>Mileage history</SectionTitle>
