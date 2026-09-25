@@ -370,9 +370,18 @@ function BuildPage() {
               </Link>
             </Button>
           </>
-        ) : build.modifications.some((m) => m.status === "requested") ? (
+        ) : build.modifications.some((m) => ["requested", "quoted", "approved"].includes(m.status)) ? (
           <p className="rounded-2xl border border-border/60 bg-card p-5 text-sm text-muted-foreground">
             Quotes requested. You'll be notified when a provider responds.
+            {build.modifications.find((m) => m.serviceRequestId)?.serviceRequestId ? (
+              <Link
+                to="/garage/request/$id"
+                params={{ id: build.modifications.find((m) => m.serviceRequestId)!.serviceRequestId! }}
+                className="mt-2 block text-primary"
+              >
+                View request and quotes →
+              </Link>
+            ) : null}
           </p>
         ) : null}
       </section>

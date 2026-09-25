@@ -17,5 +17,7 @@
 # Build Configurator V4
 - [x] Phase 1: builds (create/rename/duplicate/active/archive), modification categories, keyword suggestions, estimate-unavailable state, Request Actual Quotes → request linked to build (`0019_vehicle_builds.sql`)
 - [ ] Run `0019_vehicle_builds.sql` (user)
-- [ ] Phase 2: provider quotes + versioning, customer quote comparison/approve/decline, request status timeline
+
 - [ ] Phase 3: service-specific request forms, ZIP-based provider matching, "notify me" when no provider, install → verified build + history
+- [x] Phase 2: provider invites, provider quotes with versions, driver compare/approve/decline, request timeline (`0020_provider_quotes.sql`)
+- [ ] Run `0020_provider_quotes.sql` (user, after 0019)
