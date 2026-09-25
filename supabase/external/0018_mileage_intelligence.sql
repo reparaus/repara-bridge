@@ -149,16 +149,17 @@ create trigger apply_vehicle_mileage
   for each row execute function public.apply_mileage_reading();
 
 -- Backfill the provenance of each vehicle's current mileage from its history.
+with best as (
+  select distinct on (m.vehicle_id) m.vehicle_id, m.source::text as source, m.confidence
+    from public.vehicle_mileage_history m
+    join public.vehicles v on v.id = m.vehicle_id and v.current_mileage = m.mileage
+   order by m.vehicle_id, public.mileage_source_rank(m.source::text) desc, m.recorded_at desc
+)
 update public.vehicles v
-   set current_mileage_source = h.source::text,
-       current_mileage_confidence = h.confidence
-  from lateral (
-    select source, confidence from public.vehicle_mileage_history m
-     where m.vehicle_id = v.id and m.mileage = v.current_mileage
-     order by public.mileage_source_rank(m.source::text) desc, m.recorded_at desc
-     limit 1
-  ) h
- where v.current_mileage is not null and v.current_mileage_source is null;
+   set current_mileage_source = best.source,
+       current_mileage_confidence = best.confidence
+  from best
+ where best.vehicle_id = v.id and v.current_mileage_source is null;
 
 -- ------------------------------------------------ expanded service taxonomy
 insert into public.service_categories (key, group_key, label_en, label_es, position) values
