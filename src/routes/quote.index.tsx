@@ -1818,6 +1818,7 @@ function Confirmation({
   /** null = still checking; signed-in drivers never see guest prompts. */
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [linkedVehicleId, setLinkedVehicleId] = useState<string | null>(garageVehicleId ?? null);
+  const [linkedRequestId, setLinkedRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1837,6 +1838,7 @@ function Confirmation({
           },
         });
         if (!cancelled && result.vehicleId && garageVehicleId) setLinkedVehicleId(result.vehicleId);
+        if (!cancelled && result.requestId) setLinkedRequestId(result.requestId);
       } catch {
         // The request is already saved; linking is best-effort.
       }
@@ -1937,9 +1939,15 @@ function Confirmation({
                 size="lg"
                 className="h-13 w-full rounded-full border-border bg-transparent text-sm tracking-[0.12em]"
               >
-                <Link to="/garage/vehicle/$id" params={{ id: linkedVehicleId }}>
-                  {lang === "es" ? "Ver solicitud" : "View Request"}
-                </Link>
+                {linkedRequestId ? (
+                  <Link to="/garage/request/$id" params={{ id: linkedRequestId }}>
+                    {lang === "es" ? "Ver solicitud" : "View Request"}
+                  </Link>
+                ) : (
+                  <Link to="/garage/vehicle/$id" params={{ id: linkedVehicleId }}>
+                    {lang === "es" ? "Ver solicitud" : "View Request"}
+                  </Link>
+                )}
               </Button>
             ) : null}
             <Button

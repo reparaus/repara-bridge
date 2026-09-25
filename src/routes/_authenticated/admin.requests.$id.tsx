@@ -34,6 +34,7 @@ import { getJobWorkspace, setRequestAssignment, type JobRecommendation } from "@
 import { answerLabel, serviceLabel, statusLabel, WORKFLOW_STATUSES } from "@/lib/services";
 import { DRIVETRAIN_LABELS, type Drivetrain } from "@/lib/vehicle-config";
 import { track } from "@/lib/analytics";
+import { ProviderInvites } from "@/components/admin/ProviderInvites";
 
 export const Route = createFileRoute("/_authenticated/admin/requests/$id")({
   head: () => ({
@@ -426,6 +427,7 @@ function JobWorkspace() {
           {/* ------------------------------------------------------- OVERVIEW */}
           <TabsContent value="overview" className="mt-0 grid gap-5 lg:grid-cols-2">
             <div className="min-w-0 space-y-5">
+              {isAdmin && <ProviderInvites requestId={id} />}
               {/* Live job snapshot: what a technician needs before starting. */}
               <Panel title="What do I need to know before I start?">
                 <p className="text-sm">{nextBestAction}</p>
