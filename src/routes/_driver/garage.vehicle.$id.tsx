@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { addServiceRecord, getVehicle, updateMileage } from "@/lib/garage.functions";
+import { formatMileage, mileageSourceLabel, mileageTone } from "@/lib/mileage";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_driver/garage/vehicle/$id")({
   head: () => ({
@@ -137,9 +139,17 @@ function VehicleProfile() {
           </p>
         )}
         <p className="mt-0.5 text-sm text-muted-foreground">
-          {vehicle.currentMileage ? `${vehicle.currentMileage.toLocaleString()} miles` : "Mileage not added yet"}
+          {vehicle.currentMileage
+            ? formatMileage(vehicle.currentMileage, vehicle.mileageConfidence)
+            : "Mileage not added yet"}
           {vehicle.vinMasked ? ` · VIN ${vehicle.vinMasked}` : ""}
         </p>
+        {vehicle.currentMileage && mileageSourceLabel(vehicle.mileageSource, vehicle.mileageConfidence) ? (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {mileageSourceLabel(vehicle.mileageSource, vehicle.mileageConfidence)}
+            {vehicle.mileageConfidence === "estimated" ? " — not an odometer reading" : ""}
+          </p>
+        ) : null}
         <Button variant="outline" className="mt-3 h-11" onClick={() => setMileageOpen(true)}>
           Update mileage
         </Button>
@@ -333,7 +343,52 @@ function VehicleProfile() {
         </TabsContent>
 
         {/* ----------------------------------------------------------- info */}
-        <TabsContent value="info" className="mt-6">
+        <TabsContent value="info" className="mt-6 space-y-8">
+          <div>
+            <SectionTitle>Mileage history</SectionTitle>
+            {data.mileageReadings.length === 0 ? (
+              <div className="rounded-2xl border border-border/70 bg-card p-5 text-sm text-muted-foreground">
+                No mileage readings yet. Repara records mileage automatically whenever a service is
+                completed, so you rarely need to enter it yourself.
+              </div>
+            ) : (
+              <ol className="divide-y divide-border/60 rounded-2xl border border-border/70 bg-card px-5">
+                {data.mileageReadings.map((reading) => {
+                  const tone = mileageTone(reading.source, reading.confidence);
+                  return (
+                    <li key={reading.id} className="flex items-baseline justify-between gap-4 py-3 text-sm">
+                      <div>
+                        <p className={cn("font-medium", tone === "estimated" ? "text-muted-foreground italic" : "text-foreground")}>
+                          {formatMileage(reading.mileage, reading.confidence)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {mileageSourceLabel(reading.source, reading.confidence)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {new Date(reading.recordedAt).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+            <div className="mt-3 rounded-2xl border border-dashed border-border/70 p-4 text-xs leading-relaxed text-muted-foreground">
+              <p className="font-medium text-foreground">Connect your vehicle — coming soon</p>
+              <p className="mt-1">
+                Optionally connect a supported vehicle account to keep mileage up to date automatically.
+                Availability varies by vehicle and connected-service plan. You never need a paid subscription
+                to use Repara.
+              </p>
+            </div>
+          </div>
+
+          <div>
+          <SectionTitle>Vehicle information</SectionTitle>
           <dl className="divide-y divide-border/60 rounded-2xl border border-border/70 bg-card px-5">
             {[
               ["Year", vehicle.year ? String(vehicle.year) : "—"],
@@ -352,6 +407,7 @@ function VehicleProfile() {
               </div>
             ))}
           </dl>
+          </div>
         </TabsContent>
       </Tabs>
 
