@@ -37,6 +37,7 @@ import { Route as DriverProviderSettingsRouteImport } from './routes/_driver/pro
 import { Route as AuthenticatedAdminProvidersIndexRouteImport } from './routes/_authenticated/admin.providers.index'
 import { Route as AuthenticatedAdminRequestsIndexRouteImport } from './routes/_authenticated/admin.requests.index'
 import { Route as AuthenticatedAdminRequestsIdRouteImport } from './routes/_authenticated/admin.requests.$id'
+import { Route as DriverGarageBuildBuildIdRouteImport } from './routes/_driver/garage.build.$buildId'
 import { Route as DriverGarageVehicleIdRouteImport } from './routes/_driver/garage.vehicle.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -182,6 +183,12 @@ const AuthenticatedAdminRequestsIdRoute =
     path: '/admin/requests/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const DriverGarageBuildBuildIdRoute =
+  DriverGarageBuildBuildIdRouteImport.update({
+    id: '/garage/build/$buildId',
+    path: '/garage/build/$buildId',
+    getParentRoute: () => DriverRouteRoute,
+  } as any)
 const DriverGarageVehicleIdRoute = DriverGarageVehicleIdRouteImport.update({
   id: '/garage/vehicle/$id',
   path: '/garage/vehicle/$id',
@@ -213,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/garage/': typeof DriverGarageIndexRoute
   '/provider/': typeof DriverProviderIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
+  '/garage/build/$buildId': typeof DriverGarageBuildBuildIdRoute
   '/garage/vehicle/$id': typeof DriverGarageVehicleIdRoute
   '/admin/providers/': typeof AuthenticatedAdminProvidersIndexRoute
   '/admin/requests/': typeof AuthenticatedAdminRequestsIndexRoute
@@ -242,6 +250,7 @@ export interface FileRoutesByTo {
   '/garage': typeof DriverGarageIndexRoute
   '/provider': typeof DriverProviderIndexRoute
   '/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
+  '/garage/build/$buildId': typeof DriverGarageBuildBuildIdRoute
   '/garage/vehicle/$id': typeof DriverGarageVehicleIdRoute
   '/admin/providers': typeof AuthenticatedAdminProvidersIndexRoute
   '/admin/requests': typeof AuthenticatedAdminRequestsIndexRoute
@@ -274,6 +283,7 @@ export interface FileRoutesById {
   '/_driver/garage/': typeof DriverGarageIndexRoute
   '/_driver/provider/': typeof DriverProviderIndexRoute
   '/_authenticated/admin/requests/$id': typeof AuthenticatedAdminRequestsIdRoute
+  '/_driver/garage/build/$buildId': typeof DriverGarageBuildBuildIdRoute
   '/_driver/garage/vehicle/$id': typeof DriverGarageVehicleIdRoute
   '/_authenticated/admin/providers/': typeof AuthenticatedAdminProvidersIndexRoute
   '/_authenticated/admin/requests/': typeof AuthenticatedAdminRequestsIndexRoute
@@ -305,6 +315,7 @@ export interface FileRouteTypes {
     | '/garage/'
     | '/provider/'
     | '/admin/requests/$id'
+    | '/garage/build/$buildId'
     | '/garage/vehicle/$id'
     | '/admin/providers/'
     | '/admin/requests/'
@@ -334,6 +345,7 @@ export interface FileRouteTypes {
     | '/garage'
     | '/provider'
     | '/admin/requests/$id'
+    | '/garage/build/$buildId'
     | '/garage/vehicle/$id'
     | '/admin/providers'
     | '/admin/requests'
@@ -365,6 +377,7 @@ export interface FileRouteTypes {
     | '/_driver/garage/'
     | '/_driver/provider/'
     | '/_authenticated/admin/requests/$id'
+    | '/_driver/garage/build/$buildId'
     | '/_driver/garage/vehicle/$id'
     | '/_authenticated/admin/providers/'
     | '/_authenticated/admin/requests/'
@@ -583,6 +596,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRequestsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_driver/garage/build/$buildId': {
+      id: '/_driver/garage/build/$buildId'
+      path: '/garage/build/$buildId'
+      fullPath: '/garage/build/$buildId'
+      preLoaderRoute: typeof DriverGarageBuildBuildIdRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
     '/_driver/garage/vehicle/$id': {
       id: '/_driver/garage/vehicle/$id'
       path: '/garage/vehicle/$id'
@@ -623,6 +643,7 @@ interface DriverRouteRouteChildren {
   DriverProviderSettingsRoute: typeof DriverProviderSettingsRoute
   DriverGarageIndexRoute: typeof DriverGarageIndexRoute
   DriverProviderIndexRoute: typeof DriverProviderIndexRoute
+  DriverGarageBuildBuildIdRoute: typeof DriverGarageBuildBuildIdRoute
   DriverGarageVehicleIdRoute: typeof DriverGarageVehicleIdRoute
 }
 
@@ -639,6 +660,7 @@ const DriverRouteRouteChildren: DriverRouteRouteChildren = {
   DriverProviderSettingsRoute: DriverProviderSettingsRoute,
   DriverGarageIndexRoute: DriverGarageIndexRoute,
   DriverProviderIndexRoute: DriverProviderIndexRoute,
+  DriverGarageBuildBuildIdRoute: DriverGarageBuildBuildIdRoute,
   DriverGarageVehicleIdRoute: DriverGarageVehicleIdRoute,
 }
 
