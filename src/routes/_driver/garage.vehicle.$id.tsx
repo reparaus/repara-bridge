@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CardSkeletons, LoadError, VehicleHeroSkeleton } from "@/components/garage/GarageSkeletons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { addServiceRecord, getVehicle, updateMileage } from "@/lib/garage.functions";
 import { formatMileage, mileageSourceLabel, mileageTone } from "@/lib/mileage";
@@ -56,7 +57,7 @@ function VehicleProfile() {
   const saveMileage = useServerFn(updateMileage);
   const saveRecord = useServerFn(addServiceRecord);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["garage-vehicle", id],
     queryFn: () => load({ data: { vehicleId: id } }),
   });
@@ -109,11 +110,23 @@ function VehicleProfile() {
     onError: (error) => toast.error((error as Error).message),
   });
 
+  if (isError && !data) {
+    return (
+      <GarageShell>
+        <LoadError message="Couldn't load your vehicle right now." onRetry={() => void refetch()} />
+      </GarageShell>
+    );
+  }
+
   if (isLoading || !data) {
     return (
       <GarageShell>
-        <Skeleton className="h-24 w-full rounded-2xl" />
-        <Skeleton className="mt-4 h-40 w-full rounded-2xl" />
+        <div aria-hidden>
+          <Skeleton className="h-7 w-2/3" />
+          <Skeleton className="mt-2 h-4 w-1/3" />
+        </div>
+        <VehicleHeroSkeleton />
+        <CardSkeletons rows={2} className="mt-6" />
       </GarageShell>
     );
   }

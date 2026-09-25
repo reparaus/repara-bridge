@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { GarageShell } from "@/components/garage/GarageShell";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadError, RowSkeletons } from "@/components/garage/GarageSkeletons";
 import { getGarageHome } from "@/lib/garage.functions";
 
 export const Route = createFileRoute("/_driver/garage/my-car")({
@@ -33,12 +33,9 @@ function MyCar() {
     <GarageShell>
       <h1 className="text-2xl font-semibold text-foreground">My Car</h1>
       <p className="mt-1 text-sm text-muted-foreground">Choose a vehicle to see its maintenance, history, and details.</p>
-      {isLoading ? <Skeleton className="mt-6 h-48 w-full rounded-lg" /> : null}
-      {isError ? (
-        <div className="mt-6 border border-border bg-card p-5 text-center">
-          <p className="text-sm text-foreground">Your vehicles could not be loaded.</p>
-          <Button variant="outline" className="mt-3" onClick={() => void refetch()}>Try again</Button>
-        </div>
+      {isLoading ? <RowSkeletons rows={2} className="mt-6" /> : null}
+      {isError && !data ? (
+        <LoadError message="Couldn't load your vehicles right now." onRetry={() => void refetch()} />
       ) : null}
       {!isLoading && !isError && !vehicles.length ? (
         <div className="rounded-3xl border border-border/60 bg-card p-6 text-center">

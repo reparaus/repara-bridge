@@ -8,7 +8,7 @@ import { GarageShell, SectionTitle, StatusDot } from "@/components/garage/Garage
 import { formatMileage, mileageBadge, mileageTone } from "@/lib/mileage";
 import { VehicleVisual } from "@/components/garage/VehicleVisual";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadError, RefreshingDot, RowSkeletons, VehicleHeroSkeleton } from "@/components/garage/GarageSkeletons";
 import { claimMyRequests, getGarageHome } from "@/lib/garage.functions";
 
 export const Route = createFileRoute("/_driver/garage/")({
