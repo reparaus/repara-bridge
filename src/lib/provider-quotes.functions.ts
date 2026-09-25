@@ -116,7 +116,7 @@ export const getProviderBrief = createServerFn({ method: "POST" })
       build: b.build
         ? {
             name: String(b.build.name),
-            modifications: (b.build.modifications ?? []).map((m: any) => ({
+            modifications: ((b.build.modifications ?? []) as any[]).map((m: any): { item: string; category: string; detail: string | null; notes: string | null } => ({
               item: String(m.item),
               category: String(m.category),
               detail: m.detail ?? null,
@@ -209,16 +209,16 @@ export const getMyRequest = createServerFn({ method: "POST" })
       vehicleId: String(r.vehicle_id),
       buildId: r.build_id ? String(r.build_id) : null,
       vehicleLabel: v ? [v.year, v.make, v.model, v.trim].filter(Boolean).join(" ") : "",
-      providers: (providers ?? []).map((p: any) => ({
+      providers: ((providers ?? []) as any[]).map((p: any): { id: string; name: string; area: string | null; mobile: boolean; inShop: boolean } => ({
         id: String(p.id),
         name: String(p.business_name ?? "Provider"),
         area: [p.city, p.region].filter(Boolean).join(", ") || null,
         mobile: Boolean(p.offers_mobile),
         inShop: Boolean(p.offers_in_shop),
       })),
-      invites: (invites.data ?? []).map((i: any) => ({ providerId: String(i.provider_id), status: String(i.status) })),
-      quotes: (quotes.data ?? []).map(mapQuote),
-      events: (events.data ?? []).map((e: any) => ({
+      invites: ((invites.data ?? []) as any[]).map((i: any): { providerId: string; status: string } => ({ providerId: String(i.provider_id), status: String(i.status) })),
+      quotes: ((quotes.data ?? []) as any[]).map(mapQuote),
+      events: ((events.data ?? []) as any[]).map((e: any): { kind: string; actor: string; providerId: string | null; createdAt: string } => ({
         kind: String(e.kind),
         actor: String(e.actor),
         providerId: e.provider_id ? String(e.provider_id) : null,
@@ -250,7 +250,7 @@ export const getRequestInvites = createServerFn({ method: "POST" })
     ]);
     return {
       invites: (invites ?? []).map((i: any) => ({ providerId: String(i.provider_id), status: String(i.status) })),
-      providers: (providers ?? []).map((p: any) => ({
+      providers: ((providers ?? []) as any[]).map((p: any): { id: string; name: string; area: string | null; mobile: boolean; inShop: boolean } => ({
         id: String(p.id),
         name: String(p.business_name ?? "Provider"),
         area: [p.city, p.region].filter(Boolean).join(", ") || null,
