@@ -366,3 +366,76 @@ export const claimMyRequests = createServerFn({ method: "POST" })
     }
     return { claimed };
   });
+
+// ------------------------------------------ signed-in request → same vehicle
+/**
+ * After a signed-in driver submits the shared request flow from their Garage,
+ * attach that request to their account and their canonical Garage vehicle.
+ * Proof of authorship is the one-time `submissionId` only the submitting
+ * browser knows; Garage ownership is checked with the driver's own session.
+ */
+export const attachSubmittedRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) =>
+    z
+      .object({
+        requestNumber: z.string().min(1).max(40),
+        submissionId: z.string().uuid(),
+        vehicleId: z.string().uuid().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as unknown as Db;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as unknown as Db;
+
+    const { data: request } = await admin
+      .from("service_requests")
+      .select("id, user_id, vehicle_id, mileage, created_at")
+      .eq("request_number", data.requestNumber)
+      .eq("submission_id", data.submissionId)
+      .maybeSingle();
+    if (!request) return { attached: false as const, requestId: null, vehicleId: null };
+    if (request.user_id && request.user_id !== context.userId) {
+      return { attached: false as const, requestId: null, vehicleId: null };
+    }
+
+    let garageVehicleId: string | null = null;
+    if (data.vehicleId) {
+      const { data: link } = await db
+        .from("garage_vehicles")
+        .select("vehicle_id")
+        .eq("user_id", context.userId)
+        .eq("vehicle_id", data.vehicleId)
+        .is("ownership_ended_at", null)
+        .maybeSingle();
+      garageVehicleId = link?.vehicle_id ? String(link.vehicle_id) : null;
+    }
+
+    await admin
+      .from("service_requests")
+      .update({ user_id: context.userId, ...(garageVehicleId ? { vehicle_id: garageVehicleId } : {}) })
+      .eq("id", request.id);
+
+    if (garageVehicleId && request.mileage) {
+      // Owner-reported reading tied to this request; the unique index from
+      // 0017 keeps repeat calls from duplicating it.
+      await admin.from("vehicle_mileage_history").upsert(
+        {
+          vehicle_id: garageVehicleId,
+          mileage: Number(request.mileage),
+          source: "intake",
+          source_reference: String(request.id),
+          recorded_by: context.userId,
+        },
+        { onConflict: "vehicle_id,source,source_reference", ignoreDuplicates: true },
+      );
+    }
+
+    return {
+      attached: true as const,
+      requestId: String(request.id),
+      vehicleId: garageVehicleId ?? (request.vehicle_id ? String(request.vehicle_id) : null),
+    };
+  });
