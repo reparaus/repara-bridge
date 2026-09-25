@@ -48,7 +48,7 @@ function GarageHome() {
   const load = useServerFn(getGarageHome);
   const claim = useServerFn(claimMyRequests);
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ["garage-home"], queryFn: () => load({}) });
+  const { data, isLoading, isError, isFetching, refetch } = useQuery({ queryKey: ["garage-home"], queryFn: () => load({}) });
 
   /**
    * Links requests this driver submitted as a guest. Contact details must match
@@ -72,16 +72,28 @@ function GarageHome() {
   return (
     <GarageShell>
       <header>
-        <h1 className="text-[27px] font-semibold leading-tight tracking-tight text-foreground">
-          {greeting()}
-          {data?.profile.firstName ? `, ${data.profile.firstName}` : ""}
-        </h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-[27px] font-semibold leading-tight tracking-tight text-foreground">
+            {greeting()}
+            {data?.profile.firstName ? `, ${data.profile.firstName}` : ""}
+          </h1>
+          <RefreshingDot active={isFetching && !isLoading} />
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">Your car, understood.</p>
       </header>
 
-      {isLoading && <Skeleton className="mt-6 h-64 w-full rounded-3xl" />}
+      {isLoading && (
+        <>
+          <VehicleHeroSkeleton />
+          <RowSkeletons rows={2} className="mt-10" />
+        </>
+      )}
 
-      {!isLoading && !primary && (
+      {isError && !data && (
+        <LoadError message="Couldn't load your garage right now." onRetry={() => void refetch()} />
+      )}
+
+      {!isLoading && !isError && !primary && (
         <div className="mt-6 rounded-3xl border border-border/60 bg-card p-6 text-center">
           <p className="text-base font-medium text-foreground">Your garage is empty.</p>
           <p className="mt-1 text-sm text-muted-foreground">
