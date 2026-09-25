@@ -13,3 +13,9 @@
 - [x] Mileage provenance, source-priority, estimate-safe current mileage (`0018_mileage_intelligence.sql`)
 - [ ] Run `0018_mileage_intelligence.sql` on the external project (user)
 - [ ] Signed-in driver/provider/admin QA — needs an authenticated external-project session
+
+# Build Configurator V4
+- [x] Phase 1: builds (create/rename/duplicate/active/archive), modification categories, keyword suggestions, estimate-unavailable state, Request Actual Quotes → request linked to build (`0019_vehicle_builds.sql`)
+- [ ] Run `0019_vehicle_builds.sql` (user)
+- [ ] Phase 2: provider quotes + versioning, customer quote comparison/approve/decline, request status timeline
+- [ ] Phase 3: service-specific request forms, ZIP-based provider matching, "notify me" when no provider, install → verified build + history
