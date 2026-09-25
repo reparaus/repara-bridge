@@ -122,7 +122,7 @@ begin
   if new.provider_id is not null and (tg_op = 'INSERT' or new.provider_id is distinct from old.provider_id) then
     insert into public.request_provider_invites (request_id, provider_id)
       select new.id, new.provider_id
-       where exists (select 1 from public.service_providers where id = new.provider_id and status = 'active')
+       where exists (select 1 from public.service_providers where id = new.provider_id and status::text = 'active')
       on conflict (request_id, provider_id) do nothing;
   end if;
   return new;
@@ -139,7 +139,7 @@ begin
   if not public.is_verified_admin(auth.uid()) then raise exception 'Not allowed'; end if;
   insert into public.request_provider_invites (request_id, provider_id, invited_by)
     select _request_id, p.id, auth.uid() from public.service_providers p
-     where p.id = any(_provider_ids) and p.status = 'active'
+     where p.id = any(_provider_ids) and p.status::text = 'active'
     on conflict (request_id, provider_id) do nothing;
   get diagnostics n = row_count;
   if n > 0 then
@@ -193,7 +193,7 @@ begin
   select i.provider_id into pid from public.request_provider_invites i
     join public.service_providers p on p.id = i.provider_id
    where i.request_id = _request_id and p.owner_user_id = auth.uid()
-     and p.status = 'active' and i.status in ('invited','viewed','quoted')
+     and p.status::text = 'active' and i.status in ('invited','viewed','quoted')
    limit 1;
   if pid is null then raise exception 'You can''t quote this request'; end if;
   if least(_parts, _labor, _fees, _tax) < 0 then raise exception 'Amounts must be positive'; end if;
@@ -225,10 +225,11 @@ begin
 
   select user_id into owner from public.service_requests where id = _request_id;
   if owner is not null then
-    insert into public.notifications (user_id, kind, title, body, link, dedupe_key)
-    values (owner, 'quote_received', case when v = 1 then 'You received a quote' else 'A quote was updated' end,
-            'A provider sent pricing for your request.', '/garage/request/' || _request_id, 'quote:' || qid)
-    on conflict do nothing;
+    insert into public.notifications (user_id, service_request_id, provider_id, event_type, event_key, title, body)
+    values (owner, _request_id, pid, 'quote_received', 'quote:' || qid,
+            case when v = 1 then 'You received a quote' else 'A quote was updated' end,
+            'A provider sent pricing for your request.')
+    on conflict (user_id, event_key) do nothing;
   end if;
   return qid;
 end $$;
@@ -303,5 +304,5 @@ grant execute on function public.respond_to_provider_quote(uuid, text) to authen
 -- Existing requests with a chosen provider get their invite now.
 insert into public.request_provider_invites (request_id, provider_id)
   select sr.id, sr.provider_id from public.service_requests sr
-    join public.service_providers p on p.id = sr.provider_id and p.status = 'active'
+    join public.service_providers p on p.id = sr.provider_id and p.status::text = 'active'
   on conflict (request_id, provider_id) do nothing;
