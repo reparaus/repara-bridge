@@ -79,7 +79,9 @@ import {
 import { VinScanner } from "@/components/quote/VinScanner";
 import { ComboboxInput } from "@/components/quote/ComboboxInput";
 import { MAKES, trimSuggestions, yearOptions } from "@/lib/vehicle-data";
-import { getServiceRequestPrefill } from "@/lib/garage.functions";
+import { attachSubmittedRequest, getServiceRequestPrefill } from "@/lib/garage.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { serviceCategoryLabel } from "@/lib/service-network";
 import { useModelSuggestions } from "@/lib/use-model-suggestions";
 
 
@@ -329,11 +331,23 @@ function QuoteFlow() {
     const draft = loadDraft();
     if (draft?.data) setPendingDraft(draft);
     if (preselectedService) {
-      setForm((f) =>
-        f.services.includes(preselectedService)
-          ? f
-          : { ...f, services: [...f.services, preselectedService] },
-      );
+      // A specific taxonomy service (tint, detail, tires…) carried in `cat`
+      // pre-fills "Other" so the request never arrives as a bare "Other".
+      const categoryText =
+        preselectedService === "other" && chosenCategoryKey && chosenCategoryKey !== "other"
+          ? serviceCategoryLabel(chosenCategoryKey, lang)
+          : null;
+      setForm((f) => {
+        const services = f.services.includes(preselectedService)
+          ? f.services
+          : [...f.services, preselectedService];
+        const existing = f.answers["other"]?.["request"];
+        const answers =
+          categoryText && !existing
+            ? { ...f.answers, other: { ...(f.answers["other"] ?? {}), request: categoryText } }
+            : f.answers;
+        return { ...f, services, answers };
+      });
     }
     // One idempotency key per quote attempt, reused across retries.
     setForm((f) => (f.submissionId ? f : { ...f, submissionId: crypto.randomUUID() }));
@@ -724,6 +738,7 @@ function QuoteFlow() {
         requestNumber={confirmation.requestNumber}
         outsideArea={confirmation.outsideArea}
         snapshot={confirmation.snapshot}
+        garageVehicleId={garageVehicleId}
         onAnother={() => {
           // Fresh idempotency key: a new request is always allowed.
           setForm({ ...EMPTY, submissionId: crypto.randomUUID() });
@@ -1762,14 +1777,46 @@ function Confirmation({
   requestNumber,
   snapshot,
   outsideArea = false,
+  garageVehicleId,
   onAnother,
 }: {
   requestNumber: string;
   snapshot: FormState;
   outsideArea?: boolean;
+  garageVehicleId?: string;
   onAnother: () => void;
 }) {
   const { t, lang } = useI18n();
+  const attach = useServerFn(attachSubmittedRequest);
+  /** null = still checking; signed-in drivers never see guest prompts. */
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [linkedVehicleId, setLinkedVehicleId] = useState<string | null>(garageVehicleId ?? null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+      const hasSession = Boolean(data.session);
+      setSignedIn(hasSession);
+      if (!hasSession || !snapshot.submissionId) return;
+      try {
+        const result = await attach({
+          data: {
+            requestNumber,
+            submissionId: snapshot.submissionId,
+            ...(garageVehicleId ? { vehicleId: garageVehicleId } : {}),
+          },
+        });
+        if (!cancelled && result.vehicleId && garageVehicleId) setLinkedVehicleId(result.vehicleId);
+      } catch {
+        // The request is already saved; linking is best-effort.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [attach, garageVehicleId, requestNumber, snapshot.submissionId]);
   const contactLabel =
     contactMethodChoices(t).find((c) => c.value === snapshot.contactMethod)?.label ??
     t("quote.contact.methodText");
@@ -1781,7 +1828,13 @@ function Confirmation({
           <Check className="size-6 text-chrome" />
         </span>
         <h1 className="mt-6 font-display text-3xl font-extrabold">
-          {outsideArea ? t("quote.confirm.titleOutside") : t("quote.confirm.title")}
+          {outsideArea
+            ? t("quote.confirm.titleOutside")
+            : signedIn
+              ? lang === "es"
+                ? "¡Solicitud enviada!"
+                : "Request submitted!"
+              : t("quote.confirm.title")}
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           {outsideArea
@@ -1844,31 +1897,65 @@ function Confirmation({
           </div>
         </div>
 
-        {/* No account was needed to get here. Offering one now is optional, and
-            a request is only linked to an account when the contact details match. */}
-        <div className="surface-panel mt-6 p-5 text-left">
-          <p className="text-sm font-medium">Save this vehicle to your garage</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Create your free Repara account to track this repair, maintenance and service history.
-          </p>
-          <Button asChild variant="secondary" className="mt-3 h-12 w-full">
-            <Link to="/signin">Create account</Link>
-          </Button>
-        </div>
+        {signedIn ? (
+          <div className="mt-8 space-y-3">
+            <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
+              <Link to="/garage">{lang === "es" ? "Volver a Mi Garage" : "Return to My Garage"}</Link>
+            </Button>
+            {linkedVehicleId ? (
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="h-13 w-full rounded-full border-border bg-transparent text-sm tracking-[0.12em]"
+              >
+                <Link to="/garage/vehicle/$id" params={{ id: linkedVehicleId }}>
+                  {lang === "es" ? "Ver solicitud" : "View Request"}
+                </Link>
+              </Button>
+            ) : null}
+            <Button
+              asChild
+              variant="ghost"
+              size="lg"
+              className="h-13 w-full rounded-full text-sm tracking-[0.12em]"
+            >
+              <a href={linkedVehicleId ? `/garage/service?v=${linkedVehicleId}` : "/garage/service"}>
+                {lang === "es" ? "Solicitar otro servicio" : "Request Another Service"}
+              </a>
+            </Button>
+          </div>
+        ) : signedIn === false ? (
+          <>
+            {/* No account was needed to get here. Offering one now is optional, and
+                a request is only linked to an account when the contact details match. */}
+            <div className="surface-panel mt-6 p-5 text-left">
+              <p className="text-sm font-medium">Save this vehicle to your garage</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Create your free Repara account to track this repair, maintenance and service history.
+              </p>
+              <Button asChild variant="secondary" className="mt-3 h-12 w-full">
+                <Link to="/signin">Create account</Link>
+              </Button>
+            </div>
 
-        <div className="mt-8 space-y-3">
-          <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
-            <Link to="/">{t("quote.confirm.backHome")}</Link>
-          </Button>
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={onAnother}
-            className="h-13 w-full rounded-full border-border bg-transparent text-sm tracking-[0.12em]"
-          >
-            {t("quote.confirm.another")}
-          </Button>
-        </div>
+            <div className="mt-8 space-y-3">
+              <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
+                <Link to="/">{t("quote.confirm.backHome")}</Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={onAnother}
+                className="h-13 w-full rounded-full border-border bg-transparent text-sm tracking-[0.12em]"
+              >
+                {t("quote.confirm.another")}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="mt-8 h-13" aria-hidden />
+        )}
       </div>
     </div>
   );
