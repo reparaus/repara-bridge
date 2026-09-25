@@ -29,11 +29,11 @@ const WHEEL_URLS: Record<Exclude<WheelStyle, "stock">, string> = {
 const UNITS_PER_INCH = 0.007;
 
 const VIEWS: Record<CameraView, [number, number, number]> = {
-  three_quarter: [1.9, 1.0, 2.2],
-  front: [0, 0.7, 2.8],
-  side: [2.8, 0.6, 0],
-  rear: [0, 0.8, -2.8],
-  top: [0.01, 3.2, 0],
+  three_quarter: [3.4, 1.8, 3.9],
+  front: [0, 1.2, 4.8],
+  side: [5, 1.0, 0],
+  rear: [0, 1.4, -4.8],
+  top: [0.01, 5.6, 0],
 };
 
 function Car({ config }: { config: VisualConfig }) {
@@ -130,11 +130,11 @@ export default function Build3DViewer({ config, view, viewNonce }: { config: Vis
         <Car config={config} />
       </Suspense>
       <mesh rotation-x={-Math.PI / 2} receiveShadow>
-        <circleGeometry args={[3, 64]} />
+        <circleGeometry args={[5, 64]} />
         <meshStandardMaterial color="#26292e" roughness={0.9} />
       </mesh>
-      <ContactShadows position={[0, 0.005, 0]} opacity={0.6} scale={4} blur={2} far={1} />
-      <OrbitControls ref={controls} makeDefault enablePan={false} minDistance={1.4} maxDistance={5} maxPolarAngle={Math.PI / 2.05} target={[0, 0.3, 0]} />
+      <ContactShadows position={[0, 0.005, 0]} opacity={0.6} scale={6} blur={2} far={1} />
+      <OrbitControls ref={controls} makeDefault enablePan={false} minDistance={2.2} maxDistance={8} maxPolarAngle={Math.PI / 2.05} target={[0, 0.3, 0]} />
       <CameraRig view={view} nonce={viewNonce} controls={controls} />
     </Canvas>
   );
