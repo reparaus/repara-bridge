@@ -382,6 +382,7 @@ export const attachSubmittedRequest = createServerFn({ method: "POST" })
         requestNumber: z.string().min(1).max(40),
         submissionId: z.string().uuid(),
         vehicleId: z.string().uuid().optional(),
+        buildId: z.string().uuid().optional(),
       })
       .parse(data),
   )
@@ -431,6 +432,24 @@ export const attachSubmittedRequest = createServerFn({ method: "POST" })
         },
         { onConflict: "vehicle_id,source,source_reference", ignoreDuplicates: true },
       );
+    }
+
+    // Build → request link. RLS (as the driver) proves the build is theirs;
+    // only planned modifications move to "requested".
+    if (data.buildId) {
+      const { data: build } = await db
+        .from("vehicle_builds")
+        .select("id, vehicle_id")
+        .eq("id", data.buildId)
+        .maybeSingle();
+      if (build && (!garageVehicleId || String(build.vehicle_id) === garageVehicleId)) {
+        await admin.from("service_requests").update({ build_id: build.id }).eq("id", request.id);
+        await db
+          .from("build_modifications")
+          .update({ status: "requested", service_request_id: request.id })
+          .eq("build_id", build.id)
+          .eq("status", "planned");
+      }
     }
 
     return {
