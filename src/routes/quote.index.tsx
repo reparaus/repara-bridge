@@ -80,7 +80,6 @@ import { VinScanner } from "@/components/quote/VinScanner";
 import { ComboboxInput } from "@/components/quote/ComboboxInput";
 import { MAKES, trimSuggestions, yearOptions } from "@/lib/vehicle-data";
 import { attachSubmittedRequest, getServiceRequestPrefill } from "@/lib/garage.functions";
-import { supabase } from "@/integrations/supabase/client";
 import { serviceCategoryLabel } from "@/lib/service-network";
 import { useModelSuggestions } from "@/lib/use-model-suggestions";
 
