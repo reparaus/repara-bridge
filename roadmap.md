@@ -23,3 +23,7 @@
 - [ ] Signed-in build → quote → completion QA — needs an authenticated session
 - [x] Phase 2: provider invites, provider quotes with versions, driver compare/approve/decline, request timeline (`0020_provider_quotes.sql`)
 - [ ] Run `0020_provider_quotes.sql` (user, after 0019)
+
+- [ ] Run supabase/external/0022_build_visual_config.sql (3D build preview saving)
+- [ ] Licensed 2021 Accord 3D model (blocked: needs asset purchase)
+- [ ] 3D rounds 2+: tint, body parts, AI build assistant, live estimate in studio

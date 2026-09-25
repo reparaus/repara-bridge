@@ -31,6 +31,7 @@ export type BuildSummary = {
   isActive: boolean;
   budgetCents: number | null;
   notes: string | null;
+  visualConfig: { paint?: string | null; wheel?: string; rideHeightIn?: number } | null;
   modifications: BuildMod[];
   estimate: { totalLow: number; totalHigh: number; currency: string; source: string } | null;
 };
@@ -45,7 +46,7 @@ function fail(message: string, error: unknown): never {
 async function readBuilds(db: Db, vehicleId: string): Promise<BuildSummary[]> {
   const { data, error } = await db
     .from("vehicle_builds")
-    .select("id, vehicle_id, name, preset, is_active, budget_cents, notes, created_at, build_modifications(*), build_estimates(*)")
+    .select("*, build_modifications(*), build_estimates(*)")
     .eq("vehicle_id", vehicleId)
     .is("archived_at", null)
     .order("created_at", { ascending: true });
@@ -61,6 +62,7 @@ async function readBuilds(db: Db, vehicleId: string): Promise<BuildSummary[]> {
       isActive: b.is_active,
       budgetCents: b.budget_cents,
       notes: b.notes,
+      visualConfig: b.visual_config ?? null,
       modifications: (b.build_modifications ?? [])
         .filter((m: any) => m.status !== "removed")
         .sort((a: any, c: any) => String(a.created_at).localeCompare(String(c.created_at)))
@@ -164,6 +166,7 @@ export const updateBuild = createServerFn({ method: "POST" })
         budgetCents: z.number().int().min(0).max(100_000_000).nullable().optional(),
         makeActive: z.boolean().optional(),
         archive: z.boolean().optional(),
+        visualConfig: z.object({ paint: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable(), wheel: z.enum(["stock", "dark", "racing"]), rideHeightIn: z.number().min(-3).max(0) }).optional(),
       })
       .parse(d),
   )
@@ -177,6 +180,7 @@ export const updateBuild = createServerFn({ method: "POST" })
     if (data.name !== undefined) patch.name = data.name;
     if (data.notes !== undefined) patch.notes = data.notes;
     if (data.budgetCents !== undefined) patch.budget_cents = data.budgetCents;
+    if (data.visualConfig) patch.visual_config = data.visualConfig;
     if (data.makeActive) patch.is_active = true;
     if (data.archive) Object.assign(patch, { archived_at: new Date().toISOString(), is_active: false });
     if (Object.keys(patch).length) {

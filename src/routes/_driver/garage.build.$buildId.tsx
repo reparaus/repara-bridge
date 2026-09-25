@@ -7,7 +7,8 @@ import { toast } from "sonner";
 
 import { GarageShell, SectionTitle } from "@/components/garage/GarageShell";
 import { CardSkeletons, LoadError, VehicleHeroSkeleton } from "@/components/garage/GarageSkeletons";
-import { VehicleVisual } from "@/components/garage/VehicleVisual";
+import { BuildStudio, normalizeVisual } from "@/components/garage/BuildStudio";
+import type { VisualConfig } from "@/components/garage/Build3DViewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -125,6 +126,20 @@ function BuildPage() {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  const visualMut = useMutation({
+    mutationFn: async (c: VisualConfig) => {
+      await saveBuild({ data: { buildId, visualConfig: c } });
+      const have = new Set(data?.build.modifications.map((m) => m.item) ?? []);
+      const adds: { category: string; item: string; detail: string }[] = [];
+      if (c.wheel !== "stock" && !have.has("wheels")) adds.push({ category: "wheels_tires", item: "wheels", detail: `Style: ${c.wheel === "dark" ? "Dark 5-spoke" : "Racing"} (3D preview)` });
+      if (c.rideHeightIn < 0 && !have.has("springs") && !have.has("coilovers")) adds.push({ category: "suspension", item: "springs", detail: `Lower about ${Math.abs(c.rideHeightIn)} in (3D preview)` });
+      if (c.paint && !have.has("paint")) adds.push({ category: "exterior", item: "paint", detail: `Color ${c.paint} (3D preview)` });
+      for (const a of adds) await add({ data: { buildId, ...a, source: "owner" } });
+    },
+    onSuccess: async () => { toast.success("Build saved"); await refresh(); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
   const selected = useMemo(() => new Set(data?.build.modifications.map((m) => m.item) ?? []), [data]);
 
   if (isError && !data) {
@@ -209,11 +224,13 @@ function BuildPage() {
         </div>
       )}
 
-      <div className="mt-5 overflow-hidden rounded-3xl border border-border/60 bg-card">
-        <VehicleVisual size="hero" year={vehicle?.year} make={vehicle?.make} model={vehicle?.model} trim={vehicle?.trim} className="rounded-b-none" />
-        <p className="px-5 py-3 text-xs text-muted-foreground">
-          Generic illustration — not your exact car. Build visuals will appear here as matched vehicle imagery becomes available.
-        </p>
+      <div className="mt-5">
+        <BuildStudio
+          vehicleLabel={[vehicle?.year, vehicle?.make, vehicle?.model].filter(Boolean).join(" ") || "car"}
+          saved={normalizeVisual(build.visualConfig)}
+          saving={visualMut.isPending}
+          onSave={(c) => visualMut.mutate(c)}
+        />
       </div>
 
       {/* Driver's own words → generic modification types from the catalog. */}
