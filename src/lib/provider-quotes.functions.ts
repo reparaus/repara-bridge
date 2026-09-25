@@ -275,3 +275,119 @@ export const inviteProviders = createServerFn({ method: "POST" })
     if (error) fail("Couldn't invite providers.", error);
     return { invited: Number(n ?? 0) };
   });
+
+// ------------------------------------------------- driver: provider matching
+
+export type MatchedProvider = {
+  id: string;
+  name: string;
+  area: string | null;
+  mobile: boolean;
+  inShop: boolean;
+  services: string[];
+  servesArea: "yes" | "unconfirmed";
+};
+
+const zip3 = (z: unknown) => String(z ?? "").replace(/\D/g, "").slice(0, 3);
+
+/**
+ * Active providers that offer at least one of the request's services. Area is
+ * "yes" only when a listed postal code shares the driver's ZIP prefix; no
+ * distances, rankings, availability or ratings are ever computed.
+ */
+export const matchProvidersForRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ requestId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const db = asDb(context.supabase);
+    const { data: req, error } = await db
+      .from("service_requests")
+      .select("id, zip_code, service_category_key, build_id")
+      .eq("id", data.requestId)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (error || !req) fail("Couldn't load your request right now.", error);
+    const { serviceRequirements } = await import("@/lib/build-catalog");
+    const keys = new Set<string>();
+    if (req.service_category_key && req.service_category_key !== "other") keys.add(String(req.service_category_key));
+    if (req.build_id) {
+      const { data: mods } = await db
+        .from("build_modifications")
+        .select("item, status")
+        .eq("build_id", req.build_id)
+        .eq("service_request_id", data.requestId);
+      for (const k of serviceRequirements(((mods ?? []) as any[]).filter((m) => m.status !== "removed").map((m) => String(m.item)))) keys.add(k);
+    }
+    const categories = [...keys];
+    const { data: rows, error: pErr } = await db
+      .from("service_providers")
+      .select("id, business_name, city, region, postal_code, offers_mobile, offers_in_shop, provider_services(category_key), provider_service_areas(postal_code)")
+      .eq("status", "active")
+      .eq("is_demo", false)
+      .limit(200);
+    if (pErr) fail("Provider availability could not be loaded.", pErr);
+    const want = zip3(req.zip_code);
+    const providers: MatchedProvider[] = ((rows ?? []) as any[])
+      .map((p) => {
+        const offered = ((p.provider_services ?? []) as any[]).map((s) => String(s.category_key));
+        const services = categories.length ? offered.filter((k) => keys.has(k)) : [];
+        const zips = [p.postal_code, ...((p.provider_service_areas ?? []) as any[]).map((a) => a.postal_code)].map(zip3).filter(Boolean);
+        return {
+          id: String(p.id),
+          name: String(p.business_name ?? "Provider"),
+          area: [p.city, p.region].filter(Boolean).join(", ") || null,
+          mobile: Boolean(p.offers_mobile),
+          inShop: Boolean(p.offers_in_shop),
+          services,
+          servesArea: (want && zips.includes(want) ? "yes" : "unconfirmed") as MatchedProvider["servesArea"],
+          outOfArea: Boolean(want && zips.length && !zips.includes(want)),
+        };
+      })
+      .filter((p) => p.services.length > 0 && !p.outOfArea)
+      .map(({ outOfArea: _o, ...p }) => p);
+    const { data: alert } = await db
+      .from("provider_availability_alerts")
+      .select("id")
+      .eq("service_request_id", data.requestId)
+      .eq("status", "active")
+      .maybeSingle();
+    return { providers, categories, zip: (req.zip_code as string | null) ?? null, alertActive: Boolean(alert) };
+  });
+
+export const driverInviteProviders = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ requestId: z.string().uuid(), providerIds: z.array(z.string().uuid()).min(1).max(5) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: n, error } = await asDb(context.supabase).rpc("driver_invite_providers", {
+      _request_id: data.requestId,
+      _provider_ids: data.providerIds,
+    });
+    if (error) {
+      const msg = String(error?.message ?? "");
+      fail(msg.includes("up to 5") ? "Choose up to 5 providers." : msg.includes("already approved") ? "A quote was already approved for this request." : "Couldn't send your request to providers.", error);
+    }
+    return { invited: Number(n ?? 0) };
+  });
+
+export const createProviderAlert = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ requestId: z.string().uuid(), categories: z.array(z.string().max(60)).max(20) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const db = asDb(context.supabase);
+    const { data: req } = await db
+      .from("service_requests")
+      .select("id, zip_code, vehicle_id")
+      .eq("id", data.requestId)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (!req) throw new Error("Request not found.");
+    const { error } = await db.from("provider_availability_alerts").insert({
+      user_id: context.userId,
+      service_request_id: req.id,
+      vehicle_id: req.vehicle_id,
+      category_keys: data.categories,
+      zip_code: req.zip_code,
+    });
+    if (error && error.code !== "23505") fail("Couldn't save your alert.", error);
+    return { ok: true };
+  });
