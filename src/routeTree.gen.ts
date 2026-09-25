@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as DriverRouteRouteImport } from './routes/_driver/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CardRouteImport } from './routes/card'
+import { Route as Dev3dRouteImport } from './routes/dev3d'
 import { Route as SigninRouteImport } from './routes/signin'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminResetPasswordRouteImport } from './routes/admin.reset-password'
@@ -63,6 +64,11 @@ const AuthRoute = AuthRouteImport.update({
 const CardRoute = CardRouteImport.update({
   id: '/card',
   path: '/card',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Dev3dRoute = Dev3dRouteImport.update({
+  id: '/dev3d',
+  path: '/dev3d',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SigninRoute = SigninRouteImport.update({
@@ -211,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/dev3d': typeof Dev3dRoute
   '/signin': typeof SigninRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
@@ -243,6 +250,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/dev3d': typeof Dev3dRoute
   '/signin': typeof SigninRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
@@ -278,6 +286,7 @@ export interface FileRoutesById {
   '/_driver': typeof DriverRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/dev3d': typeof Dev3dRoute
   '/signin': typeof SigninRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
@@ -312,6 +321,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/card'
+    | '/dev3d'
     | '/signin'
     | '/admin/login'
     | '/admin/reset-password'
@@ -344,6 +354,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/card'
+    | '/dev3d'
     | '/signin'
     | '/admin/login'
     | '/admin/reset-password'
@@ -378,6 +389,7 @@ export interface FileRouteTypes {
     | '/_driver'
     | '/auth'
     | '/card'
+    | '/dev3d'
     | '/signin'
     | '/admin/login'
     | '/admin/reset-password'
@@ -413,6 +425,7 @@ export interface RootRouteChildren {
   DriverRouteRoute: typeof DriverRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   CardRoute: typeof CardRoute
+  Dev3dRoute: typeof Dev3dRoute
   SigninRoute: typeof SigninRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminResetPasswordRoute: typeof AdminResetPasswordRoute
@@ -457,6 +470,13 @@ declare module '@tanstack/react-router' {
       path: '/card'
       fullPath: '/card'
       preLoaderRoute: typeof CardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev3d': {
+      id: '/dev3d'
+      path: '/dev3d'
+      fullPath: '/dev3d'
+      preLoaderRoute: typeof Dev3dRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signin': {
@@ -716,6 +736,7 @@ const rootRouteChildren: RootRouteChildren = {
   DriverRouteRoute: DriverRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   CardRoute: CardRoute,
+  Dev3dRoute: Dev3dRoute,
   SigninRoute: SigninRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminResetPasswordRoute: AdminResetPasswordRoute,
