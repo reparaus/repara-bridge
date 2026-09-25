@@ -195,6 +195,7 @@ export const addModification = createServerFn({ method: "POST" })
         category: z.string().min(1).max(40),
         item: z.string().min(1).max(60),
         detail: z.string().trim().max(200).optional(),
+        notes: z.string().trim().max(1000).optional(),
         source: z.enum(["owner", "suggestion"]).default("owner"),
       })
       .parse(d),
@@ -212,7 +213,7 @@ export const addModification = createServerFn({ method: "POST" })
     if (existing) return { id: String(existing.id) };
     const { data: row, error } = await db
       .from("build_modifications")
-      .insert({ build_id: data.buildId, category: data.category, item: data.item, detail: data.detail || null, source: data.source })
+      .insert({ build_id: data.buildId, category: data.category, item: data.item, detail: data.detail || null, notes: data.notes || null, source: data.source })
       .select("id")
       .single();
     if (error) fail("Couldn't add that modification.", error);

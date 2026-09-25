@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { GarageShell, SectionTitle } from "@/components/garage/GarageShell";
 import { CardSkeletons, LoadError, RefreshingDot } from "@/components/garage/GarageSkeletons";
+import { ProviderMatch } from "@/components/garage/ProviderMatch";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/money";
 import { getMyRequest, respondToQuote } from "@/lib/provider-quotes.functions";
@@ -32,6 +33,8 @@ const EVENT_LABEL: Record<string, string> = {
   quote_declined: "You declined a quote",
   quote_approved: "You approved a quote",
   provider_declined: "A provider declined",
+  modifications_installed: "Work completed — modifications installed",
+  modifications_verified: "Verified in your service history",
 };
 
 function RequestTracking() {
@@ -99,6 +102,13 @@ function RequestTracking() {
           Price estimate unavailable. Actual pricing comes from providers below.
         </p>
       </section>
+
+      {!approved && !["completed", "cancelled"].includes(data.status) && (
+        <section className="mt-8">
+          <SectionTitle>{data.invites.length ? "Add more providers" : "Potential providers"}</SectionTitle>
+          <ProviderMatch requestId={data.id} />
+        </section>
+      )}
 
       <section className="mt-8">
         <SectionTitle>Actual provider quotes</SectionTitle>
