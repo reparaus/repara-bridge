@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { findProviders, getGarageHome } from "@/lib/garage.functions";
+import { CardSkeletons, RowSkeletons } from "@/components/garage/GarageSkeletons";
 import {
   SERVICE_CATEGORIES,
   SERVICE_GROUPS,
@@ -95,7 +96,7 @@ function ServiceArea() {
         Tell Repara what you need, or pick it yourself. Your vehicle details come along automatically.
       </p>
 
-      {isLoading && <Skeleton className="mt-6 h-28 w-full rounded-2xl" />}
+      {isLoading && <RowSkeletons rows={1} className="mt-6" />}
 
       {!isLoading && !vehicles.length && (
         <div className="mt-6 rounded-3xl border border-border/60 bg-card p-6 text-center">
@@ -226,9 +227,11 @@ function ServiceArea() {
       {/* Providers: only real, active providers ever appear here. */}
       <section className="mt-8">
         <SectionTitle>Who does the work</SectionTitle>
-        {providerQuery.data?.error ? (
-          <div className="border border-border bg-card p-5">
-            <p className="text-sm text-foreground">Provider availability could not be loaded.</p>
+        {providerQuery.isLoading ? (
+          <CardSkeletons rows={2} />
+        ) : providerQuery.isError || providerQuery.data?.error ? (
+          <div className="rounded-2xl border border-border/60 bg-card p-5">
+            <p className="text-sm text-foreground">Couldn't load providers right now.</p>
             <Button variant="outline" className="mt-3" onClick={() => void providerQuery.refetch()}>Try again</Button>
           </div>
         ) : providerQuery.data?.providers.length ? (
