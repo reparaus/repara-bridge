@@ -80,6 +80,7 @@ import { VinScanner } from "@/components/quote/VinScanner";
 import { ComboboxInput } from "@/components/quote/ComboboxInput";
 import { MAKES, trimSuggestions, yearOptions } from "@/lib/vehicle-data";
 import { attachSubmittedRequest, getServiceRequestPrefill } from "@/lib/garage.functions";
+import { getBuildRequestPrefill } from "@/lib/builds.functions";
 import { serviceCategoryLabel } from "@/lib/service-network";
 import { useModelSuggestions } from "@/lib/use-model-suggestions";
 
@@ -92,7 +93,7 @@ export const Route = createFileRoute("/quote/")({
    */
   validateSearch: (
     search: Record<string, unknown>,
-  ): { service?: ServiceKey; v?: string; p?: string; cat?: string } => {
+  ): { service?: ServiceKey; v?: string; p?: string; cat?: string; b?: string } => {
     const raw = typeof search.service === "string" ? search.service : undefined;
     // `?v=<vehicleId>` comes from a signed-in driver's Garage: the vehicle and
     // contact details are prefilled so nothing is entered twice.
@@ -101,11 +102,14 @@ export const Route = createFileRoute("/quote/")({
     // the Service area, so the request records who the driver chose.
     const provider = typeof search.p === "string" ? search.p : undefined;
     const category = typeof search.cat === "string" ? search.cat : undefined;
+    // `?b=<buildId>` comes from a Garage build's "Request Actual Quotes".
+    const build = typeof search.b === "string" ? search.b : undefined;
     return {
       ...(raw && isServiceKey(raw) ? { service: raw } : {}),
       ...(vehicle ? { v: vehicle } : {}),
       ...(provider ? { p: provider } : {}),
       ...(category ? { cat: category } : {}),
+      ...(build ? { b: build } : {}),
     };
   },
   head: () => ({
@@ -310,8 +314,29 @@ function QuoteFlow() {
     v: garageVehicleId,
     p: chosenProviderId,
     cat: chosenCategoryKey,
+    b: buildId,
   } = Route.useSearch();
   const loadGaragePrefill = useServerFn(getServiceRequestPrefill);
+  const loadBuildPrefill = useServerFn(getBuildRequestPrefill);
+
+  /** Build prefill: the project text goes into the request, never retyped. */
+  useEffect(() => {
+    if (!buildId) return;
+    let cancelled = false;
+    void loadBuildPrefill({ data: { buildId } })
+      .then((prefill) => {
+        if (cancelled) return;
+        setForm((f) => ({
+          ...f,
+          services: f.services.includes("other") ? f.services : [...f.services, "other"],
+          answers: { ...f.answers, other: { ...(f.answers["other"] ?? {}), request: prefill.text } },
+        }));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [buildId, loadBuildPrefill]);
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -738,6 +763,7 @@ function QuoteFlow() {
         outsideArea={confirmation.outsideArea}
         snapshot={confirmation.snapshot}
         garageVehicleId={garageVehicleId}
+        buildId={buildId}
         onAnother={() => {
           // Fresh idempotency key: a new request is always allowed.
           setForm({ ...EMPTY, submissionId: crypto.randomUUID() });
@@ -1777,12 +1803,14 @@ function Confirmation({
   snapshot,
   outsideArea = false,
   garageVehicleId,
+  buildId,
   onAnother,
 }: {
   requestNumber: string;
   snapshot: FormState;
   outsideArea?: boolean;
   garageVehicleId?: string;
+  buildId?: string;
   onAnother: () => void;
 }) {
   const { t, lang } = useI18n();
@@ -1805,6 +1833,7 @@ function Confirmation({
             requestNumber,
             submissionId: snapshot.submissionId,
             ...(garageVehicleId ? { vehicleId: garageVehicleId } : {}),
+            ...(buildId ? { buildId } : {}),
           },
         });
         if (!cancelled && result.vehicleId && garageVehicleId) setLinkedVehicleId(result.vehicleId);
