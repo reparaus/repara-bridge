@@ -1920,7 +1920,7 @@ function Confirmation({
               size="lg"
               className="h-13 w-full rounded-full text-sm tracking-[0.12em]"
             >
-              <a href={linkedVehicleId ? `/garage/service?v=${linkedVehicleId}` : "/garage/service"}>
+              <a href={linkedVehicleId ? `/garage/service?vehicle=${linkedVehicleId}` : "/garage/service"}>
                 {lang === "es" ? "Solicitar otro servicio" : "Request Another Service"}
               </a>
             </Button>
