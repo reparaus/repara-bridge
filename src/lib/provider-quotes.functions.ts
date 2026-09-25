@@ -249,13 +249,13 @@ export const getRequestInvites = createServerFn({ method: "POST" })
       db.from("provider_quotes").select("provider_id, version, total_cents, status").eq("request_id", data.requestId),
     ]);
     return {
-      invites: (invites ?? []).map((i: any) => ({ providerId: String(i.provider_id), status: String(i.status) })),
-      providers: ((providers ?? []) as any[]).map((p: any): { id: string; name: string; area: string | null; mobile: boolean; inShop: boolean } => ({
+      invites: ((invites ?? []) as any[]).map((i: any): { providerId: string; status: string } => ({ providerId: String(i.provider_id), status: String(i.status) })),
+      providers: ((providers ?? []) as any[]).map((p: any): { id: string; name: string; area: string | null } => ({
         id: String(p.id),
         name: String(p.business_name ?? "Provider"),
         area: [p.city, p.region].filter(Boolean).join(", ") || null,
       })),
-      quotes: (quotes ?? []).map((q: any) => ({
+      quotes: ((quotes ?? []) as any[]).map((q: any): { providerId: string; version: number; totalCents: number; status: string } => ({
         providerId: String(q.provider_id),
         version: Number(q.version),
         totalCents: Number(q.total_cents),
