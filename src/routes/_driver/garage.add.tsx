@@ -280,6 +280,9 @@ function AddVehicle() {
               placeholder="72,418"
               className="h-12 text-lg"
             />
+            <p className="text-xs text-muted-foreground">
+              Enter it once. Repara will keep this updated automatically whenever possible.
+            </p>
           </div>
           <Button className="h-12 w-full text-base" disabled={busy} onClick={saveMileage}>
             {busy ? "Saving…" : "Continue"}

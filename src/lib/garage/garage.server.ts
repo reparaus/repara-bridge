@@ -51,6 +51,9 @@ export type VehicleSummary = {
   vinMasked: string | null;
   currentMileage: number | null;
   mileageUpdatedAt: string | null;
+  /** Where the current mileage came from — never shown as fact when estimated. */
+  mileageSource: string | null;
+  mileageConfidence: string | null;
   isPrimary: boolean;
   status: { tone: "good" | "attention" | "unknown"; label: string };
   nextService: { label: string; detail: string } | null;
@@ -239,6 +242,8 @@ export async function listGarage(db: Db, userId: string) {
       vinMasked: maskVin(v['vin'] ?? null),
       currentMileage: v['current_mileage'] ?? v['mileage'] ?? null,
       mileageUpdatedAt: v['mileage_updated_at'] ?? null,
+      mileageSource: v['current_mileage_source'] ?? null,
+      mileageConfidence: v['current_mileage_confidence'] ?? null,
       isPrimary: Boolean(link['is_primary']),
       status: needsAttention
         ? { tone: "attention", label: "Something to review" }
@@ -390,7 +395,9 @@ export async function recordMileage(
   db: Db,
   vehicleId: string,
   mileage: number,
-  source: "owner" | "repara_shop" | "service_record" | "intake",
+  // Drivers can only ever record owner-reported readings; the database
+  // (0018 guard_mileage_reading) enforces this too.
+  source: "owner" | "service_record" | "intake",
   userId: string | null,
 ) {
   const { error } = await db.from("vehicle_mileage_history").insert({
@@ -419,7 +426,8 @@ export async function getVehicleDetail(db: Db, userId: string, vehicleId: string
   const [{ data: mileage }, { data: records }, states, recalls, { data: requests }] = await Promise.all([
     db
       .from("vehicle_mileage_history")
-      .select("id, mileage, recorded_at, source")
+      // "*" keeps working before and after 0018 adds confidence/metadata.
+      .select("*")
       .eq("vehicle_id", vehicleId)
       .order("recorded_at", { ascending: false })
       .limit(24),
@@ -461,6 +469,7 @@ export async function getVehicleDetail(db: Db, userId: string, vehicleId: string
     mileage: Number(m['mileage']),
     recordedAt: String(m['recorded_at']),
     source: String(m['source']),
+    confidence: m['confidence'] ? String(m['confidence']) : null,
   }));
 
   return {
@@ -480,6 +489,8 @@ export async function getVehicleDetail(db: Db, userId: string, vehicleId: string
       vinMasked: maskVin(v['vin'] ?? null),
       currentMileage: v['current_mileage'] ?? v['mileage'] ?? null,
       mileageUpdatedAt: v['mileage_updated_at'] ?? null,
+      mileageSource: v['current_mileage_source'] ?? null,
+      mileageConfidence: v['current_mileage_confidence'] ?? null,
     },
     status: needsAttention
       ? { tone: "attention" as const, label: "Something to review" }

@@ -5,6 +5,7 @@ import { CalendarClock, ChevronRight, MessageCircle, Plus, Wrench } from "lucide
 import { useEffect } from "react";
 
 import { GarageShell, SectionTitle, StatusDot } from "@/components/garage/GarageShell";
+import { formatMileage, mileageBadge, mileageTone } from "@/lib/mileage";
 import { VehicleVisual } from "@/components/garage/VehicleVisual";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -118,7 +119,7 @@ function GarageHome() {
                   </p>
                   <p className="mt-0.5 text-sm text-muted-foreground">
                     {primary.currentMileage
-                      ? `${primary.currentMileage.toLocaleString()} mi`
+                      ? `${formatMileage(primary.currentMileage, primary.mileageConfidence)}${mileageBadge(mileageTone(primary.mileageSource, primary.mileageConfidence)) ? ` · ${mileageBadge(mileageTone(primary.mileageSource, primary.mileageConfidence))}` : ""}`
                       : "Mileage not added yet"}
                   </p>
                 </div>
@@ -189,7 +190,7 @@ function GarageHome() {
                   </span>
                   <span className="block text-sm text-muted-foreground">
                     {vehicle.currentMileage
-                      ? `${vehicle.currentMileage.toLocaleString()} mi`
+                      ? `${formatMileage(vehicle.currentMileage, vehicle.mileageConfidence)}${mileageBadge(mileageTone(vehicle.mileageSource, vehicle.mileageConfidence)) ? ` · ${mileageBadge(mileageTone(vehicle.mileageSource, vehicle.mileageConfidence))}` : ""}`
                       : "Mileage not added yet"}
                   </span>
                 </span>
