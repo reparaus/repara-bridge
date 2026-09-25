@@ -155,3 +155,84 @@ export const MOD_STATUS_LABEL: Record<string, string> = {
   verified: "Verified",
   removed: "Removed",
 };
+
+/** Short, beginner-friendly questions per modification. All optional. */
+export type BuildQuestion = { key: string; label: string; options?: string[]; placeholder?: string };
+
+const USE_Q: BuildQuestion = { key: "use", label: "How will you use the car?", options: ["Daily", "Show", "Track"] };
+const PHOTOS_NOTE = "You can add photos when the provider contacts you.";
+
+export const BUILD_QUESTIONS: Record<string, BuildQuestion[]> = {
+  window_tint: [
+    { key: "windows", label: "Which windows?", options: ["Side & rear", "Front sides only", "Full car", "Windshield strip"] },
+    { key: "existing", label: "Existing tint?", options: ["None", "Yes — remove it", "Not sure"] },
+    { key: "level", label: "How dark?", options: ["Light", "Medium", "Dark", "Not sure"] },
+  ],
+  wheels: [
+    { key: "size", label: "Desired wheel size", placeholder: 'e.g. 19"' },
+    { key: "current", label: "Current wheel size (if known)", placeholder: 'e.g. 17"' },
+    { key: "scope", label: "Wheels only or with tires?", options: ["Wheels only", "Wheels + tires"] },
+    { key: "style", label: "Style preference", placeholder: "e.g. black, OEM+, mesh" },
+  ],
+  wheel_tire_package: [
+    { key: "size", label: "Desired wheel size", placeholder: 'e.g. 19"' },
+    { key: "style", label: "Style preference", placeholder: "e.g. black, OEM+, mesh" },
+  ],
+  tires: [
+    { key: "size", label: "Tire size (if known)", placeholder: "e.g. 235/40R19" },
+    { key: "qty", label: "Quantity", options: ["1", "2", "4"] },
+    { key: "brand", label: "Brand preference", placeholder: "Optional" },
+    { key: "install", label: "Installation needed?", options: ["Yes", "No"] },
+  ],
+  coilovers: [{ key: "height", label: "Desired ride height", options: ["Slight drop", "Moderate", "Low", "Not sure"] }, USE_Q, { key: "brand", label: "Brand preference", placeholder: "Optional" }],
+  springs: [{ key: "height", label: "Desired ride height", options: ["Slight drop", "Moderate", "Low", "Not sure"] }, USE_Q],
+  air_suspension: [{ key: "height", label: "Desired ride height", options: ["Slight drop", "Moderate", "Low", "Not sure"] }, USE_Q],
+  lower_front: [{ key: "how", label: "How?", options: ["Springs", "Coilovers", "Air", "Not sure"] }, USE_Q],
+  lower_rear: [{ key: "how", label: "How?", options: ["Springs", "Coilovers", "Air", "Not sure"] }, USE_Q],
+  detailing: [
+    { key: "scope", label: "What needs detailing?", options: ["Exterior", "Interior", "Both"] },
+    { key: "condition", label: "Current condition", options: ["Good", "Fair", "Rough"] },
+  ],
+  ppf: [
+    { key: "coverage", label: "Coverage", options: ["Full vehicle", "Front clip", "Specific panels"] },
+    { key: "existing", label: "Existing film?", options: ["None", "Yes", "Not sure"] },
+  ],
+  body_kit: [
+    { key: "parts", label: "Parts required", placeholder: "e.g. front lip, side skirts" },
+    { key: "brand", label: "Product/brand if known", placeholder: "Optional" },
+    { key: "supply", label: "Who supplies parts?", options: ["I have the parts", "Provider supplies parts"] },
+  ],
+  spoiler: [
+    { key: "brand", label: "Product/brand if known", placeholder: "Optional" },
+    { key: "supply", label: "Who supplies parts?", options: ["I have the parts", "Provider supplies parts"] },
+  ],
+  exhaust: [
+    { key: "type", label: "Type", options: ["Axle-back", "Cat-back", "Not sure"] },
+    { key: "sound", label: "Sound", options: ["Mild", "Moderate", "Loud"] },
+    { key: "brand", label: "Brand preference", placeholder: "Optional" },
+  ],
+  intake: [{ key: "brand", label: "Brand preference", placeholder: "Optional" }],
+};
+
+export const BUILD_PHOTOS_NOTE = PHOTOS_NOTE;
+
+export function questionsFor(itemKey: string): BuildQuestion[] {
+  return BUILD_QUESTIONS[itemKey] ?? [USE_Q, { key: "brand", label: "Brand or product (optional)", placeholder: "Optional" }];
+}
+
+/** Answers → one compact detail line saved with the modification. */
+export function answersToDetail(itemKey: string, answers: Record<string, string>): string {
+  return questionsFor(itemKey)
+    .filter((q) => answers[q.key]?.trim())
+    .map((q) => `${q.label.replace(/\?$/, "").replace(/ \(.*\)$/, "")}: ${answers[q.key]!.trim()}`)
+    .join(" · ")
+    .slice(0, 200);
+}
+
+/** Generic modification types commonly associated with a build style. Suggestions only. */
+export const PRESET_SUGGESTIONS: Record<string, string[]> = {
+  daily: ["window_tint", "tires", "detailing", "ceramic_coating"],
+  show: ["wheels", "lower_front", "lower_rear", "wrap", "lighting", "detailing"],
+  track: ["coilovers", "pads", "brake_lines_fluid", "tires", "alignment", "tuning"],
+  stock: ["detailing", "tires", "alignment"],
+};
