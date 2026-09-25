@@ -18,6 +18,8 @@
 - [x] Phase 1: builds (create/rename/duplicate/active/archive), modification categories, keyword suggestions, estimate-unavailable state, Request Actual Quotes → request linked to build (`0019_vehicle_builds.sql`)
 - [ ] Run `0019_vehicle_builds.sql` (user)
 
-- [ ] Phase 3: service-specific request forms, ZIP-based provider matching, "notify me" when no provider, install → verified build + history
+- [x] Phase 3: per-modification questions, budget, ZIP/service provider matching, driver provider selection, "notify me", install → verified (`0021_build_completion.sql`)
+- [ ] Run `0021_build_completion.sql` (user, after 0020)
+- [ ] Signed-in build → quote → completion QA — needs an authenticated session
 - [x] Phase 2: provider invites, provider quotes with versions, driver compare/approve/decline, request timeline (`0020_provider_quotes.sql`)
 - [ ] Run `0020_provider_quotes.sql` (user, after 0019)
