@@ -31,7 +31,7 @@ export type BuildSummary = {
   isActive: boolean;
   budgetCents: number | null;
   notes: string | null;
-  visualConfig: unknown;
+  visualConfig: { paint?: string | null; wheel?: string; rideHeightIn?: number } | null;
   modifications: BuildMod[];
   estimate: { totalLow: number; totalHigh: number; currency: string; source: string } | null;
 };
