@@ -170,7 +170,7 @@ function VehicleProfile() {
       </div>
 
       <Tabs defaultValue="overview" className="mt-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
