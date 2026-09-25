@@ -29,7 +29,7 @@ const WHEEL_URLS: Record<Exclude<WheelStyle, "stock">, string> = {
 const UNITS_PER_INCH = 0.007;
 
 const VIEWS: Record<CameraView, [number, number, number]> = {
-  three_quarter: [3.4, 1.8, 3.9],
+  three_quarter: [2.6, 1.4, 3.0],
   front: [0, 1.2, 4.8],
   side: [5, 1.0, 0],
   rear: [0, 1.4, -4.8],
