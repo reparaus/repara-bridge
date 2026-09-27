@@ -1,3 +1,4 @@
+import { toE164 } from "@/lib/phone";
 import { z } from "zod";
 
 /** Shared quote-request shape used by the customer form and the server function. */
@@ -115,10 +116,12 @@ export const quoteRequestSchema = z.object({
         .optional()
         .or(z.literal("")),
       email: z.string().trim().email("Enter a valid email").max(255).optional().or(z.literal("")),
-      preferredContactMethod: z.enum(["text", "call", "email"]).default("text"),
+      preferredContactMethod: z.enum(["text", "call", "email", "both"]).default("text"),
+      /** Explicit agreement to transactional texts (required for text/both). */
+      smsConsent: z.boolean().optional().default(false),
     })
     .superRefine((c, ctx) => {
-      const needsPhone = c.preferredContactMethod === "text" || c.preferredContactMethod === "call";
+      const needsPhone = c.preferredContactMethod !== "email";
       if (needsPhone && !c.phone) {
         ctx.addIssue({
           code: "custom",
@@ -126,7 +129,14 @@ export const quoteRequestSchema = z.object({
           message: "Add a mobile number so we can reach you.",
         });
       }
-      if (c.preferredContactMethod === "email" && !c.email) {
+      const texts = c.preferredContactMethod === "text" || c.preferredContactMethod === "both";
+      if (texts && c.phone && !toE164(c.phone)) {
+        ctx.addIssue({ code: "custom", path: ["phone"], message: "Enter a valid mobile number." });
+      }
+      if (texts && !c.smsConsent) {
+        ctx.addIssue({ code: "custom", path: ["smsConsent"], message: "Agree to receive texts, or choose Email." });
+      }
+      if ((c.preferredContactMethod === "email" || c.preferredContactMethod === "both") && !c.email) {
         ctx.addIssue({
           code: "custom",
           path: ["email"],
