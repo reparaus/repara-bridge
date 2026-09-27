@@ -171,8 +171,8 @@ Deno.serve(async (req) => {
   );
 
   const BASE_COLUMNS =
-    "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, customers(first_name, last_name, phone, email, preferred_contact_method), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)";
-  const FULL_COLUMNS = `${BASE_COLUMNS}, preferred_contact_method, preferred_language, intake_followups`;
+    "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, user_id, customers(first_name, last_name, phone, email, preferred_contact_method), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)";
+  const FULL_COLUMNS = `${BASE_COLUMNS}, preferred_contact_method, preferred_language, intake_followups, phone_e164, sms_consent_at`;
 
   let { data: request, error } = await supabase
     .from("service_requests")
@@ -265,7 +265,42 @@ Deno.serve(async (req) => {
   const customerEmail = String(customer.email ?? "").trim();
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(customerEmail);
 
-  if (validEmail && !request.customer_email_sent_at) {
+  // SMS first (0024): text/both preference, explicit consent, valid E.164.
+  // If SMS can't go out, email is used as a fallback so the customer still
+  // gets their private link. Deduped per request; never retried in a loop.
+  const smsWanted = preferred === "text" || preferred === "both";
+  let smsOutcome = "not_wanted";
+  let guestLink = "";
+  const linkOnce = async () => (guestLink ||= await mintGuestLink(supabase, String(request.id)).catch(() => ""));
+  if (smsWanted) {
+    const phone = toE164((request as any).phone_e164 ?? customer.phone);
+    const dedupe = `sms:confirmation:${request.id}`;
+    const { data: already } = await supabase.from("notification_deliveries").select("status").eq("dedupe_key", dedupe).maybeSingle();
+    if (already) smsOutcome = already.status;
+    else {
+      const base = { dedupe_key: dedupe, channel: "sms", service_request_id: request.id, event_type: "request_submitted", audience: request.user_id ? "driver" : "guest" };
+      if (!(request as any).sms_consent_at) smsOutcome = "skipped_no_consent";
+      else if (!phone) smsOutcome = "skipped_invalid_phone";
+      else {
+        const veh = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ");
+        const link = await linkOnce();
+        const r = await sendSms(phone, `Repara: Your service request${veh ? ` for your ${veh}` : ""} was received. View your private request: ${link}`);
+        smsOutcome = r.status;
+        await logDelivery(supabase, { ...base, status: r.status, error: r.error ?? null, provider_message_id: r.sid ?? null });
+        await logComm({ channel: "sms", category: "confirmation", status: r.status === "sent" ? "sent" : "failed", message: r.status === "sent" ? "Request received — confirmation text sent." : `Confirmation text not sent (${r.status}).`, ...(r.error ? { error: r.error.slice(0, 400) } : {}) });
+      }
+      if (smsOutcome !== "sent" && !["failed", "not_configured"].includes(smsOutcome)) {
+        await logDelivery(supabase, { ...base, status: smsOutcome });
+      }
+      if (smsOutcome === "sent") {
+        await supabase.from("service_requests").update({ confirmation_channel: "sms", confirmation_sent_at: new Date().toISOString() }).eq("id", request.id);
+      }
+    }
+    results.sms = smsOutcome;
+  }
+  const emailWanted = !smsWanted || preferred === "both" || smsOutcome !== "sent";
+
+  if (emailWanted && validEmail && !request.customer_email_sent_at) {
     const intro = outside
       ? "Your request has been received. Repara does not currently service your area, but we've saved your request as we evaluate future service areas."
       : "Your service request has been received. We'll review the details and contact you shortly.";
@@ -277,7 +312,7 @@ Deno.serve(async (req) => {
       location: esc(location),
       areaText: esc(areaText),
       requestNumber: esc(request.request_number ?? ""),
-      link: await mintGuestLink(supabase, String(request.id)).catch(() => ""),
+      link: await linkOnce(),
     });
     try {
       await send(customerEmail, "Repara — Your service request was received", html);
@@ -286,8 +321,7 @@ Deno.serve(async (req) => {
         .from("service_requests")
         .update({
           customer_email_sent_at: now,
-          confirmation_channel: "email",
-          confirmation_sent_at: now,
+          ...(smsOutcome === "sent" ? {} : { confirmation_channel: "email", confirmation_sent_at: now }),
         })
         .eq("id", request.id);
       results.customer = "sent";
@@ -310,24 +344,9 @@ Deno.serve(async (req) => {
       });
     }
   } else {
-    results.customer = validEmail ? "already_sent" : "skipped_no_email";
+    results.customer = !emailWanted ? "skipped_pref" : validEmail ? "already_sent" : "skipped_no_email";
   }
 
-  // SMS architecture placeholder: the intent is recorded so a provider can
-  // later replay or take over these rows. Nothing is silently discarded.
-  if ((preferred === "text" || preferred === "call") && !request.customer_email_sent_at) {
-    const phone = String(customer.phone ?? "").trim();
-    if (phone) {
-      results.sms = "not_configured";
-      await logComm({
-        channel: "sms",
-        category: "confirmation",
-        status: "not_configured",
-        message: `Customer prefers ${preferred}. SMS provider is not connected yet — confirmation went out by email.`,
-        metadata: { to: phone, preferred },
-      });
-    }
-  }
 
 
   // ---------------------------------------------------------------- admin
