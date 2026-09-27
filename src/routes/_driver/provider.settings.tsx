@@ -3,6 +3,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 
+import { EmailPreferences } from "@/components/common/EmailPreferences";
+import { ServicePricing } from "@/components/provider/ServicePricing";
 import { ProviderShell, ProviderStatusPill } from "@/components/provider/ProviderShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -104,6 +106,23 @@ function ProviderSettings() {
           )}
         </div>
       </div>
+
+      <section className="mt-6">
+        <p className="mb-2 text-sm font-medium text-foreground">Services &amp; preset pricing</p>
+        <ServicePricing />
+      </section>
+
+      <section className="mt-6">
+        <p className="mb-2 text-sm font-medium text-foreground">Email notifications</p>
+        <EmailPreferences
+          items={[
+            ["provider_new_request", "New matching request"],
+            ["provider_message", "Customer message"],
+            ["provider_quote_accepted", "Quote accepted"],
+          ]}
+        />
+        <p className="mt-2 text-xs text-muted-foreground">In-app notifications are always kept. Text messages are coming later.</p>
+      </section>
 
       <div className="mt-6 rounded-2xl border border-border/70 bg-card p-5">
         <p className="text-sm font-medium text-foreground">Your Repara account</p>

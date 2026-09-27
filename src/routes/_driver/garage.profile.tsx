@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { EmailPreferences } from "@/components/common/EmailPreferences";
 import { GarageShell, SectionTitle } from "@/components/garage/GarageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -195,6 +196,15 @@ function Profile() {
                 />
               </div>
             ))}
+          </div>
+          <div className="mt-3">
+            <EmailPreferences
+              items={[
+                ["message_received", "Email me provider messages"],
+                ["quote_received", "Email me new quotes"],
+                ["request_status", "Email me request status changes"],
+              ]}
+            />
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             Used for the emails Repara already sends. Push notifications arrive with the Repara app.
