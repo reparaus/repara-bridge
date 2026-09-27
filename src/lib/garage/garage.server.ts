@@ -110,7 +110,14 @@ export async function updateProfile(
   if (input.lastName !== undefined) patch['last_name'] = input.lastName;
   if (input.phone !== undefined) patch['phone'] = input.phone;
   if (input.preferredLanguage) patch['preferred_language'] = input.preferredLanguage;
-  if (input.notificationPreferences) patch['notification_preferences'] = input.notificationPreferences;
+  if (input.notificationPreferences) {
+    // Merge so provider/email preferences saved elsewhere are kept.
+    const { data: current } = await db.from("profiles").select("notification_preferences").eq("id", userId).maybeSingle();
+    patch['notification_preferences'] = {
+      ...(((current as Row | null)?.['notification_preferences'] ?? {}) as Record<string, boolean>),
+      ...input.notificationPreferences,
+    };
+  }
 
   const { error } = await db.from("profiles").update(patch).eq("id", userId);
   if (error) throw new Error(error.message);

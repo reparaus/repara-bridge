@@ -106,3 +106,25 @@ export async function matchAndNotifyProviders(requestId: string): Promise<void> 
     console.error("[match] failed for request", requestId, error);
   }
 }
+
+/** Deliveries for a newly sent quote: account holder or guest link. */
+export async function quoteSentItems(quoteId: string): Promise<NotifyItem[]> {
+  const db = await admin();
+  const { data: q } = await db
+    .from("provider_quotes")
+    .select("id, request_id, total_cents, service_requests(user_id), service_providers(business_name)")
+    .eq("id", quoteId)
+    .maybeSingle();
+  if (!q) return [];
+  if (q.service_requests?.user_id) return notificationIdsFor([`quote:${quoteId}`]);
+  return [
+    {
+      kind: "guest",
+      requestId: String(q.request_id),
+      event: "quote_received",
+      ref: String(q.id),
+      providerName: q.service_providers?.business_name ?? undefined,
+      totalCents: Number(q.total_cents),
+    },
+  ];
+}

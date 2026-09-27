@@ -159,6 +159,12 @@ export const submitProviderQuote = createServerFn({ method: "POST" })
       _warranty: data.warranty,
     });
     if (error) friendly(error, "Couldn't send the quote.");
+    try {
+      const notify = await import("./notify.server");
+      await notify.dispatchNotifications(await notify.quoteSentItems(String(id)));
+    } catch (e) {
+      console.error("[notify] quote delivery failed", e);
+    }
     return { id: String(id) };
   });
 
@@ -233,6 +239,14 @@ export const respondToQuote = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { error } = await asDb(context.supabase).rpc("respond_to_provider_quote", { _quote_id: data.quoteId, _action: data.action });
     if (error) friendly(error, "Couldn't update the quote.");
+    if (data.action === "accept") {
+      try {
+        const notify = await import("./notify.server");
+        await notify.dispatchNotifications(await notify.notificationIdsFor([`accepted:${data.quoteId}`]));
+      } catch (e) {
+        console.error("[notify] acceptance delivery failed", e);
+      }
+    }
     return { ok: true };
   });
 
