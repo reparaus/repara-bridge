@@ -200,6 +200,7 @@ function Profile() {
           </div>
           <div className="mt-3">
             <ContactChannelSettings audience="driver" />
+            <div className="mt-3" />
             <EmailPreferences
               items={[
                 ["message_received", "Email me provider messages"],
@@ -209,7 +210,7 @@ function Profile() {
             />
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Used for the emails Repara already sends. Push notifications arrive with the Repara app.
+            Texts and emails follow your choice above. Push notifications arrive with the Repara app.
           </p>
         </section>
 
