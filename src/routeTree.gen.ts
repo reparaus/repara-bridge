@@ -30,6 +30,7 @@ import { Route as DriverGarageNotificationsRouteImport } from './routes/_driver/
 import { Route as DriverGarageProfileRouteImport } from './routes/_driver/garage.profile'
 import { Route as DriverGarageServiceRouteImport } from './routes/_driver/garage.service'
 import { Route as DriverProviderIndexRouteImport } from './routes/_driver/provider.index'
+import { Route as DriverProviderNotificationsRouteImport } from './routes/_driver/provider.notifications'
 import { Route as DriverProviderOnboardingRouteImport } from './routes/_driver/provider.onboarding'
 import { Route as DriverProviderProfileRouteImport } from './routes/_driver/provider.profile'
 import { Route as DriverProviderRequestsRouteImport } from './routes/_driver/provider.requests'
@@ -146,6 +147,12 @@ const DriverProviderIndexRoute = DriverProviderIndexRouteImport.update({
   path: '/provider/',
   getParentRoute: () => DriverRouteRoute,
 } as any)
+const DriverProviderNotificationsRoute =
+  DriverProviderNotificationsRouteImport.update({
+    id: '/provider/notifications',
+    path: '/provider/notifications',
+    getParentRoute: () => DriverRouteRoute,
+  } as any)
 const DriverProviderOnboardingRoute =
   DriverProviderOnboardingRouteImport.update({
     id: '/provider/onboarding',
@@ -224,6 +231,7 @@ export interface FileRoutesByFullPath {
   '/garage/notifications': typeof DriverGarageNotificationsRoute
   '/garage/profile': typeof DriverGarageProfileRoute
   '/garage/service': typeof DriverGarageServiceRoute
+  '/provider/notifications': typeof DriverProviderNotificationsRoute
   '/provider/onboarding': typeof DriverProviderOnboardingRoute
   '/provider/profile': typeof DriverProviderProfileRoute
   '/provider/requests': typeof DriverProviderRequestsRoute
@@ -256,6 +264,7 @@ export interface FileRoutesByTo {
   '/garage/notifications': typeof DriverGarageNotificationsRoute
   '/garage/profile': typeof DriverGarageProfileRoute
   '/garage/service': typeof DriverGarageServiceRoute
+  '/provider/notifications': typeof DriverProviderNotificationsRoute
   '/provider/onboarding': typeof DriverProviderOnboardingRoute
   '/provider/profile': typeof DriverProviderProfileRoute
   '/provider/requests': typeof DriverProviderRequestsRoute
@@ -291,6 +300,7 @@ export interface FileRoutesById {
   '/_driver/garage/notifications': typeof DriverGarageNotificationsRoute
   '/_driver/garage/profile': typeof DriverGarageProfileRoute
   '/_driver/garage/service': typeof DriverGarageServiceRoute
+  '/_driver/provider/notifications': typeof DriverProviderNotificationsRoute
   '/_driver/provider/onboarding': typeof DriverProviderOnboardingRoute
   '/_driver/provider/profile': typeof DriverProviderProfileRoute
   '/_driver/provider/requests': typeof DriverProviderRequestsRoute
@@ -325,6 +335,7 @@ export interface FileRouteTypes {
     | '/garage/notifications'
     | '/garage/profile'
     | '/garage/service'
+    | '/provider/notifications'
     | '/provider/onboarding'
     | '/provider/profile'
     | '/provider/requests'
@@ -357,6 +368,7 @@ export interface FileRouteTypes {
     | '/garage/notifications'
     | '/garage/profile'
     | '/garage/service'
+    | '/provider/notifications'
     | '/provider/onboarding'
     | '/provider/profile'
     | '/provider/requests'
@@ -391,6 +403,7 @@ export interface FileRouteTypes {
     | '/_driver/garage/notifications'
     | '/_driver/garage/profile'
     | '/_driver/garage/service'
+    | '/_driver/provider/notifications'
     | '/_driver/provider/onboarding'
     | '/_driver/provider/profile'
     | '/_driver/provider/requests'
@@ -571,6 +584,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DriverProviderIndexRouteImport
       parentRoute: typeof DriverRouteRoute
     }
+    '/_driver/provider/notifications': {
+      id: '/_driver/provider/notifications'
+      path: '/provider/notifications'
+      fullPath: '/provider/notifications'
+      preLoaderRoute: typeof DriverProviderNotificationsRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
     '/_driver/provider/onboarding': {
       id: '/_driver/provider/onboarding'
       path: '/provider/onboarding'
@@ -675,6 +695,7 @@ interface DriverRouteRouteChildren {
   DriverGarageNotificationsRoute: typeof DriverGarageNotificationsRoute
   DriverGarageProfileRoute: typeof DriverGarageProfileRoute
   DriverGarageServiceRoute: typeof DriverGarageServiceRoute
+  DriverProviderNotificationsRoute: typeof DriverProviderNotificationsRoute
   DriverProviderOnboardingRoute: typeof DriverProviderOnboardingRoute
   DriverProviderProfileRoute: typeof DriverProviderProfileRoute
   DriverProviderRequestsRoute: typeof DriverProviderRequestsRoute
@@ -694,6 +715,7 @@ const DriverRouteRouteChildren: DriverRouteRouteChildren = {
   DriverGarageNotificationsRoute: DriverGarageNotificationsRoute,
   DriverGarageProfileRoute: DriverGarageProfileRoute,
   DriverGarageServiceRoute: DriverGarageServiceRoute,
+  DriverProviderNotificationsRoute: DriverProviderNotificationsRoute,
   DriverProviderOnboardingRoute: DriverProviderOnboardingRoute,
   DriverProviderProfileRoute: DriverProviderProfileRoute,
   DriverProviderRequestsRoute: DriverProviderRequestsRoute,
