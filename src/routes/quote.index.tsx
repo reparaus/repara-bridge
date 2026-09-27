@@ -1778,7 +1778,7 @@ function ContactStep({
           <label className="flex items-start gap-3 rounded-2xl border border-border/70 bg-card p-4 text-sm leading-relaxed">
             <input
               type="checkbox"
-              className="mt-1 h-4 w-4 accent-[hsl(var(--primary))]"
+              className="mt-1 h-4 w-4 accent-[var(--primary)]"
               checked={!!form.smsConsent}
               onChange={(e) => patch({ smsConsent: e.target.checked })}
             />
