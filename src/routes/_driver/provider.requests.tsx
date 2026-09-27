@@ -1,44 +1,63 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { MessageCircle } from "lucide-react";
+import { useState } from "react";
 
 import { ProviderShell } from "@/components/provider/ProviderShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listProviderInvites } from "@/lib/provider-quotes.functions";
+import { listProviderRequests, type ProviderRequestRow } from "@/lib/messaging.functions";
 import { getMyProviderFn } from "@/lib/provider.functions";
 import { serviceCategoryLabel } from "@/lib/service-network";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_driver/provider/requests")({
   head: () => ({
     meta: [
       { title: "Provider requests — Repara" },
-      {
-        name: "description",
-        content: "Service requests drivers sent directly to your Repara provider profile.",
-      },
+      { name: "description", content: "Service requests matched to your Repara provider profile." },
       { property: "og:title", content: "Provider requests — Repara" },
       { property: "og:description", content: "Requests sent to you, with the vehicle details already attached." },
-          { property: "og:type", content: "website" },
+      { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
   }),
   component: ProviderRequests,
 });
 
-function ProviderRequests() {
-  const load = useServerFn(getMyProviderFn);
-  const { data, isLoading } = useQuery({ queryKey: ["my-provider"], queryFn: () => load({}) });
+export const STAGES: { key: ProviderRequestRow["stage"]; label: string }[] = [
+  { key: "new", label: "New" },
+  { key: "reviewing", label: "Reviewing" },
+  { key: "quoted", label: "Quoted" },
+  { key: "accepted", label: "Accepted" },
+  { key: "in_progress", label: "In Progress" },
+  { key: "completed", label: "Completed" },
+  { key: "archived", label: "Archived" },
+];
 
-  if (isLoading) {
+const QUOTE_LABEL: Record<string, string> = {
+  submitted: "Quote sent",
+  accepted: "Quote accepted",
+  declined: "Quote declined",
+  withdrawn: "Quote withdrawn",
+};
+
+function ProviderRequests() {
+  const loadProvider = useServerFn(getMyProviderFn);
+  const provider = useQuery({ queryKey: ["my-provider"], queryFn: () => loadProvider({}) });
+  const load = useServerFn(listProviderRequests);
+  const list = useQuery({ queryKey: ["provider-requests"], queryFn: () => load({}), refetchInterval: 30_000 });
+  const [stage, setStage] = useState<ProviderRequestRow["stage"]>("new");
+
+  if (provider.isLoading) {
     return (
       <ProviderShell>
         <Skeleton className="h-32 w-full rounded-2xl" />
       </ProviderShell>
     );
   }
-
-  if (!data?.provider) {
+  if (!provider.data?.provider) {
     return (
       <ProviderShell>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Requests</h1>
@@ -52,109 +71,82 @@ function ProviderRequests() {
     );
   }
 
-  const requests = data.requests;
+  const rows = list.data?.requests ?? [];
+  const shown = rows.filter((r) => r.stage === stage);
 
   return (
     <ProviderShell>
       <h1 className="text-2xl font-semibold tracking-tight text-foreground">Requests</h1>
-      <ProjectInvites />
-      <p className="mt-2 text-sm text-muted-foreground">
-        Requests drivers sent to {data.provider.businessName}.
-      </p>
+      <div className="-mx-4 mt-4 overflow-x-auto px-4">
+        <div className="flex gap-2">
+          {STAGES.map((s) => {
+            const count = rows.filter((r) => r.stage === s.key).length;
+            return (
+              <button
+                key={s.key}
+                onClick={() => setStage(s.key)}
+                className={cn(
+                  "shrink-0 rounded-full border px-3 py-1.5 text-sm",
+                  stage === s.key ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground",
+                )}
+              >
+                {s.label}
+                {count ? ` · ${count}` : ""}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-      {requests.length === 0 ? (
+      {list.isLoading ? (
+        <Skeleton className="mt-6 h-32 w-full rounded-2xl" />
+      ) : list.isError ? (
+        <div className="mt-6 rounded-2xl border border-border/70 bg-card p-5 text-sm">
+          Couldn't load requests. <button className="text-primary" onClick={() => void list.refetch()}>Try again</button>
+        </div>
+      ) : shown.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-border/70 bg-card p-5 text-sm text-muted-foreground">
-          No requests yet. Once your profile is active, drivers who pick you will show up here.
+          {rows.length === 0
+            ? "No requests yet. Requests that match your services and area appear here."
+            : "Nothing in this tab."}
         </div>
       ) : (
         <div className="mt-6 space-y-3">
-          {requests.map((request) => (
+          {shown.map((r) => (
             <Link
-              key={request.id}
-              to="/admin/requests/$id"
-              params={{ id: request.id }}
+              key={r.requestId}
+              to="/provider/project/$id"
+              params={{ id: r.requestId }}
               className="block rounded-2xl border border-border/70 bg-card p-5 transition-colors hover:border-border"
             >
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-base font-semibold text-foreground">
-                    {request.vehicleLabel ?? "Vehicle"}
-                  </p>
+                <div className="min-w-0">
+                  <p className="text-base font-semibold text-foreground">{r.vehicle || "Vehicle"}</p>
                   <p className="mt-0.5 text-sm text-muted-foreground">
-                    #{request.requestNumber} ·{" "}
-                    {new Date(request.createdAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {[
+                      r.categoryKey ? serviceCategoryLabel(r.categoryKey, "en") ?? r.categoryKey : null,
+                      r.mileage ? `${r.mileage.toLocaleString()} mi` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
                 </div>
-                <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-foreground">
-                  {request.status}
-                </span>
+                {r.unread > 0 && (
+                  <span className="flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+                    <MessageCircle className="size-3" /> {r.unread}
+                  </span>
+                )}
               </div>
-              {request.categoryKey && (
-                <p className="mt-3 text-sm text-foreground">
-                  {serviceCategoryLabel(request.categoryKey, "en") ?? request.categoryKey}
-                </p>
-              )}
-              {request.concern && (
-                <p className="mt-1 text-sm text-muted-foreground">{request.concern}</p>
-              )}
-              <p className="mt-4 text-xs font-medium text-primary">Open Job Workspace</p>
+              {r.concern && <p className="mt-2 line-clamp-2 text-sm text-foreground">{r.concern}</p>}
+              <p className="mt-3 text-xs text-muted-foreground">
+                {r.customerLabel} · #{r.requestNumber} · {new Date(r.createdAt).toLocaleDateString()}
+                {r.quoteStatus ? ` · ${QUOTE_LABEL[r.quoteStatus] ?? r.quoteStatus}` : ""}
+                {r.appointmentStatus === "pending" ? " · Appointment pending" : ""}
+              </p>
             </Link>
           ))}
         </div>
       )}
     </ProviderShell>
-  );
-}
-
-const INVITE_LABEL: Record<string, string> = {
-  invited: "New",
-  viewed: "Viewed",
-  quoted: "Quoted",
-  declined: "Declined",
-  selected: "Selected",
-  not_selected: "Not selected",
-};
-
-/** Project requests sent to this provider for an actual quote. */
-function ProjectInvites() {
-  const load = useServerFn(listProviderInvites);
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["provider-invites"], queryFn: () => load({}) });
-  if (isLoading) return <Skeleton className="mt-6 h-24 w-full rounded-2xl" />;
-  if (isError)
-    return (
-      <div className="mt-6 rounded-2xl border border-border/70 bg-card p-5 text-sm">
-        Couldn't load quote requests. <button className="text-primary" onClick={() => void refetch()}>Try again</button>
-      </div>
-    );
-  const invites = data?.invites ?? [];
-  if (!invites.length) return null;
-  return (
-    <section className="mt-6">
-      <p className="mb-2 text-sm font-medium text-foreground">Quote requests</p>
-      <div className="space-y-3">
-        {invites.map((i) => (
-          <Link
-            key={i.requestId}
-            to="/provider/project/$id"
-            params={{ id: i.requestId }}
-            className="flex items-start justify-between gap-3 rounded-2xl border border-border/70 bg-card p-5 transition-colors hover:border-border"
-          >
-            <div>
-              <p className="text-base font-semibold text-foreground">{i.vehicleLabel || "Vehicle"}</p>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                #{i.requestNumber}
-                {i.buildName ? ` · ${i.buildName}` : ""}
-                {i.categoryKey ? ` · ${serviceCategoryLabel(i.categoryKey, "en") ?? i.categoryKey}` : ""}
-              </p>
-            </div>
-            <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-foreground">{INVITE_LABEL[i.status] ?? i.status}</span>
-          </Link>
-        ))}
-      </div>
-    </section>
   );
 }
