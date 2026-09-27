@@ -6,6 +6,7 @@ import { ArrowRight } from "lucide-react";
 import { ProviderShell, ProviderStatusPill } from "@/components/provider/ProviderShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { listProviderRequests } from "@/lib/messaging.functions";
 import { getMyProviderFn } from "@/lib/provider.functions";
 import { PROVIDER_STATUS_LABEL, providerKindLabel } from "@/lib/provider-kinds";
 import { serviceCategoryLabel } from "@/lib/service-network";
@@ -30,6 +31,13 @@ export const Route = createFileRoute("/_driver/provider/")({
 function ProviderHome() {
   const load = useServerFn(getMyProviderFn);
   const { data, isLoading } = useQuery({ queryKey: ["my-provider"], queryFn: () => load({}) });
+  const loadRequests = useServerFn(listProviderRequests);
+  const work = useQuery({
+    queryKey: ["provider-requests"],
+    queryFn: () => loadRequests({}),
+    enabled: Boolean(data?.provider),
+    refetchInterval: 30_000,
+  });
 
   if (isLoading) {
     return (
@@ -162,19 +170,50 @@ function ProviderHome() {
         </div>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-border/70 bg-card p-5">
+      <section className="mt-6">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-foreground">Incoming requests</p>
-          <p className="text-sm text-muted-foreground">{requests.length}</p>
+          <p className="text-sm font-medium text-foreground">Your requests</p>
+          <Link to="/provider/requests" className="text-sm text-primary">Open workspace</Link>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          When a driver asks for service and chooses you, the request arrives here with the vehicle, VIN,
-          mileage and what they described — no back-and-forth to collect the basics.
+        {work.isLoading ? (
+          <Skeleton className="mt-3 h-24 w-full rounded-2xl" />
+        ) : work.isError ? (
+          <p className="mt-3 rounded-2xl border border-border/70 bg-card p-4 text-sm">
+            Couldn't load your requests. <button className="text-primary" onClick={() => void work.refetch()}>Try again</button>
+          </p>
+        ) : (
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {(
+              [
+                ["New requests", (r) => r.stage === "new"],
+                ["Awaiting your response", (r) => r.stage === "reviewing"],
+                ["Quotes sent", (r) => r.stage === "quoted"],
+                ["Upcoming jobs", (r) => r.stage === "accepted"],
+                ["In progress", (r) => r.stage === "in_progress"],
+                ["Completed", (r) => r.stage === "completed"],
+              ] as [string, (r: { stage: string }) => boolean][]
+            ).map(([label, test]) => (
+              <Link key={label} to="/provider/requests" className="rounded-2xl border border-border/70 bg-card p-4">
+                <p className="text-2xl font-semibold text-foreground">{(work.data?.requests ?? []).filter(test).length}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{label}</p>
+              </Link>
+            ))}
+          </div>
+        )}
+        {(work.data?.requests ?? []).some((r) => r.unread > 0) && (
+          <p className="mt-3 text-sm text-primary">
+            You have unread customer messages.
+          </p>
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">
+          Requests arrive when a driver picks you or when they match your services and ZIP area. {requests.length} directly assigned.
         </p>
-        <Button asChild variant="outline" className="mt-4 h-11 w-full">
-          <Link to="/provider/requests">View requests</Link>
-        </Button>
-      </div>
+      </section>
+
+      <Link to="/provider/settings" className="mt-6 block rounded-2xl border border-border/70 bg-card p-5">
+        <p className="text-sm font-medium text-foreground">Services &amp; preset pricing</p>
+        <p className="mt-1 text-sm text-muted-foreground">Set fixed, starting-at or range prices so quotes start in one tap.</p>
+      </Link>
     </ProviderShell>
   );
 }

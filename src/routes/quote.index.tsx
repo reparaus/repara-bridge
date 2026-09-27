@@ -349,6 +349,8 @@ function QuoteFlow() {
     requestNumber: string;
     snapshot: FormState;
     outsideArea: boolean;
+    viewToken: string | null;
+    submittedAt: string;
   } | null>(null);
 
   useEffect(() => {
@@ -530,6 +532,8 @@ function QuoteFlow() {
         requestNumber: result.requestNumber,
         snapshot: form,
         outsideArea: result.serviceAreaStatus === "outside_area",
+        viewToken: result.viewToken ?? null,
+        submittedAt: new Date().toISOString(),
       });
       window.scrollTo({ top: 0 });
     },
@@ -761,6 +765,8 @@ function QuoteFlow() {
       <Confirmation
         requestNumber={confirmation.requestNumber}
         outsideArea={confirmation.outsideArea}
+        viewToken={confirmation.viewToken}
+        submittedAt={confirmation.submittedAt}
         snapshot={confirmation.snapshot}
         garageVehicleId={garageVehicleId}
         buildId={buildId}
@@ -1805,7 +1811,11 @@ function Confirmation({
   garageVehicleId,
   buildId,
   onAnother,
+  viewToken,
+  submittedAt,
 }: {
+  viewToken?: string | null;
+  submittedAt?: string;
   requestNumber: string;
   snapshot: FormState;
   outsideArea?: boolean;
@@ -1869,11 +1879,17 @@ function Confirmation({
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           {outsideArea
             ? t("quote.confirm.bodyOutside", { zip: snapshot.zipCode.trim().slice(0, 5) })
-            : t("quote.confirm.body")}
+            : lang === "es"
+              ? "Tu solicitud fue enviada a los proveedores de Repara adecuados."
+              : "Your request has been sent to relevant Repara providers."}
         </p>
 
         <div className="surface-panel mt-8 space-y-4 p-5 text-left">
           <Row label={t("quote.confirm.request")} value={`#${requestNumber}`} />
+          <Row label={lang === "es" ? "Estado" : "Status"} value={lang === "es" ? "Nueva solicitud" : "New request"} />
+          {submittedAt ? (
+            <Row label={lang === "es" ? "Enviada" : "Submitted"} value={new Date(submittedAt).toLocaleString()} />
+          ) : null}
           <Row label={t("quote.confirm.vehicle")} value={vehicleTitle(snapshot) || "—"} />
           {configSummary(snapshot.config) && (
             <Row label={t("quote.confirm.configuration")} value={configSummary(snapshot.config)} />
@@ -1963,20 +1979,13 @@ function Confirmation({
           </div>
         ) : signedIn === false ? (
           <>
-            {/* No account was needed to get here. Offering one now is optional, and
-                a request is only linked to an account when the contact details match. */}
-            <div className="surface-panel mt-6 p-5 text-left">
-              <p className="text-sm font-medium">Save this vehicle to your garage</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Create your free Repara account to track this repair, maintenance and service history.
-              </p>
-              <Button asChild variant="secondary" className="mt-3 h-12 w-full">
-                <Link to="/signin">Create account</Link>
-              </Button>
-            </div>
-
             <div className="mt-8 space-y-3">
-              <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
+              {viewToken ? (
+                <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
+                  <Link to="/r/$token" params={{ token: viewToken }}>{lang === "es" ? "Ver solicitud" : "View Request"}</Link>
+                </Button>
+              ) : null}
+              <Button asChild size="lg" variant={viewToken ? "ghost" : "default"} className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
                 <Link to="/">{t("quote.confirm.backHome")}</Link>
               </Button>
               <Button

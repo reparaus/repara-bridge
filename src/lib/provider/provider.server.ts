@@ -167,11 +167,13 @@ export async function saveMyProvider(
   // Services: replace the set the provider selected. Categories come from the
   // shared taxonomy, so there is no second provider-only category system.
   if (input.categories) {
-    await db.from("provider_services").delete().eq("provider_id", providerId);
-    const rows = [...new Set(input.categories)].map((key) => ({
-      provider_id: providerId,
-      category_key: key,
-    }));
+    // Keep existing rows (and their preset pricing); only add/remove the diff.
+    const wanted = [...new Set(input.categories)];
+    const { data: existingRows } = await db.from("provider_services").select("category_key").eq("provider_id", providerId);
+    const have = new Set(((existingRows ?? []) as Record<string, unknown>[]).map((r) => String(r['category_key'])));
+    const removed = [...have].filter((k) => !wanted.includes(k));
+    if (removed.length) await db.from("provider_services").delete().eq("provider_id", providerId).in("category_key", removed);
+    const rows = wanted.filter((k) => !have.has(k)).map((key) => ({ provider_id: providerId, category_key: key }));
     if (rows.length) {
       const { error } = await db.from("provider_services").insert(rows);
       if (error) throw new Error(error.message);

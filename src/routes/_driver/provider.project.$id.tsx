@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { buildItem } from "@/lib/build-catalog";
 import { formatCents, parseDollars } from "@/lib/money";
+import { RequestMessages } from "@/components/common/RequestMessages";
+import { getMyServicePricing } from "@/lib/messaging.functions";
 import { declineProviderInvite, getProviderBrief, submitProviderQuote } from "@/lib/provider-quotes.functions";
 import { serviceCategoryLabel } from "@/lib/service-network";
 
@@ -39,6 +41,8 @@ function ProjectRequest() {
   const submit = useServerFn(submitProviderQuote);
   const decline = useServerFn(declineProviderInvite);
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["provider-brief", id], queryFn: () => load({ data: { requestId: id } }) });
+  const loadPricing = useServerFn(getMyServicePricing);
+  const pricing = useQuery({ queryKey: ["my-service-pricing"], queryFn: () => loadPricing({}) });
   const [form, setForm] = useState(EMPTY);
   const [showForm, setShowForm] = useState(false);
 
@@ -152,6 +156,20 @@ function ProjectRequest() {
         </section>
       )}
 
+      {data.providerId && (
+        <section className="mt-6">
+          <p className="mb-2 text-sm font-medium text-foreground">Messages</p>
+          <RequestMessages requestId={id} providerId={data.providerId} viewer="provider" otherName="Customer" />
+        </section>
+      )}
+
+      {data.inviteStatus === "selected" && (
+        <section className="mt-6 rounded-2xl border border-border/60 bg-card p-5 text-sm">
+          <p className="font-medium text-foreground">Appointment</p>
+          <p className="mt-1 text-muted-foreground">Appointment pending — scheduling is coming soon. Contact the customer through Messages to agree on a time.</p>
+        </section>
+      )}
+
       {data.inviteStatus === "selected" && (
         <div className="mt-6 rounded-2xl border border-primary/40 bg-primary/5 p-5 text-sm">
           <p className="font-medium text-foreground">The driver selected your quote.</p>
@@ -192,6 +210,40 @@ function ProjectRequest() {
             submitMut.mutate();
           }}
         >
+          {(() => {
+            const preset = pricing.data?.services.find((s) => s.categoryKey === data.categoryKey && s.isActive && s.pricingMode !== "quote" && s.priceCents !== null);
+            if (!preset) return null;
+            const label =
+              preset.pricingMode === "fixed"
+                ? `Fixed — ${formatCents(preset.priceCents!)}`
+                : preset.pricingMode === "starting_at"
+                  ? `Starting at ${formatCents(preset.priceCents!)}`
+                  : `${formatCents(preset.priceCents!)}–${formatCents(preset.priceMaxCents ?? preset.priceCents!)}`;
+            return (
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-secondary/60 p-3 text-sm">
+                <span>
+                  <span className="block text-xs text-muted-foreground">Your preset · {serviceCategoryLabel(preset.categoryKey, "en")}</span>
+                  {label}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Copies the default into this quote only; the preset itself is never changed.
+                    setForm((f) => ({
+                      ...f,
+                      labor: (preset.priceCents! / 100).toFixed(2),
+                      notes: f.notes || preset.notes || "",
+                      timeframe: f.timeframe || (preset.durationMinutes ? `About ${Math.round(preset.durationMinutes / 6) / 10} hours` : ""),
+                    }));
+                  }}
+                >
+                  Use preset
+                </Button>
+              </div>
+            );
+          })()}
           <div className="grid grid-cols-2 gap-3">
             {(["parts", "labor", "fees", "tax"] as const).map((k) => (
               <div key={k}>
