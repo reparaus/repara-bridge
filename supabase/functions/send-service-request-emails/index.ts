@@ -92,6 +92,29 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  // Request notifications (0023). Service-role gate. Each item is either a saved
+  // in-app notification (signed-in user) or a guest event that is delivered
+  // with a request-scoped secure link. Preferences are respected, duplicates are
+  // blocked by dedupe_key and every outcome is logged. Never throws per item.
+  if (body['mode'] === "notify") {
+    const bearer = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (bearer !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return json({ error: "forbidden" }, 403);
+    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+      auth: { persistSession: false },
+    });
+    const items = (Array.isArray(body['items']) ? body['items'] : []).slice(0, 25) as Record<string, unknown>[];
+    const results: string[] = [];
+    for (const item of items) {
+      try {
+        results.push(await deliverNotification(sb, item));
+      } catch (e) {
+        console.error("[notify] item failed", (e as Error).message);
+        results.push("failed");
+      }
+    }
+    return json({ ok: true, results });
+  }
+
   // Admin-confirmed quote delivery. Same service-role gate as clarification:
   // only Repara's own server code can reach it, and it never prices anything
   // itself — the amounts are passed in from the saved quote.
