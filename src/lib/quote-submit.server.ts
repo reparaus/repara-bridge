@@ -369,12 +369,18 @@ export async function persistQuoteRequest(data: QuoteInput) {
     console.error("[emails] trigger failed for request", request.id, error);
   }
 
+  // 0023: invite matching providers (category + ZIP area, never a broadcast)
+  // and mint the request-specific guest link. Both are best-effort.
+  const notify = await import("./notify.server");
+  await notify.matchAndNotifyProviders(request.id);
+  const viewToken = await notify.mintRequestToken(request.id);
+
   return {
     requestNumber: request.request_number,
     serviceAreaStatus: area.status,
     serviceAreaCity: area.city,
     duplicate: false as const,
-
+    viewToken,
   };
 }
 
