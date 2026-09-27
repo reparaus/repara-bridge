@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { CopyValue } from "@/components/admin/CopyValue";
 import { ConversationPanel } from "@/components/admin/ConversationPanel";
+import { RequestCommsAdmin } from "@/components/admin/RequestCommsAdmin";
 import { ReparaAiCard } from "@/components/admin/ReparaAiCard";
 import { JobCopilot } from "@/components/admin/JobCopilot";
 import { JobDiagnosis } from "@/components/admin/JobDiagnosis";
@@ -930,6 +931,7 @@ function JobWorkspace() {
           <TabsContent value="messages" className="mt-0">
             <div className="mx-auto max-w-3xl">
               <ConversationPanel requestId={id} />
+              <RequestCommsAdmin requestId={id} />
             </div>
           </TabsContent>
 
