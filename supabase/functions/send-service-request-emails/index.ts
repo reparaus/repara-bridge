@@ -277,9 +277,10 @@ Deno.serve(async (req) => {
       location: esc(location),
       areaText: esc(areaText),
       requestNumber: esc(request.request_number ?? ""),
+      link: await mintGuestLink(supabase, String(request.id)).catch(() => ""),
     });
     try {
-      await send(customerEmail, "Repara service request received", html);
+      await send(customerEmail, "Repara — Your service request was received", html);
       const now = new Date().toISOString();
       await supabase
         .from("service_requests")
@@ -410,6 +411,7 @@ function customerHtml(d: {
   location: string;
   areaText: string;
   requestNumber: string;
+  link?: string;
 }) {
   return shell(`
 <h1 style="font-size:20px;margin:0 0 12px;">Request received</h1>
@@ -420,6 +422,9 @@ ${row("Vehicle", d.vehicleText)}
 ${row("Service", d.serviceText)}
 ${row("Location", d.location)}
 ${row("Service area", d.areaText)}
+</table>
+${d.link ? button(d.link, "View request") : ""}
+<table style="width:100%;border-collapse:collapse;">
 </table>
 <p style="font-size:12px;line-height:1.6;color:#666666;margin:22px 0 0;">
 This is a confirmation that we received your request. It is not a final estimate or a confirmed appointment.</p>`);
@@ -500,4 +505,133 @@ function quoteHtml(d: {
       You can approve or decline the quote from that link. No account needed.
     </p>
   `);
+}
+
+// ------------------------------------------------------------ notify (0023)
+function button(href: string, label: string) {
+  return `<p style="margin:24px 0 0;"><a href="${esc(href)}" style="display:inline-block;background:#111111;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;">${esc(label)}</a></p>`;
+}
+
+async function sha256Hex(value: string) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Request-scoped guest link. Only the hash is stored. */
+// deno-lint-ignore no-explicit-any
+async function mintGuestLink(sb: any, requestId: string) {
+  const raw = new Uint8Array(24);
+  crypto.getRandomValues(raw);
+  const token = btoa(String.fromCharCode(...raw)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const { error } = await sb.from("request_access_tokens").insert({ token_hash: await sha256Hex(token), service_request_id: requestId });
+  if (error) throw new Error(error.message);
+  return `${SITE_URL}/r/${token}`;
+}
+
+const SUBJECTS: Record<string, string> = {
+  provider_new_request: "Repara — New Service Request",
+  provider_message: "Repara — New message from a customer",
+  provider_quote_accepted: "Repara — Quote accepted",
+  message_received: "Repara — New message about your request",
+  quote_received: "Repara — New quote available",
+  request_status: "Repara — Request update",
+  request_submitted: "Repara — Your service request was received",
+};
+
+// deno-lint-ignore no-explicit-any
+async function logDelivery(sb: any, row: Record<string, unknown>) {
+  const { error } = await sb.from("notification_deliveries").insert(row);
+  return !error; // unique violation = already handled
+}
+
+// deno-lint-ignore no-explicit-any
+async function deliverNotification(sb: any, item: Record<string, unknown>): Promise<string> {
+  if (!RESEND_API_KEY) return "email_not_configured";
+  const sendMail = async (to: string, subject: string, html: string) => {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${RESEND_API_KEY}` },
+      body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
+    });
+    if (!res.ok) throw new Error(`resend ${res.status}`);
+  };
+  const valid = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+
+  if (item["kind"] === "user") {
+    const id = String(item["notificationId"] ?? "");
+    if (!UUID.test(id)) return "invalid";
+    const { data: n } = await sb.from("notifications").select("id, user_id, provider_id, event_type, title, body, link, service_request_id, audience").eq("id", id).maybeSingle();
+    if (!n) return "missing";
+    const base = { dedupe_key: `email:${n.id}`, channel: "email", notification_id: n.id, service_request_id: n.service_request_id, event_type: n.event_type, audience: n.audience };
+    const { data: already } = await sb.from("notification_deliveries").select("id").eq("dedupe_key", base.dedupe_key).maybeSingle();
+    if (already) return "duplicate";
+    const { data: prof } = await sb.from("profiles").select("notification_preferences").eq("id", n.user_id).maybeSingle();
+    if (prof?.notification_preferences?.[`email.${n.event_type}`] === false) {
+      await logDelivery(sb, { ...base, status: "skipped_pref" });
+      return "skipped_pref";
+    }
+    let to = "";
+    if (n.audience === "provider" && n.provider_id) {
+      const { data: p } = await sb.from("service_providers").select("email").eq("id", n.provider_id).maybeSingle();
+      to = String(p?.email ?? "").trim();
+    }
+    if (!valid(to)) {
+      const { data: u } = await sb.auth.admin.getUserById(n.user_id);
+      to = String(u?.user?.email ?? "").trim();
+    }
+    if (!valid(to)) {
+      await logDelivery(sb, { ...base, status: "skipped_no_address" });
+      return "skipped_no_address";
+    }
+    const html = shell(`<h1 style="font-size:20px;margin:0 0 12px;">${esc(n.title)}</h1>
+<p style="font-size:15px;line-height:1.6;margin:0;">${esc(n.body ?? "")}</p>
+${n.link ? button(`${SITE_URL}${n.link}`, "Open in Repara") : ""}`);
+    try {
+      await sendMail(to, SUBJECTS[n.event_type] ?? "Repara — Update", html);
+      await logDelivery(sb, { ...base, status: "sent" });
+      return "sent";
+    } catch (e) {
+      await logDelivery(sb, { ...base, status: "failed", error: (e as Error).message.slice(0, 400) });
+      return "failed";
+    }
+  }
+
+  if (item["kind"] === "guest") {
+    const requestId = String(item["requestId"] ?? "");
+    const event = String(item["event"] ?? "");
+    const ref = String(item["ref"] ?? "").slice(0, 80);
+    if (!UUID.test(requestId) || !["message_received", "quote_received", "request_status"].includes(event)) return "invalid";
+    const base = { dedupe_key: `guest:${event}:${ref || requestId}`, channel: "email", service_request_id: requestId, event_type: event, audience: "guest" };
+    const { data: already } = await sb.from("notification_deliveries").select("id").eq("dedupe_key", base.dedupe_key).maybeSingle();
+    if (already) return "duplicate";
+    const { data: r } = await sb.from("service_requests").select("id, request_number, user_id, customers(email, first_name), vehicles(year, make, model)").eq("id", requestId).maybeSingle();
+    if (!r || r.user_id) return "not_guest";
+    const to = String(r.customers?.email ?? "").trim();
+    if (!valid(to)) {
+      await logDelivery(sb, { ...base, status: "skipped_no_address" });
+      return "skipped_no_address";
+    }
+    const vehicle = [r.vehicles?.year, r.vehicles?.make, r.vehicles?.model].filter(Boolean).join(" ") || `Request ${r.request_number}`;
+    const provider = String(item["providerName"] ?? "Your provider").slice(0, 120);
+    const total = typeof item["totalCents"] === "number" ? `$${((item["totalCents"] as number) / 100).toFixed(2)}` : "";
+    const lines: Record<string, [string, string]> = {
+      message_received: ["New message", `${provider} sent you a message about your ${vehicle}.`],
+      quote_received: ["New quote available", `${provider} sent you a quote for your ${vehicle}${total ? ` — ${total}` : ""}.`],
+      request_status: ["Request update", `There is an update on your ${vehicle} request.`],
+    };
+    const [title, text] = lines[event]!;
+    const link = await mintGuestLink(sb, requestId);
+    const html = shell(`<h1 style="font-size:20px;margin:0 0 12px;">${esc(title)}</h1>
+<p style="font-size:15px;line-height:1.6;margin:0;">Hi ${esc(r.customers?.first_name || "there")}, ${esc(text)}</p>
+${button(link, "View request")}`);
+    try {
+      await sendMail(to, SUBJECTS[event] ?? "Repara — Update", html);
+      await logDelivery(sb, { ...base, status: "sent" });
+      return "sent";
+    } catch (e) {
+      await logDelivery(sb, { ...base, status: "failed", error: (e as Error).message.slice(0, 400) });
+      return "failed";
+    }
+  }
+  return "invalid";
 }
