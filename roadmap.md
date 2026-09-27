@@ -27,3 +27,10 @@
 - [ ] Run supabase/external/0022_build_visual_config.sql (3D build preview saving)
 - [ ] Licensed 2021 Accord 3D model (blocked: needs asset purchase)
 - [ ] 3D rounds 2+: tint, body parts, AI build assistant, live estimate in studio
+
+# Notifications + Messaging + Provider Dashboard
+- [x] Notifications with links/audience, delivery log, request-scoped guest links, request messaging, provider matching, preset pricing, appointment-pending (`0023_messaging_notifications.sql`)
+- [x] Guest request page `/r/$token`, provider workspace tabs + dashboard, messages on both request pages, notification centers, email preferences, admin delivery view
+- [ ] Run `0023_messaging_notifications.sql` (user)
+- [ ] Redeploy `send-service-request-emails` edge function (user)
+- [ ] Signed-in/guest end-to-end QA — needs migration + authenticated session
