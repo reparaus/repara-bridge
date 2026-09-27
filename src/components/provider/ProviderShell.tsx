@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, Inbox, Settings, Store } from "lucide-react";
+import { Bell, Home, Inbox, Settings, Store } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Logo } from "@/components/brand/Logo";
@@ -29,6 +29,13 @@ export function ProviderShell({ children }: { children: ReactNode }) {
             <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
               Provider
             </span>
+          </Link>
+          <Link
+            to="/provider/notifications"
+            aria-label="Notifications"
+            className="ml-auto mr-2 flex size-10 items-center justify-center rounded-full text-muted-foreground hover:text-foreground sm:ml-0"
+          >
+            <Bell className="size-5" />
           </Link>
           <nav className="hidden gap-1 sm:flex">
             {TABS.map((tab) => (
