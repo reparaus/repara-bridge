@@ -1,3 +1,4 @@
+import { toE164 } from "@/lib/phone";
 import type { z } from "zod";
 
 import type { quoteRequestSchema } from "./quote-schema";
@@ -104,6 +105,14 @@ export async function persistQuoteRequest(data: QuoteInput) {
     phone: data.contact.phone || "",
     email: data.contact.email || null,
     preferred_contact_method: data.contact.preferredContactMethod,
+  };
+  // 0024: normalized SMS number + explicit consent (only when texting).
+  const smsFields = {
+    phone_e164: toE164(data.contact.phone),
+    sms_consent_at:
+      data.contact.smsConsent && data.contact.preferredContactMethod !== "email" && data.contact.preferredContactMethod !== "call"
+        ? new Date().toISOString()
+        : null,
   };
 
   let createdCustomerId: string | null = null;
@@ -257,6 +266,7 @@ export async function persistQuoteRequest(data: QuoteInput) {
     intake_followups: data.intakeFollowups,
     // Snapshot of the channel the customer chose for THIS request (0009).
     preferred_contact_method: data.contact.preferredContactMethod,
+    ...smsFields,
     // 0015: an intentionally chosen provider and the shared category key.
     ...(data.providerId ? { provider_id: data.providerId } : {}),
     ...(data.serviceCategoryKey ? { service_category_key: data.serviceCategoryKey } : {}),

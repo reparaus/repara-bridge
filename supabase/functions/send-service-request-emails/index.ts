@@ -171,8 +171,8 @@ Deno.serve(async (req) => {
   );
 
   const BASE_COLUMNS =
-    "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, customers(first_name, last_name, phone, email, preferred_contact_method), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)";
-  const FULL_COLUMNS = `${BASE_COLUMNS}, preferred_contact_method, preferred_language, intake_followups`;
+    "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, user_id, customers(first_name, last_name, phone, email, preferred_contact_method), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)";
+  const FULL_COLUMNS = `${BASE_COLUMNS}, preferred_contact_method, preferred_language, intake_followups, phone_e164, sms_consent_at`;
 
   let { data: request, error } = await supabase
     .from("service_requests")
@@ -265,7 +265,42 @@ Deno.serve(async (req) => {
   const customerEmail = String(customer.email ?? "").trim();
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(customerEmail);
 
-  if (validEmail && !request.customer_email_sent_at) {
+  // SMS first (0024): text/both preference, explicit consent, valid E.164.
+  // If SMS can't go out, email is used as a fallback so the customer still
+  // gets their private link. Deduped per request; never retried in a loop.
+  const smsWanted = preferred === "text" || preferred === "both";
+  let smsOutcome = "not_wanted";
+  let guestLink = "";
+  const linkOnce = async () => (guestLink ||= await mintGuestLink(supabase, String(request.id)).catch(() => ""));
+  if (smsWanted) {
+    const phone = toE164((request as any).phone_e164 ?? customer.phone);
+    const dedupe = `sms:confirmation:${request.id}`;
+    const { data: already } = await supabase.from("notification_deliveries").select("status").eq("dedupe_key", dedupe).maybeSingle();
+    if (already) smsOutcome = already.status;
+    else {
+      const base = { dedupe_key: dedupe, channel: "sms", service_request_id: request.id, event_type: "request_submitted", audience: request.user_id ? "driver" : "guest" };
+      if (!(request as any).sms_consent_at) smsOutcome = "skipped_no_consent";
+      else if (!phone) smsOutcome = "skipped_invalid_phone";
+      else {
+        const veh = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ");
+        const link = await linkOnce();
+        const r = await sendSms(phone, `Repara: Your service request${veh ? ` for your ${veh}` : ""} was received. View your private request: ${link}`);
+        smsOutcome = r.status;
+        await logDelivery(supabase, { ...base, status: r.status, error: r.error ?? null, provider_message_id: r.sid ?? null });
+        await logComm({ channel: "sms", category: "confirmation", status: r.status === "sent" ? "sent" : "failed", message: r.status === "sent" ? "Request received — confirmation text sent." : `Confirmation text not sent (${r.status}).`, ...(r.error ? { error: r.error.slice(0, 400) } : {}) });
+      }
+      if (smsOutcome !== "sent" && !["failed", "not_configured"].includes(smsOutcome)) {
+        await logDelivery(supabase, { ...base, status: smsOutcome });
+      }
+      if (smsOutcome === "sent") {
+        await supabase.from("service_requests").update({ confirmation_channel: "sms", confirmation_sent_at: new Date().toISOString() }).eq("id", request.id);
+      }
+    }
+    results.sms = smsOutcome;
+  }
+  const emailWanted = !smsWanted || preferred === "both" || smsOutcome !== "sent";
+
+  if (emailWanted && validEmail && !request.customer_email_sent_at) {
     const intro = outside
       ? "Your request has been received. Repara does not currently service your area, but we've saved your request as we evaluate future service areas."
       : "Your service request has been received. We'll review the details and contact you shortly.";
@@ -277,7 +312,7 @@ Deno.serve(async (req) => {
       location: esc(location),
       areaText: esc(areaText),
       requestNumber: esc(request.request_number ?? ""),
-      link: await mintGuestLink(supabase, String(request.id)).catch(() => ""),
+      link: await linkOnce(),
     });
     try {
       await send(customerEmail, "Repara — Your service request was received", html);
@@ -286,8 +321,7 @@ Deno.serve(async (req) => {
         .from("service_requests")
         .update({
           customer_email_sent_at: now,
-          confirmation_channel: "email",
-          confirmation_sent_at: now,
+          ...(smsOutcome === "sent" ? {} : { confirmation_channel: "email", confirmation_sent_at: now }),
         })
         .eq("id", request.id);
       results.customer = "sent";
@@ -310,24 +344,9 @@ Deno.serve(async (req) => {
       });
     }
   } else {
-    results.customer = validEmail ? "already_sent" : "skipped_no_email";
+    results.customer = !emailWanted ? "skipped_pref" : validEmail ? "already_sent" : "skipped_no_email";
   }
 
-  // SMS architecture placeholder: the intent is recorded so a provider can
-  // later replay or take over these rows. Nothing is silently discarded.
-  if ((preferred === "text" || preferred === "call") && !request.customer_email_sent_at) {
-    const phone = String(customer.phone ?? "").trim();
-    if (phone) {
-      results.sms = "not_configured";
-      await logComm({
-        channel: "sms",
-        category: "confirmation",
-        status: "not_configured",
-        message: `Customer prefers ${preferred}. SMS provider is not connected yet — confirmation went out by email.`,
-        metadata: { to: phone, preferred },
-      });
-    }
-  }
 
 
   // ---------------------------------------------------------------- admin
@@ -536,64 +555,206 @@ const SUBJECTS: Record<string, string> = {
   quote_received: "Repara — New quote available",
   request_status: "Repara — Request update",
   request_submitted: "Repara — Your service request was received",
+  // Future (no scheduling yet): copy is ready, nothing emits these events.
+  appointment_requested: "Repara — Appointment requested",
+  appointment_confirmed: "Repara — Appointment confirmed",
+  appointment_rescheduled: "Repara — Appointment rescheduled",
+  appointment_cancelled: "Repara — Appointment cancelled",
+  appointment_reminder: "Repara — Appointment reminder",
 };
+
+// ------------------------------------------------------------------ SMS (0024)
+/** E.164 or null. Numbers without a country code are treated as +1. */
+function toE164(raw: unknown): string | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const d = s.replace(/\D/g, "");
+  if (s.startsWith("+")) return /^[1-9]\d{7,14}$/.test(d) ? `+${d}` : null;
+  if (d.length === 10 && /^[2-9]\d{2}[2-9]/.test(d)) return `+1${d}`;
+  if (d.length === 11 && /^1[2-9]\d{2}[2-9]/.test(d)) return `+${d}`;
+  return null;
+}
+
+type SmsResult = { status: "sent" | "failed" | "not_configured" | "skipped_invalid_phone"; sid?: string; error?: string };
+
+/** Short transactional SMS through Twilio. Secrets stay in this function. */
+async function sendSms(to: string, body: string): Promise<SmsResult> {
+  const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
+  const token = Deno.env.get("TWILIO_AUTH_TOKEN");
+  const from = Deno.env.get("TWILIO_PHONE_NUMBER");
+  if (!sid || !token || !from) return { status: "not_configured" };
+  const phone = toE164(to);
+  if (!phone) return { status: "skipped_invalid_phone" };
+  const text = body.replace(/\s+/g, " ").trim().slice(0, 320);
+  if (!text) return { status: "failed", error: "empty message" };
+  try {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      method: "POST",
+      headers: { authorization: `Basic ${btoa(`${sid}:${token}`)}`, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ To: phone, From: from, Body: text }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { status: "failed", error: `twilio ${res.status}: ${String(data?.message ?? "").slice(0, 300)}` };
+    return { status: "sent", sid: String(data?.sid ?? "") };
+  } catch (e) {
+    return { status: "failed", error: (e as Error).message.slice(0, 300) };
+  }
+}
+
+/** Short SMS copy. No customer details beyond the vehicle. */
+function smsText(event: string, ctx: { vehicle?: string; provider?: string; total?: string; link: string }) {
+  const v = ctx.vehicle ? ` for a ${ctx.vehicle}` : "";
+  const map: Record<string, string> = {
+    provider_new_request: `Repara: You have a new service request${v}. View request: ${ctx.link}`,
+    provider_message: `Repara: You have a new customer message. View it: ${ctx.link}`,
+    provider_quote_accepted: `Repara: Your quote was accepted. Help the customer schedule: ${ctx.link}`,
+    message_received: `Repara: You have a new message about your service request. View it: ${ctx.link}`,
+    quote_received: `Repara: You have a new ${ctx.total ? `${ctx.total} ` : ""}quote${ctx.provider ? ` from ${ctx.provider}` : ""}. Review: ${ctx.link}`,
+    request_status: `Repara: There is an update on your service request. View it: ${ctx.link}`,
+    appointment_requested: `Repara: An appointment was requested. View: ${ctx.link}`,
+    appointment_confirmed: `Repara: Your appointment is confirmed. View: ${ctx.link}`,
+    appointment_rescheduled: `Repara: Your appointment was rescheduled. View: ${ctx.link}`,
+    appointment_cancelled: `Repara: Your appointment was cancelled. View: ${ctx.link}`,
+    appointment_reminder: `Repara: Reminder about your upcoming appointment. View: ${ctx.link}`,
+  };
+  return map[event] ?? `Repara: You have an update. View: ${ctx.link}`;
+}
 
 // deno-lint-ignore no-explicit-any
 async function logDelivery(sb: any, row: Record<string, unknown>) {
   const { error } = await sb.from("notification_deliveries").insert(row);
+  if (error && /provider_message_id/.test(error.message)) {
+    const { provider_message_id: _drop, ...rest } = row;
+    return !(await sb.from("notification_deliveries").insert(rest)).error;
+  }
   return !error; // unique violation = already handled
 }
 
 // deno-lint-ignore no-explicit-any
-async function deliverNotification(sb: any, item: Record<string, unknown>): Promise<string> {
-  if (!RESEND_API_KEY) return "email_not_configured";
-  const sendMail = async (to: string, subject: string, html: string) => {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${RESEND_API_KEY}` },
-      body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
-    });
-    if (!res.ok) throw new Error(`resend ${res.status}`);
-  };
-  const valid = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+async function alreadyDelivered(sb: any, key: string) {
+  const { data } = await sb.from("notification_deliveries").select("id").eq("dedupe_key", key).maybeSingle();
+  return !!data;
+}
 
+const validEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+
+async function sendMail(to: string, subject: string, html: string) {
+  if (!RESEND_API_KEY) throw new Error("email_not_configured");
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${RESEND_API_KEY}` },
+    body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
+  });
+  if (!res.ok) throw new Error(`resend ${res.status}`);
+}
+
+/**
+ * One notification → each chosen external channel (email and/or SMS), each
+ * with its own dedupe key and delivery-log row. In-app already exists.
+ */
+// deno-lint-ignore no-explicit-any
+async function deliverChannels(sb: any, o: {
+  keyBase: string;
+  base: Record<string, unknown>;
+  channel: string; // email | sms | both | in_app
+  email: string;
+  phone: string | null;
+  smsConsent: boolean;
+  emailOff: boolean;
+  smsOff: boolean;
+  subject: string;
+  html: () => Promise<string>;
+  sms: () => Promise<string>;
+}): Promise<string> {
+  const out: string[] = [];
+  const doEmail = o.channel === "email" || o.channel === "both";
+  const doSms = o.channel === "sms" || o.channel === "both";
+  if (doSms) {
+    const key = `sms:${o.keyBase}`;
+    if (await alreadyDelivered(sb, key)) out.push("sms:duplicate");
+    else {
+      const row = { ...o.base, dedupe_key: key, channel: "sms" };
+      let status: string;
+      if (o.smsOff) status = "skipped_pref";
+      else if (!o.smsConsent) status = "skipped_no_consent";
+      else if (!o.phone) status = "skipped_invalid_phone";
+      else {
+        const r = await sendSms(o.phone, await o.sms());
+        await logDelivery(sb, { ...row, status: r.status, error: r.error ?? null, provider_message_id: r.sid ?? null });
+        out.push(`sms:${r.status}`);
+        status = "";
+      }
+      if (status) {
+        await logDelivery(sb, { ...row, status });
+        out.push(`sms:${status}`);
+      }
+    }
+  }
+  if (doEmail) {
+    const key = `email:${o.keyBase}`;
+    const row = { ...o.base, dedupe_key: key, channel: "email" };
+    if (await alreadyDelivered(sb, key)) out.push("email:duplicate");
+    else if (o.emailOff) { await logDelivery(sb, { ...row, status: "skipped_pref" }); out.push("email:skipped_pref"); }
+    else if (!validEmail(o.email)) { await logDelivery(sb, { ...row, status: "skipped_no_address" }); out.push("email:skipped_no_address"); }
+    else if (!RESEND_API_KEY) { await logDelivery(sb, { ...row, status: "not_configured" }); out.push("email:not_configured"); }
+    else {
+      try {
+        await sendMail(o.email, o.subject, await o.html());
+        await logDelivery(sb, { ...row, status: "sent" });
+        out.push("email:sent");
+      } catch (e) {
+        await logDelivery(sb, { ...row, status: "failed", error: (e as Error).message.slice(0, 400) });
+        out.push("email:failed");
+      }
+    }
+  }
+  return out.join(",") || "in_app_only";
+}
+
+const CHANNELS = ["email", "sms", "both", "in_app"];
+
+// deno-lint-ignore no-explicit-any
+async function deliverNotification(sb: any, item: Record<string, unknown>): Promise<string> {
   if (item["kind"] === "user") {
     const id = String(item["notificationId"] ?? "");
     if (!UUID.test(id)) return "invalid";
     const { data: n } = await sb.from("notifications").select("id, user_id, provider_id, event_type, title, body, link, service_request_id, audience").eq("id", id).maybeSingle();
     if (!n) return "missing";
-    const base = { dedupe_key: `email:${n.id}`, channel: "email", notification_id: n.id, service_request_id: n.service_request_id, event_type: n.event_type, audience: n.audience };
-    const { data: already } = await sb.from("notification_deliveries").select("id").eq("dedupe_key", base.dedupe_key).maybeSingle();
-    if (already) return "duplicate";
-    const { data: prof } = await sb.from("profiles").select("notification_preferences").eq("id", n.user_id).maybeSingle();
-    if (prof?.notification_preferences?.[`email.${n.event_type}`] === false) {
-      await logDelivery(sb, { ...base, status: "skipped_pref" });
-      return "skipped_pref";
-    }
-    let to = "";
+    const { data: prof } = await sb.from("profiles").select("*").eq("id", n.user_id).maybeSingle();
+    const prefs = prof?.notification_preferences ?? {};
+    let channel = CHANNELS.includes(prof?.notify_channel) ? prof.notify_channel : "email";
+    let email = "";
+    let phone: string | null = toE164(prof?.phone_e164 ?? prof?.phone);
+    let consent = !!prof?.sms_consent_at;
     if (n.audience === "provider" && n.provider_id) {
-      const { data: p } = await sb.from("service_providers").select("email").eq("id", n.provider_id).maybeSingle();
-      to = String(p?.email ?? "").trim();
+      const { data: p } = await sb.from("service_providers").select("*").eq("id", n.provider_id).maybeSingle();
+      email = String(p?.email ?? "").trim();
+      channel = CHANNELS.includes(p?.notify_channel) ? p.notify_channel : "email";
+      phone = toE164(p?.notify_phone_e164 ?? p?.phone);
+      consent = !!p?.sms_consent_at;
     }
-    if (!valid(to)) {
+    if (!validEmail(email)) {
       const { data: u } = await sb.auth.admin.getUserById(n.user_id);
-      to = String(u?.user?.email ?? "").trim();
+      email = String(u?.user?.email ?? "").trim();
     }
-    if (!valid(to)) {
-      await logDelivery(sb, { ...base, status: "skipped_no_address" });
-      return "skipped_no_address";
+    let vehicle = "";
+    if (n.service_request_id) {
+      const { data: r } = await sb.from("service_requests").select("vehicles(year, make, model)").eq("id", n.service_request_id).maybeSingle();
+      vehicle = [r?.vehicles?.year, r?.vehicles?.make, r?.vehicles?.model].filter(Boolean).join(" ");
     }
-    const html = shell(`<h1 style="font-size:20px;margin:0 0 12px;">${esc(n.title)}</h1>
+    const link = `${SITE_URL}${n.link ?? ""}`;
+    return deliverChannels(sb, {
+      keyBase: String(n.id),
+      base: { notification_id: n.id, service_request_id: n.service_request_id, event_type: n.event_type, audience: n.audience },
+      channel, email, phone, smsConsent: consent,
+      emailOff: prefs[`email.${n.event_type}`] === false,
+      smsOff: prefs[`sms.${n.event_type}`] === false,
+      subject: SUBJECTS[n.event_type] ?? "Repara — Update",
+      html: async () => shell(`<h1 style="font-size:20px;margin:0 0 12px;">${esc(n.title)}</h1>
 <p style="font-size:15px;line-height:1.6;margin:0;">${esc(n.body ?? "")}</p>
-${n.link ? button(`${SITE_URL}${n.link}`, "Open in Repara") : ""}`);
-    try {
-      await sendMail(to, SUBJECTS[n.event_type] ?? "Repara — Update", html);
-      await logDelivery(sb, { ...base, status: "sent" });
-      return "sent";
-    } catch (e) {
-      await logDelivery(sb, { ...base, status: "failed", error: (e as Error).message.slice(0, 400) });
-      return "failed";
-    }
+${n.link ? button(link, "Open in Repara") : ""}`),
+      sms: async () => smsText(n.event_type, { vehicle, link }),
+    });
   }
 
   if (item["kind"] === "guest") {
@@ -601,37 +762,36 @@ ${n.link ? button(`${SITE_URL}${n.link}`, "Open in Repara") : ""}`);
     const event = String(item["event"] ?? "");
     const ref = String(item["ref"] ?? "").slice(0, 80);
     if (!UUID.test(requestId) || !["message_received", "quote_received", "request_status"].includes(event)) return "invalid";
-    const base = { dedupe_key: `guest:${event}:${ref || requestId}`, channel: "email", service_request_id: requestId, event_type: event, audience: "guest" };
-    const { data: already } = await sb.from("notification_deliveries").select("id").eq("dedupe_key", base.dedupe_key).maybeSingle();
-    if (already) return "duplicate";
-    const { data: r } = await sb.from("service_requests").select("id, request_number, user_id, customers(email, first_name), vehicles(year, make, model)").eq("id", requestId).maybeSingle();
+    const { data: r } = await sb.from("service_requests").select("*, customers(email, first_name, phone, preferred_contact_method), vehicles(year, make, model)").eq("id", requestId).maybeSingle();
     if (!r || r.user_id) return "not_guest";
-    const to = String(r.customers?.email ?? "").trim();
-    if (!valid(to)) {
-      await logDelivery(sb, { ...base, status: "skipped_no_address" });
-      return "skipped_no_address";
-    }
+    const pref = String(r.preferred_contact_method ?? r.customers?.preferred_contact_method ?? "email");
+    // text → SMS, both → both, email/call → email. If SMS can't be attempted
+    // (no consent / bad number) the guest still gets the email with their link.
+    const phone = toE164(r.phone_e164 ?? r.customers?.phone);
+    const smsPossible = !!r.sms_consent_at && !!phone && !!Deno.env.get("TWILIO_ACCOUNT_SID");
+    const channel = pref === "both" ? "both" : pref === "text" ? (smsPossible ? "sms" : "both") : "email";
     const vehicle = [r.vehicles?.year, r.vehicles?.make, r.vehicles?.model].filter(Boolean).join(" ") || `Request ${r.request_number}`;
     const provider = String(item["providerName"] ?? "Your provider").slice(0, 120);
-    const total = typeof item["totalCents"] === "number" ? `$${((item["totalCents"] as number) / 100).toFixed(2)}` : "";
+    const total = typeof item["totalCents"] === "number" ? `$${((item["totalCents"] as number) / 100).toFixed(0)}` : "";
+    let link = "";
+    const getLink = async () => (link ||= await mintGuestLink(sb, requestId));
     const lines: Record<string, [string, string]> = {
       message_received: ["New message", `${provider} sent you a message about your ${vehicle}.`],
       quote_received: ["New quote available", `${provider} sent you a quote for your ${vehicle}${total ? ` — ${total}` : ""}.`],
       request_status: ["Request update", `There is an update on your ${vehicle} request.`],
     };
     const [title, text] = lines[event]!;
-    const link = await mintGuestLink(sb, requestId);
-    const html = shell(`<h1 style="font-size:20px;margin:0 0 12px;">${esc(title)}</h1>
+    return deliverChannels(sb, {
+      keyBase: `guest:${event}:${ref || requestId}`,
+      base: { service_request_id: requestId, event_type: event, audience: "guest" },
+      channel, email: String(r.customers?.email ?? "").trim(), phone, smsConsent: !!r.sms_consent_at,
+      emailOff: false, smsOff: false,
+      subject: SUBJECTS[event] ?? "Repara — Update",
+      html: async () => shell(`<h1 style="font-size:20px;margin:0 0 12px;">${esc(title)}</h1>
 <p style="font-size:15px;line-height:1.6;margin:0;">Hi ${esc(r.customers?.first_name || "there")}, ${esc(text)}</p>
-${button(link, "View request")}`);
-    try {
-      await sendMail(to, SUBJECTS[event] ?? "Repara — Update", html);
-      await logDelivery(sb, { ...base, status: "sent" });
-      return "sent";
-    } catch (e) {
-      await logDelivery(sb, { ...base, status: "failed", error: (e as Error).message.slice(0, 400) });
-      return "failed";
-    }
+${button(await getLink(), "View request")}`),
+      sms: async () => smsText(event, { provider: item["providerName"] ? provider : "", total, link: await getLink() }),
+    });
   }
   return "invalid";
 }

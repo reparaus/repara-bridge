@@ -83,6 +83,7 @@ import { attachSubmittedRequest, getServiceRequestPrefill } from "@/lib/garage.f
 import { getBuildRequestPrefill } from "@/lib/builds.functions";
 import { serviceCategoryLabel } from "@/lib/service-network";
 import { useModelSuggestions } from "@/lib/use-model-suggestions";
+import { toE164 } from "@/lib/phone";
 
 
 export const Route = createFileRoute("/quote/")({
@@ -172,6 +173,8 @@ type FormState = {
   phone: string;
   email: string;
   contactMethod: string;
+  /** Explicit agreement to transactional texts (text / both). */
+  smsConsent: boolean;
   /**
    * Idempotency key for THIS submission attempt. Persisted with the draft so a
    * refresh or retry reuses it; a new quote gets a new key, so returning
@@ -215,6 +218,7 @@ const EMPTY: FormState = {
   email: "",
 
   contactMethod: "text",
+  smsConsent: false,
   submissionId: "",
   intakeQuestions: [],
   intakeAnswers: {},
@@ -498,6 +502,7 @@ function QuoteFlow() {
         phone: form.phone,
         email: form.email,
         preferredContactMethod: form.contactMethod,
+        smsConsent: !!form.smsConsent,
       },
     }),
     [form, lang, chosenProviderId, chosenCategoryKey],
@@ -580,14 +585,18 @@ function QuoteFlow() {
 
     if (step === STEP_CONTACT) {
       if (!form.firstName.trim()) e.firstName = t("quote.contact.errFirst");
-      const needsPhone = form.contactMethod === "text" || form.contactMethod === "call";
-      const phoneOk = /^[0-9+()\-.\s]{7,20}$/.test(form.phone.trim());
+      const needsPhone = form.contactMethod !== "email";
+      const texts = form.contactMethod === "text" || form.contactMethod === "both";
+      const phoneOk = texts ? !!toE164(form.phone) : /^[0-9+()\-.\s]{7,20}$/.test(form.phone.trim());
       if (needsPhone && !phoneOk) e.phone = t("quote.contact.errPhone");
       if (!needsPhone && form.phone.trim() && !phoneOk)
         e.phone = t("quote.contact.errPhoneInvalid");
       const emailOk = /^\S+@\S+\.\S+$/.test(form.email.trim());
-      if (form.contactMethod === "email" && !emailOk) e.email = t("quote.contact.errEmail");
-      if (form.contactMethod !== "email" && form.email.trim() && !emailOk)
+      if (needsPhone && form.phone.trim() && !phoneOk) e.phone = t("quote.contact.errPhoneInvalid");
+      if (texts && !form.smsConsent) e.smsConsent = t("quote.contact.errSmsConsent");
+      const needsEmail = form.contactMethod === "email" || form.contactMethod === "both";
+      if (needsEmail && !emailOk) e.email = t("quote.contact.errEmail");
+      if (!needsEmail && form.email.trim() && !emailOk)
         e.email = t("quote.contact.errEmailInvalid");
     }
 
@@ -1707,8 +1716,9 @@ function ContactStep({
   errors: Record<string, string>;
 }) {
   const { t } = useI18n();
-  const emailRequired = form.contactMethod === "email";
-  const phoneRequired = form.contactMethod === "text" || form.contactMethod === "call";
+  const emailRequired = form.contactMethod === "email" || form.contactMethod === "both";
+  const phoneRequired = form.contactMethod !== "email";
+  const texts = form.contactMethod === "text" || form.contactMethod === "both";
 
   return (
     <div className="space-y-7">
@@ -1762,6 +1772,21 @@ function ContactStep({
           className="h-12"
         />
       </Field>
+
+      {texts && (
+        <div>
+          <label className="flex items-start gap-3 rounded-2xl border border-border/70 bg-card p-4 text-sm leading-relaxed">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-[var(--primary)]"
+              checked={!!form.smsConsent}
+              onChange={(e) => patch({ smsConsent: e.target.checked })}
+            />
+            <span className="text-muted-foreground">{t("quote.contact.smsConsent")}</span>
+          </label>
+          {errors.smsConsent && <p className="mt-2 text-sm text-destructive">{errors.smsConsent}</p>}
+        </div>
+      )}
 
       <Field
         label={t("quote.contact.email")}
@@ -2012,6 +2037,7 @@ function contactMethodChoices(t: (path: string) => string) {
     { value: "text", label: t("quote.contact.methodText") },
     { value: "call", label: t("quote.contact.methodCall") },
     { value: "email", label: t("quote.contact.methodEmail") },
+    { value: "both", label: t("quote.contact.methodBoth") },
   ];
 }
 

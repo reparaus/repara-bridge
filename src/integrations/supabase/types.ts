@@ -504,7 +504,7 @@ export type Database = {
     Enums: {
       app_role: "admin"
       appointment_status: "pending" | "scheduled" | "completed" | "cancelled"
-      contact_method: "text" | "call" | "email"
+      contact_method: "text" | "call" | "email" | "both"
       drivetrain_type: "fwd" | "rwd" | "awd" | "4wd" | "unknown"
       quote_item_type: "labor" | "part" | "fee" | "discount"
       quote_status: "draft" | "sent" | "accepted" | "declined" | "expired"
@@ -648,7 +648,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin"],
       appointment_status: ["pending", "scheduled", "completed", "cancelled"],
-      contact_method: ["text", "call", "email"],
+      contact_method: ["text", "call", "email", "both"],
       drivetrain_type: ["fwd", "rwd", "awd", "4wd", "unknown"],
       quote_item_type: ["labor", "part", "fee", "discount"],
       quote_status: ["draft", "sent", "accepted", "declined", "expired"],
