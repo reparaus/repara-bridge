@@ -125,6 +125,8 @@ export const getProviderBrief = createServerFn({ method: "POST" })
           }
         : null,
       inviteStatus: String(b.invite?.status ?? "invited"),
+      providerId: String(b.provider_id ?? ""),
+      requestStatus: String(b.status ?? ""),
       quotes: ((b.quotes ?? []) as any[]).map(mapQuote),
     };
   });

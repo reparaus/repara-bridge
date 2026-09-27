@@ -7,7 +7,9 @@ import { toast } from "sonner";
 import { GarageShell, SectionTitle } from "@/components/garage/GarageShell";
 import { CardSkeletons, LoadError, RefreshingDot } from "@/components/garage/GarageSkeletons";
 import { ProviderMatch } from "@/components/garage/ProviderMatch";
+import { RequestMessages } from "@/components/common/RequestMessages";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import { formatCents } from "@/lib/money";
 import { getMyRequest, respondToQuote } from "@/lib/provider-quotes.functions";
 import { serviceCategoryLabel } from "@/lib/service-network";
@@ -32,6 +34,7 @@ const EVENT_LABEL: Record<string, string> = {
   quote_revised: "Quote updated",
   quote_declined: "You declined a quote",
   quote_approved: "You approved a quote",
+  appointment_pending: "Appointment pending — the provider will follow up to schedule",
   provider_declined: "A provider declined",
   modifications_installed: "Work completed — modifications installed",
   modifications_verified: "Verified in your service history",
@@ -184,6 +187,12 @@ function RequestTracking() {
         )}
       </section>
 
+      <ConversationSection
+        requestId={data.id}
+        providers={data.providers.filter((p) => data.invites.some((i) => i.providerId === p.id && !["declined", "not_selected"].includes(i.status)))}
+        preferred={approved?.providerId ?? null}
+      />
+
       {data.events.length > 0 && (
         <section className="mt-8">
           <SectionTitle>Timeline</SectionTitle>
@@ -199,5 +208,39 @@ function RequestTracking() {
         </section>
       )}
     </GarageShell>
+  );
+}
+
+function ConversationSection({
+  requestId,
+  providers,
+  preferred,
+}: {
+  requestId: string;
+  providers: { id: string; name: string }[];
+  preferred: string | null;
+}) {
+  const [active, setActive] = useState<string | null>(null);
+  const current = active ?? preferred ?? providers[0]?.id ?? null;
+  if (!current) return null;
+  const name = providers.find((p) => p.id === current)?.name ?? "Provider";
+  return (
+    <section className="mt-8">
+      <SectionTitle>Messages</SectionTitle>
+      {providers.length > 1 && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {providers.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setActive(p.id)}
+              className={`rounded-full border px-3 py-1.5 text-sm ${p.id === current ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground"}`}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <RequestMessages requestId={requestId} providerId={current} viewer="customer" otherName={name} />
+    </section>
   );
 }

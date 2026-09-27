@@ -20,6 +20,7 @@ import { Route as AdminResetPasswordRouteImport } from './routes/admin.reset-pas
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as QuoteIndexRouteImport } from './routes/quote.index'
 import { Route as QuoteTokenRouteImport } from './routes/quote.$token'
+import { Route as RTokenRouteImport } from './routes/r.$token'
 import { Route as ReplyTokenRouteImport } from './routes/reply.$token'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as DriverGarageIndexRouteImport } from './routes/_driver/garage.index'
@@ -94,6 +95,11 @@ const QuoteIndexRoute = QuoteIndexRouteImport.update({
 const QuoteTokenRoute = QuoteTokenRouteImport.update({
   id: '/quote/$token',
   path: '/quote/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RTokenRoute = RTokenRouteImport.update({
+  id: '/r/$token',
+  path: '/r/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReplyTokenRoute = ReplyTokenRouteImport.update({
@@ -223,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/providers/$id': typeof ProvidersIdRoute
   '/quote/$token': typeof QuoteTokenRoute
+  '/r/$token': typeof RTokenRoute
   '/reply/$token': typeof ReplyTokenRoute
   '/quote/': typeof QuoteIndexRoute
   '/garage/add': typeof DriverGarageAddRoute
@@ -256,6 +263,7 @@ export interface FileRoutesByTo {
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/providers/$id': typeof ProvidersIdRoute
   '/quote/$token': typeof QuoteTokenRoute
+  '/r/$token': typeof RTokenRoute
   '/reply/$token': typeof ReplyTokenRoute
   '/quote': typeof QuoteIndexRoute
   '/garage/add': typeof DriverGarageAddRoute
@@ -292,6 +300,7 @@ export interface FileRoutesById {
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/providers/$id': typeof ProvidersIdRoute
   '/quote/$token': typeof QuoteTokenRoute
+  '/r/$token': typeof RTokenRoute
   '/reply/$token': typeof ReplyTokenRoute
   '/quote/': typeof QuoteIndexRoute
   '/_driver/garage/add': typeof DriverGarageAddRoute
@@ -327,6 +336,7 @@ export interface FileRouteTypes {
     | '/admin/reset-password'
     | '/providers/$id'
     | '/quote/$token'
+    | '/r/$token'
     | '/reply/$token'
     | '/quote/'
     | '/garage/add'
@@ -360,6 +370,7 @@ export interface FileRouteTypes {
     | '/admin/reset-password'
     | '/providers/$id'
     | '/quote/$token'
+    | '/r/$token'
     | '/reply/$token'
     | '/quote'
     | '/garage/add'
@@ -395,6 +406,7 @@ export interface FileRouteTypes {
     | '/admin/reset-password'
     | '/providers/$id'
     | '/quote/$token'
+    | '/r/$token'
     | '/reply/$token'
     | '/quote/'
     | '/_driver/garage/add'
@@ -431,6 +443,7 @@ export interface RootRouteChildren {
   AdminResetPasswordRoute: typeof AdminResetPasswordRoute
   ProvidersIdRoute: typeof ProvidersIdRoute
   QuoteTokenRoute: typeof QuoteTokenRoute
+  RTokenRoute: typeof RTokenRoute
   ReplyTokenRoute: typeof ReplyTokenRoute
   QuoteIndexRoute: typeof QuoteIndexRoute
 }
@@ -512,6 +525,13 @@ declare module '@tanstack/react-router' {
       path: '/quote/$token'
       fullPath: '/quote/$token'
       preLoaderRoute: typeof QuoteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/r/$token': {
+      id: '/r/$token'
+      path: '/r/$token'
+      fullPath: '/r/$token'
+      preLoaderRoute: typeof RTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reply/$token': {
@@ -743,6 +763,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminResetPasswordRoute: AdminResetPasswordRoute,
   ProvidersIdRoute: ProvidersIdRoute,
   QuoteTokenRoute: QuoteTokenRoute,
+  RTokenRoute: RTokenRoute,
   ReplyTokenRoute: ReplyTokenRoute,
   QuoteIndexRoute: QuoteIndexRoute,
 }
