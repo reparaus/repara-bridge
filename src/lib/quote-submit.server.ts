@@ -65,6 +65,7 @@ export async function persistQuoteRequest(data: QuoteInput) {
           | "unknown",
         serviceAreaCity: existing.city ?? null,
         duplicate: true as const,
+        viewToken: null as string | null,
       };
     }
   }
@@ -293,6 +294,7 @@ export async function persistQuoteRequest(data: QuoteInput) {
         serviceAreaStatus: area.status,
         serviceAreaCity: area.city,
         duplicate: true as const,
+        viewToken: null as string | null,
       };
     }
     throw new Error("Could not submit your request.");
