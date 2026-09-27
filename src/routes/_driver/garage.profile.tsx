@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { ContactChannelSettings } from "@/components/common/ContactChannelSettings";
 import { EmailPreferences } from "@/components/common/EmailPreferences";
 import { GarageShell, SectionTitle } from "@/components/garage/GarageShell";
 import { Button } from "@/components/ui/button";
@@ -198,6 +199,7 @@ function Profile() {
             ))}
           </div>
           <div className="mt-3">
+            <ContactChannelSettings audience="driver" />
             <EmailPreferences
               items={[
                 ["message_received", "Email me provider messages"],

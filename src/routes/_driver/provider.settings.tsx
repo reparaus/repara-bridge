@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 
+import { ContactChannelSettings } from "@/components/common/ContactChannelSettings";
 import { EmailPreferences } from "@/components/common/EmailPreferences";
 import { ServicePricing } from "@/components/provider/ServicePricing";
 import { ProviderShell, ProviderStatusPill } from "@/components/provider/ProviderShell";
@@ -114,6 +115,7 @@ function ProviderSettings() {
 
       <section className="mt-6">
         <p className="mb-2 text-sm font-medium text-foreground">Email notifications</p>
+        <ContactChannelSettings audience="provider" />
         <EmailPreferences
           items={[
             ["provider_new_request", "New matching request"],

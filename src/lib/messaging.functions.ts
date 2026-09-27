@@ -451,3 +451,57 @@ export const getRequestCommsAdmin = createServerFn({ method: "POST" })
       messages: ((messages.data ?? []) as any[]).map(mapMessage),
     };
   });
+
+// ------------------------------------------------ external channel (0024)
+// Where out-of-app notifications go: email, text (SMS), both, or in-app only.
+// Texts require a valid mobile number AND explicit consent.
+
+const channelInput = z.object({
+  audience: z.enum(["driver", "provider"]),
+});
+
+export const getContactChannel = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => channelInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const db = asDb(context.supabase);
+    if (data.audience === "provider") {
+      const { data: p } = await db.from("service_providers").select("*").eq("owner_user_id", context.userId).maybeSingle();
+      if (!p) return { available: false as const };
+      return { available: true as const, channel: String(p.notify_channel ?? "email"), phone: String(p.notify_phone_e164 ?? p.phone ?? ""), consented: !!p.sms_consent_at };
+    }
+    const { data: p } = await db.from("profiles").select("*").eq("id", context.userId).maybeSingle();
+    if (!p) return { available: false as const };
+    return { available: true as const, channel: String(p.notify_channel ?? "email"), phone: String(p.phone_e164 ?? p.phone ?? ""), consented: !!p.sms_consent_at };
+  });
+
+export const setContactChannel = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    channelInput
+      .extend({
+        channel: z.enum(["email", "sms", "both", "in_app"]),
+        phone: z.string().trim().max(30).optional().default(""),
+        consent: z.boolean().default(false),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { toE164 } = await import("@/lib/phone");
+    const texts = data.channel === "sms" || data.channel === "both";
+    const e164 = toE164(data.phone);
+    if (texts && !e164) fail("Enter a valid mobile number to receive texts.");
+    if (texts && !data.consent) fail("Please agree to receive texts first.");
+    const consentAt = texts ? new Date().toISOString() : null;
+    const db = asDb(context.supabase);
+    const q =
+      data.audience === "provider"
+        ? db.from("service_providers").update({ notify_channel: data.channel, notify_phone_e164: e164, sms_consent_at: consentAt }).eq("owner_user_id", context.userId)
+        : db.from("profiles").update({ notify_channel: data.channel, phone_e164: e164, sms_consent_at: consentAt }).eq("id", context.userId);
+    const { error } = await q;
+    if (error) {
+      if (/notify_channel|column/.test(String(error.message))) fail("Text notifications need the latest database update (0024).", error);
+      fail("Could not save your notification settings.", error);
+    }
+    return { ok: true };
+  });
