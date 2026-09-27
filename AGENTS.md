@@ -10,3 +10,4 @@
 <!-- LOVABLE:END -->
 - Notifications: in-app rows are created in SQL (triggers/definer fns); email/SMS delivery goes through the send-service-request-emails edge function `notify` mode and is logged in notification_deliveries. Why: one delivery path, never blocks the saved action.
 - Guest access uses request_access_tokens (hash only, service-role only) resolved in server fns; never accept a request id from guests. Why: request-scoped, non-enumerable.
+- SMS goes through Twilio inside the send-service-request-emails edge function (notify mode + confirmation), gated by channel choice, E.164 number and explicit sms_consent_at; each channel has its own dedupe key in notification_deliveries. Why: one delivery path, secrets never leave the edge function.
