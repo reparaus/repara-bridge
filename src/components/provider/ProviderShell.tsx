@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Bell, Home, Inbox, Settings, Store } from "lucide-react";
+import { Bell, Home, Inbox, Settings, Store, Users } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Logo } from "@/components/brand/Logo";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { to: "/provider", label: "Home", icon: Home },
   { to: "/provider/requests", label: "Requests", icon: Inbox },
+  { to: "/provider/customers", label: "Customers", icon: Users },
   { to: "/provider/profile", label: "Profile", icon: Store },
   { to: "/provider/settings", label: "Settings", icon: Settings },
 ] as const;
@@ -27,7 +28,7 @@ export function ProviderShell({ children }: { children: ReactNode }) {
           <Link to="/provider" aria-label="Repara for providers" className="flex items-center gap-2">
             <Logo className="h-7 w-auto" />
             <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Provider
+              For providers
             </span>
           </Link>
           <Link
@@ -62,7 +63,7 @@ export function ProviderShell({ children }: { children: ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-20 border-t border-border/60 bg-background/90 backdrop-blur-xl sm:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto grid max-w-3xl grid-cols-4">
+        <div className="mx-auto grid max-w-3xl grid-cols-5">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const active = pathname === tab.to;

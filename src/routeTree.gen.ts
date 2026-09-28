@@ -19,6 +19,7 @@ import { Route as SigninRouteImport } from './routes/signin'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminResetPasswordRouteImport } from './routes/admin.reset-password'
+import { Route as ProviderLoginRouteImport } from './routes/provider.login'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as QuoteIndexRouteImport } from './routes/quote.index'
 import { Route as QuoteTokenRouteImport } from './routes/quote.$token'
@@ -33,6 +34,7 @@ import { Route as DriverGarageNotificationsRouteImport } from './routes/_driver/
 import { Route as DriverGarageProfileRouteImport } from './routes/_driver/garage.profile'
 import { Route as DriverGarageServiceRouteImport } from './routes/_driver/garage.service'
 import { Route as DriverProviderIndexRouteImport } from './routes/_driver/provider.index'
+import { Route as DriverProviderCustomersRouteImport } from './routes/_driver/provider.customers'
 import { Route as DriverProviderNotificationsRouteImport } from './routes/_driver/provider.notifications'
 import { Route as DriverProviderOnboardingRouteImport } from './routes/_driver/provider.onboarding'
 import { Route as DriverProviderProfileRouteImport } from './routes/_driver/provider.profile'
@@ -92,6 +94,11 @@ const AdminLoginRoute = AdminLoginRouteImport.update({
 const AdminResetPasswordRoute = AdminResetPasswordRouteImport.update({
   id: '/admin/reset-password',
   path: '/admin/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProviderLoginRoute = ProviderLoginRouteImport.update({
+  id: '/provider/login',
+  path: '/provider/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProvidersIdRoute = ProvidersIdRouteImport.update({
@@ -163,6 +170,11 @@ const DriverGarageServiceRoute = DriverGarageServiceRouteImport.update({
 const DriverProviderIndexRoute = DriverProviderIndexRouteImport.update({
   id: '/provider/',
   path: '/provider/',
+  getParentRoute: () => DriverRouteRoute,
+} as any)
+const DriverProviderCustomersRoute = DriverProviderCustomersRouteImport.update({
+  id: '/provider/customers',
+  path: '/provider/customers',
   getParentRoute: () => DriverRouteRoute,
 } as any)
 const DriverProviderNotificationsRoute =
@@ -241,6 +253,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
+  '/provider/login': typeof ProviderLoginRoute
   '/providers/$id': typeof ProvidersIdRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/r/$token': typeof RTokenRoute
@@ -252,6 +265,7 @@ export interface FileRoutesByFullPath {
   '/garage/notifications': typeof DriverGarageNotificationsRoute
   '/garage/profile': typeof DriverGarageProfileRoute
   '/garage/service': typeof DriverGarageServiceRoute
+  '/provider/customers': typeof DriverProviderCustomersRoute
   '/provider/notifications': typeof DriverProviderNotificationsRoute
   '/provider/onboarding': typeof DriverProviderOnboardingRoute
   '/provider/profile': typeof DriverProviderProfileRoute
@@ -277,6 +291,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
+  '/provider/login': typeof ProviderLoginRoute
   '/providers/$id': typeof ProvidersIdRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/r/$token': typeof RTokenRoute
@@ -288,6 +303,7 @@ export interface FileRoutesByTo {
   '/garage/notifications': typeof DriverGarageNotificationsRoute
   '/garage/profile': typeof DriverGarageProfileRoute
   '/garage/service': typeof DriverGarageServiceRoute
+  '/provider/customers': typeof DriverProviderCustomersRoute
   '/provider/notifications': typeof DriverProviderNotificationsRoute
   '/provider/onboarding': typeof DriverProviderOnboardingRoute
   '/provider/profile': typeof DriverProviderProfileRoute
@@ -316,6 +332,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
+  '/provider/login': typeof ProviderLoginRoute
   '/providers/$id': typeof ProvidersIdRoute
   '/quote/$token': typeof QuoteTokenRoute
   '/r/$token': typeof RTokenRoute
@@ -327,6 +344,7 @@ export interface FileRoutesById {
   '/_driver/garage/notifications': typeof DriverGarageNotificationsRoute
   '/_driver/garage/profile': typeof DriverGarageProfileRoute
   '/_driver/garage/service': typeof DriverGarageServiceRoute
+  '/_driver/provider/customers': typeof DriverProviderCustomersRoute
   '/_driver/provider/notifications': typeof DriverProviderNotificationsRoute
   '/_driver/provider/onboarding': typeof DriverProviderOnboardingRoute
   '/_driver/provider/profile': typeof DriverProviderProfileRoute
@@ -354,6 +372,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/admin/login'
     | '/admin/reset-password'
+    | '/provider/login'
     | '/providers/$id'
     | '/quote/$token'
     | '/r/$token'
@@ -365,6 +384,7 @@ export interface FileRouteTypes {
     | '/garage/notifications'
     | '/garage/profile'
     | '/garage/service'
+    | '/provider/customers'
     | '/provider/notifications'
     | '/provider/onboarding'
     | '/provider/profile'
@@ -390,6 +410,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/admin/login'
     | '/admin/reset-password'
+    | '/provider/login'
     | '/providers/$id'
     | '/quote/$token'
     | '/r/$token'
@@ -401,6 +422,7 @@ export interface FileRouteTypes {
     | '/garage/notifications'
     | '/garage/profile'
     | '/garage/service'
+    | '/provider/customers'
     | '/provider/notifications'
     | '/provider/onboarding'
     | '/provider/profile'
@@ -428,6 +450,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/admin/login'
     | '/admin/reset-password'
+    | '/provider/login'
     | '/providers/$id'
     | '/quote/$token'
     | '/r/$token'
@@ -439,6 +462,7 @@ export interface FileRouteTypes {
     | '/_driver/garage/notifications'
     | '/_driver/garage/profile'
     | '/_driver/garage/service'
+    | '/_driver/provider/customers'
     | '/_driver/provider/notifications'
     | '/_driver/provider/onboarding'
     | '/_driver/provider/profile'
@@ -467,6 +491,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminResetPasswordRoute: typeof AdminResetPasswordRoute
+  ProviderLoginRoute: typeof ProviderLoginRoute
   ProvidersIdRoute: typeof ProvidersIdRoute
   QuoteTokenRoute: typeof QuoteTokenRoute
   RTokenRoute: typeof RTokenRoute
@@ -544,6 +569,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/reset-password'
       fullPath: '/admin/reset-password'
       preLoaderRoute: typeof AdminResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/provider/login': {
+      id: '/provider/login'
+      path: '/provider/login'
+      fullPath: '/provider/login'
+      preLoaderRoute: typeof ProviderLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/providers/$id': {
@@ -642,6 +674,13 @@ declare module '@tanstack/react-router' {
       path: '/provider'
       fullPath: '/provider/'
       preLoaderRoute: typeof DriverProviderIndexRouteImport
+      parentRoute: typeof DriverRouteRoute
+    }
+    '/_driver/provider/customers': {
+      id: '/_driver/provider/customers'
+      path: '/provider/customers'
+      fullPath: '/provider/customers'
+      preLoaderRoute: typeof DriverProviderCustomersRouteImport
       parentRoute: typeof DriverRouteRoute
     }
     '/_driver/provider/notifications': {
@@ -755,6 +794,7 @@ interface DriverRouteRouteChildren {
   DriverGarageNotificationsRoute: typeof DriverGarageNotificationsRoute
   DriverGarageProfileRoute: typeof DriverGarageProfileRoute
   DriverGarageServiceRoute: typeof DriverGarageServiceRoute
+  DriverProviderCustomersRoute: typeof DriverProviderCustomersRoute
   DriverProviderNotificationsRoute: typeof DriverProviderNotificationsRoute
   DriverProviderOnboardingRoute: typeof DriverProviderOnboardingRoute
   DriverProviderProfileRoute: typeof DriverProviderProfileRoute
@@ -775,6 +815,7 @@ const DriverRouteRouteChildren: DriverRouteRouteChildren = {
   DriverGarageNotificationsRoute: DriverGarageNotificationsRoute,
   DriverGarageProfileRoute: DriverGarageProfileRoute,
   DriverGarageServiceRoute: DriverGarageServiceRoute,
+  DriverProviderCustomersRoute: DriverProviderCustomersRoute,
   DriverProviderNotificationsRoute: DriverProviderNotificationsRoute,
   DriverProviderOnboardingRoute: DriverProviderOnboardingRoute,
   DriverProviderProfileRoute: DriverProviderProfileRoute,
@@ -803,6 +844,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminResetPasswordRoute: AdminResetPasswordRoute,
+  ProviderLoginRoute: ProviderLoginRoute,
   ProvidersIdRoute: ProvidersIdRoute,
   QuoteTokenRoute: QuoteTokenRoute,
   RTokenRoute: RTokenRoute,

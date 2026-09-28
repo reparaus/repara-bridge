@@ -171,6 +171,44 @@ function ProviderHome() {
       </div>
 
       <section className="mt-6">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">New requests</p>
+        {work.isLoading ? (
+          <Skeleton className="mt-3 h-24 w-full rounded-2xl" />
+        ) : (work.data?.requests ?? []).filter((r) => r.stage === "new").length === 0 ? (
+          <p className="mt-3 rounded-2xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
+            No new service requests. When customers request your services through Repara, they'll appear here.
+          </p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {(work.data?.requests ?? [])
+              .filter((r) => r.stage === "new")
+              .slice(0, 3)
+              .map((r) => (
+                <Link
+                  key={r.requestId}
+                  to="/provider/project/$id"
+                  params={{ id: r.requestId }}
+                  className="block rounded-2xl border border-border/70 bg-card p-4 transition-colors hover:border-border"
+                >
+                  <p className="text-sm font-semibold text-foreground">{r.vehicle || "Vehicle not provided"}</p>
+                  <p className="text-sm text-muted-foreground">{serviceCategoryLabel(r.categoryKey, "en") ?? "Service request"}</p>
+                  {r.concern && <p className="mt-1 line-clamp-2 text-sm text-foreground">“{r.concern}”</p>}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {r.mileage ? `${Number(r.mileage).toLocaleString()} mi · ` : ""}
+                    <span className="text-primary">View request</span>
+                  </p>
+                </Link>
+              ))}
+          </div>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button asChild variant="outline" className="h-11"><Link to="/provider/requests">View requests</Link></Button>
+          <Button asChild variant="outline" className="h-11"><Link to="/provider/profile">Update profile</Link></Button>
+          <Button asChild variant="outline" className="h-11"><Link to="/provider/customers">View customers</Link></Button>
+        </div>
+      </section>
+
+      <section className="mt-6">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium text-foreground">Your requests</p>
           <Link to="/provider/requests" className="text-sm text-primary">Open workspace</Link>

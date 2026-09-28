@@ -21,6 +21,10 @@ export const Route = createFileRoute("/_driver")({
   beforeLoad: async ({ location }) => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) {
+      // Providers get their own business-branded sign-in, never /admin.
+      if (location.pathname === "/provider" || location.pathname.startsWith("/provider/")) {
+        throw redirect({ to: "/provider/login", search: { next: location.href } });
+      }
       throw redirect({ to: "/signin", search: { next: location.href } });
     }
     return { user: data.user };

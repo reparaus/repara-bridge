@@ -286,6 +286,11 @@ function Landing() {
           </p>
           <LegalLinks className="text-xs text-muted-foreground" />
         </div>
+        <div className="mx-auto mt-6 flex max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-1 px-5 text-xs text-muted-foreground sm:justify-start">
+          <span className="font-medium uppercase tracking-[0.14em]">For service providers</span>
+          <Link to="/provider/login" className="underline-offset-4 hover:text-foreground hover:underline">Provider login</Link>
+          <Link to="/provider/onboarding" className="underline-offset-4 hover:text-foreground hover:underline">Become a Repara provider</Link>
+        </div>
       </footer>
     </div>
   );
