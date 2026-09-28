@@ -168,8 +168,11 @@ export const es: Dictionary = {
       photoTooLarge: "{name} es muy grande. Mantén las fotos por debajo de 8 MB.",
     },
     followups: {
-      title: "Ayúdanos a entenderlo mejor",
-      sub: "Unas preguntas rápidas de asesor de servicio sobre lo que describiste. Responde lo que sepas — puedes omitir lo que no estés seguro.",
+      title: "Vamos a entenderlo juntos",
+      sub: "Un par de preguntas rápidas sobre lo que describiste. Responde lo que sepas — puedes omitir lo que no estés seguro.",
+      subMore: "Solo un par de detalles más…",
+      edit: "Editar",
+      skipped: "Omitida",
       answerPlaceholder: "Escribe tu respuesta…",
       skipQuestion: "Omitir esta pregunta",
       answerLabel: "Tu respuesta",
