@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/common/LoadingState";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -396,6 +397,7 @@ function QuoteFlow() {
         return { ...f, services, answers };
       });
     }
+    if (carriedConcern) setForm((f) => (f.notes ? f : { ...f, notes: carriedConcern }));
     // One idempotency key per quote attempt, reused across retries.
     setForm((f) => (f.submissionId ? f : { ...f, submissionId: crypto.randomUUID() }));
     // Do not save the empty initial state over a draft while the choice is open.
@@ -812,6 +814,15 @@ function QuoteFlow() {
           setConfirmation(null);
         }}
       />
+    );
+  }
+
+
+  if (prefilling) {
+    return (
+      <div className="mx-auto max-w-xl px-4 py-16">
+        <LoadingState label="Preparing your request" />
+      </div>
     );
   }
 
