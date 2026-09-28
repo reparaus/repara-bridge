@@ -114,6 +114,7 @@ export const Route = createFileRoute("/quote/")({
       ...(provider ? { p: provider } : {}),
       ...(category ? { cat: category } : {}),
       ...(build ? { b: build } : {}),
+      ...(step === "contact" ? { step } : {}),
     };
   },
   head: () => ({
@@ -322,6 +323,7 @@ function QuoteFlow() {
     p: chosenProviderId,
     cat: chosenCategoryKey,
     b: buildId,
+    step: startStep,
   } = Route.useSearch();
   const loadGaragePrefill = useServerFn(getServiceRequestPrefill);
   const loadBuildPrefill = useServerFn(getBuildRequestPrefill);
