@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getContactChannel, setContactChannel } from "@/lib/messaging.functions";
 import { toE164 } from "@/lib/phone";
+import { LegalLinks } from "@/components/legal/LegalPage";
 
 const OPTIONS = [
   ["email", "Email"],
@@ -71,6 +72,7 @@ export function ContactChannelSettings({ audience }: { audience: "driver" | "pro
             <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--primary)]" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
             <span>I agree to receive text messages from Repara about service requests, messages and quotes. Message and data rates may apply. Reply STOP to opt out.</span>
           </label>
+          <LegalLinks className="block text-xs text-muted-foreground" />
         </div>
       )}
       <Button onClick={() => mut.mutate()} disabled={!data || mut.isPending || phoneBad || (texts && (!consent || !phone.trim()))}>

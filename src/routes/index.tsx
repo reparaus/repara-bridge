@@ -13,6 +13,7 @@ import { localizedServiceBlurb, localizedServiceLabel } from "@/lib/i18n/catalog
 import { LANDING_SERVICE_KEYS, SERVICES } from "@/lib/services";
 import { siteConfig } from "@/lib/site-config";
 import { track } from "@/lib/analytics";
+import { LegalLinks } from "@/components/legal/LegalPage";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -283,6 +284,7 @@ function Landing() {
           <p className="text-xs text-muted-foreground">
             © {new Date().getFullYear()} {t("home.footerNote")}
           </p>
+          <LegalLinks className="text-xs text-muted-foreground" />
         </div>
       </footer>
     </div>

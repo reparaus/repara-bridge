@@ -1791,6 +1791,7 @@ function ContactStep({
             />
             <span className="text-muted-foreground">{t("quote.contact.smsConsent")}</span>
           </label>
+          <LegalLinks className="mt-2 block text-xs text-muted-foreground" />
           {errors.smsConsent && <p className="mt-2 text-sm text-destructive">{errors.smsConsent}</p>}
         </div>
       )}
