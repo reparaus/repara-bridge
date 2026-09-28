@@ -25,23 +25,15 @@ const TONE_DOT: Record<InsightTone, string> = {
   unknown: "bg-muted-foreground/50",
 };
 
-const TONE_WORD: Record<InsightTone, string> = {
-  attention: "Needs attention",
-  recommended: "Recommended",
-  info: "Good to know",
-  good: "No action needed",
-  unknown: "Missing info",
-};
-
 function money(cents: number) {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
 /**
- * "What's Next" — the vehicle intelligence summary on the Garage. Everything
- * shown comes from real records, with its source; nothing is auto-submitted.
+ * Service guidance woven into the Garage — a service advisor's read of the
+ * car from real records, with its source; nothing is auto-submitted.
  */
-export function WhatsNext({ vehicleId }: { vehicleId: string }) {
+export function ServiceGuidance({ vehicleId }: { vehicleId: string }) {
   const load = useServerFn(getVehicleIntelligence);
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["vehicle-intel", vehicleId],
@@ -52,7 +44,7 @@ export function WhatsNext({ vehicleId }: { vehicleId: string }) {
   if (isLoading) {
     return (
       <section className="mt-10">
-        <SectionTitle>What's next</SectionTitle>
+        <SectionTitle>Service guidance</SectionTitle>
         <RowSkeletons rows={2} />
       </section>
     );
@@ -60,8 +52,8 @@ export function WhatsNext({ vehicleId }: { vehicleId: string }) {
   if (isError || !data) {
     return (
       <section className="mt-10">
-        <SectionTitle>What's next</SectionTitle>
-        <LoadError message="Couldn't check what's next for your car." onRetry={() => void refetch()} />
+        <SectionTitle>Service guidance</SectionTitle>
+        <LoadError message="Couldn't load service guidance for your car." onRetry={() => void refetch()} />
       </section>
     );
   }
@@ -99,15 +91,15 @@ export function WhatsNext({ vehicleId }: { vehicleId: string }) {
       )}
 
       <section className="mt-10">
-        <SectionTitle>What's next</SectionTitle>
+        <SectionTitle>Service guidance</SectionTitle>
         {data.insufficient ? (
           <div className="rounded-2xl border border-border/60 bg-card p-5">
             <div className="flex items-center gap-2">
               <span className={cn("h-2.5 w-2.5 rounded-full", TONE_DOT.unknown)} aria-hidden />
-              <p className="text-sm font-semibold text-foreground">Not enough information yet</p>
+              <p className="text-sm font-semibold text-foreground">Repara is still learning about your car</p>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              As you add mileage and service history, Repara will start building a better picture of your car.
+              Add your current mileage and service history to get more personalized maintenance guidance.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild variant="outline" className="h-11">
@@ -122,8 +114,8 @@ export function WhatsNext({ vehicleId }: { vehicleId: string }) {
           <div className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card p-4">
             <span className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", TONE_DOT.good)} aria-hidden />
             <div>
-              <p className="text-sm font-semibold text-foreground">No action currently identified</p>
-              <p className="text-xs text-muted-foreground">Based on what Repara knows so far. Ask Repara if something feels off.</p>
+              <p className="text-sm font-semibold text-foreground">{data.upToDate ? "You're up to date" : "Nothing coming up right now"}</p>
+              <p className="text-xs text-muted-foreground">No upcoming maintenance items are identified from the information Repara has. Ask Repara if something feels off.</p>
             </div>
           </div>
         ) : (
@@ -153,8 +145,7 @@ function InsightCard({ insight, vehicleId }: { insight: Insight; vehicleId: stri
       <div className="flex items-start gap-3">
         <span className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", TONE_DOT[insight.tone])} aria-hidden />
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-medium text-muted-foreground">{TONE_WORD[insight.tone]}</p>
-          <p className="text-sm font-semibold text-foreground">{insight.title}</p>
+          <p className={cn("text-sm text-foreground", insight.tone === "info" ? "font-medium" : "font-semibold")}>{insight.title}</p>
           {why ? (
             <p className="mt-1 text-sm text-muted-foreground">{insight.reason}</p>
           ) : (
@@ -171,8 +162,11 @@ function InsightCard({ insight, vehicleId }: { insight: Insight; vehicleId: stri
               {insight.source}
             </span>
           </p>
+          {insight.actions.length > 0 && insight.tone !== "unknown" && insight.actions.some((a) => a.kind === "find" || a.kind === "quote") && (
+            <p className="mt-3 text-xs text-muted-foreground">Want to take care of it?</p>
+          )}
           {insight.actions.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               {insight.actions.map((action, i) => (
                 <ActionButton key={i} action={action} vehicleId={vehicleId} primary={i === 0} />
               ))}
@@ -190,6 +184,15 @@ function ActionButton({ action, vehicleId, primary }: { action: InsightAction; v
     return (
       <Button asChild size="sm" variant={variant} className="h-10">
         <Link to="/garage/request/$id" params={{ id: action.requestId }}>{action.label}</Link>
+      </Button>
+    );
+  }
+  if (action.kind === "find") {
+    return (
+      <Button asChild size="sm" variant={variant} className="h-10">
+        <Link to="/garage/service" search={{ vehicle: vehicleId, ...(action.cat ? { category: action.cat } : {}) }}>
+          {action.label}
+        </Link>
       </Button>
     );
   }
