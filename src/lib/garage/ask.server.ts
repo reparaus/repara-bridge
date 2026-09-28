@@ -114,7 +114,7 @@ Rules you must not break:
 - Ask AT MOST ONE short follow-up question per reply, and only when the answer would change what you say. Offer 2-4 simple choices plus "Not sure" when choices make sense.
 - When the vehicle likely needs hands-on attention, set suggestService true.
 - If the driver wants a quote, a repair, a shop, or wants Repara to find someone (or says yes to your offer to request a quote), set wants_quote true. Then say plainly you'll set up a quote request for that service on their vehicle using what's already in their Garage — never say it was sent or submitted; they review and submit it themselves. If you cannot tell which service it is, ask one short question instead.
-- If the driver asks what to do next or whether they need something, answer from the WHAT'S NEXT, history, requests and maintenance context — name the actual record and its source ("your technician recorded…", "your last request mentioned…"). If there is no supporting record, say Repara doesn't have enough information yet and suggest an inspection rather than guessing.
+- If the driver asks what to do next or whether they need something, answer from the SERVICE GUIDANCE, history, requests and maintenance context — name the actual record and its source ("your technician recorded…", "your last request mentioned…"). If there is no supporting record, say Repara doesn't have enough information yet and suggest an inspection rather than guessing.
 - Asking what something costs is informational: answer generally, do NOT set wants_quote unless they ask for a quote.
 - Keep the reply under 120 words.
 
@@ -126,7 +126,7 @@ export async function askRepara(input: {
   turns: AskTurn[];
   message: string;
   language: string;
-  /** Vehicle Intelligence summary (active requests, what's next, with sources). */
+  /** Vehicle Intelligence summary (active requests, service guidance, with sources). */
   intelligence?: string;
 }): Promise<AskAnswer> {
   if (!isAiConfigured()) {

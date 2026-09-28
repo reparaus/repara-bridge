@@ -8,7 +8,7 @@ import { GarageShell, SectionTitle, StatusDot } from "@/components/garage/Garage
 import { formatMileage, mileageBadge, mileageTone } from "@/lib/mileage";
 import { buildProgressLine, useBuilds } from "@/components/garage/BuildsPanel";
 import { VehicleVisual } from "@/components/garage/VehicleVisual";
-import { WhatsNext } from "@/components/garage/WhatsNext";
+import { ServiceGuidance } from "@/components/garage/ServiceGuidance";
 import { Button } from "@/components/ui/button";
 import { LoadError, RefreshingDot, RowSkeletons, VehicleHeroSkeleton } from "@/components/garage/GarageSkeletons";
 import { claimMyRequests, getGarageHome } from "@/lib/garage.functions";
@@ -68,7 +68,7 @@ function GarageHome() {
   const vehicles = data?.vehicles ?? [];
   const primary = vehicles.find((v) => v.isPrimary) ?? vehicles[0];
   const others = vehicles.filter((v) => v.id !== primary?.id);
-  const upcoming = vehicles.filter((v) => v.nextService);
+  const upcoming = vehicles.filter((v) => v.nextService && v.id !== primary?.id);
   const activity = data?.recentActivity ?? [];
 
   return (
@@ -184,7 +184,7 @@ function GarageHome() {
         </section>
       )}
 
-      {primary && <WhatsNext vehicleId={primary.id} />}
+      {primary && <ServiceGuidance vehicleId={primary.id} />}
 
       {others.length > 0 && (
         <section className="mt-10">
