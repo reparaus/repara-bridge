@@ -11,6 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/admin/reset-password")({
   ssr: false,
+  validateSearch: (search: Record<string, unknown>): { for?: "provider" } =>
+    search.for === "provider" ? { for: "provider" } : {},
   head: () => ({
     meta: [
       { title: "Reset Admin Password — Repara" },
@@ -35,6 +37,11 @@ type Stage = "checking" | "ready" | "invalid";
 
 function ResetPasswordPage() {
   const navigate = useNavigate();
+  const { for: audience } = Route.useSearch();
+  const backToSignIn = () =>
+    audience === "provider"
+      ? navigate({ to: "/provider/login", replace: true })
+      : navigate({ to: "/admin/login", search: { reset: true }, replace: true });
   const [stage, setStage] = useState<Stage>("checking");
   const [busy, setBusy] = useState(false);
   const [password, setPassword] = useState("");
@@ -106,7 +113,7 @@ function ResetPasswordPage() {
     // Force a clean sign-in (password + TOTP) with the new password.
     await supabase.auth.signOut();
     setBusy(false);
-    navigate({ to: "/admin/login", search: { reset: true }, replace: true });
+    backToSignIn();
   }
 
   return (
@@ -134,7 +141,7 @@ function ResetPasswordPage() {
             <Button
               size="lg"
               className="h-12 w-full rounded-full"
-              onClick={() => navigate({ to: "/admin/login" })}
+              onClick={backToSignIn}
             >
               BACK TO SIGN IN
             </Button>
