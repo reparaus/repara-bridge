@@ -169,24 +169,15 @@ Deno.serve(async (req) => {
     "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, user_id, customers(first_name, last_name, phone, email, preferred_contact_method), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)";
   const FULL_COLUMNS = `${BASE_COLUMNS}, preferred_contact_method, preferred_language, intake_followups, phone_e164, sms_consent_at`;
 
-  let { data: request, error } = await supabase
+  const { data: request, error } = await supabase
     .from("service_requests")
     .select(FULL_COLUMNS)
     .eq("id", requestId)
     .maybeSingle();
 
-  // Tolerate a database that has not run the newest migration yet.
-  if (error) {
-    ({ data: request, error } = await supabase
-      .from("service_requests")
-      .select(BASE_COLUMNS)
-      .eq("id", requestId)
-      .maybeSingle());
-  }
-
   if (error || !request) {
     console.error("[emails] request lookup failed", error?.message);
-    return json({ error: "request_not_found" }, 404);
+    return json({ error: error ? "notification_schema_not_ready" : "request_not_found" }, error ? 503 : 404);
   }
 
   const customer = (request as any).customers ?? {};
