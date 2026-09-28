@@ -23,6 +23,7 @@ const FROM_EMAIL = Deno.env.get("REPARA_FROM_EMAIL") ?? "Repara <requests@repara
 const ADMIN_EMAIL = Deno.env.get("REPARA_ADMIN_EMAIL") ?? "repara.us@gmail.com";
 const SITE_URL = (Deno.env.get("REPARA_SITE_URL") ?? "https://reparaus.com").replace(/\/$/, "");
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const FUNCTION_VERSION = "repara-sms-0024.3";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -112,7 +113,7 @@ Deno.serve(async (req) => {
         results.push("failed");
       }
     }
-    return json({ ok: true, results });
+    return json({ ok: true, version: FUNCTION_VERSION, results });
   }
 
   // Admin-confirmed quote delivery. Same service-role gate as clarification:
@@ -169,24 +170,15 @@ Deno.serve(async (req) => {
     "id, request_number, created_at, status, service_area_status, city, zip_code, mileage, notes, services, service_category, customer_email_sent_at, admin_email_sent_at, user_id, customers(first_name, last_name, phone, email, preferred_contact_method), vehicles(year, make, model, trim, vin, engine_displacement, engine_code, cylinder_count, fuel_type, is_hybrid, drivetrain)";
   const FULL_COLUMNS = `${BASE_COLUMNS}, preferred_contact_method, preferred_language, intake_followups, phone_e164, sms_consent_at`;
 
-  let { data: request, error } = await supabase
+  const { data: request, error } = await supabase
     .from("service_requests")
     .select(FULL_COLUMNS)
     .eq("id", requestId)
     .maybeSingle();
 
-  // Tolerate a database that has not run the newest migration yet.
-  if (error) {
-    ({ data: request, error } = await supabase
-      .from("service_requests")
-      .select(BASE_COLUMNS)
-      .eq("id", requestId)
-      .maybeSingle());
-  }
-
   if (error || !request) {
     console.error("[emails] request lookup failed", error?.message);
-    return json({ error: "request_not_found" }, 404);
+    return json({ error: error ? "notification_schema_not_ready" : "request_not_found" }, error ? 503 : 404);
   }
 
   const customer = (request as any).customers ?? {};
@@ -402,7 +394,7 @@ Deno.serve(async (req) => {
     .eq("id", request.id);
 
   // Never leak customer data or provider errors in the response body.
-  return json({ ok: errors.length === 0, results });
+  return json({ ok: errors.length === 0, version: FUNCTION_VERSION, results });
 });
 
 function shell(inner: string) {

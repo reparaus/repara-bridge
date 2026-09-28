@@ -39,5 +39,6 @@
 - [x] Preserve SMS number and consent on both new and returning customer records
 - [x] Prevent older-schema fallback from changing a Text-only request into email delivery
 - [x] Keep SMS independent from email-provider configuration and prohibit Text-only email fallback
+- [x] Remove the legacy read fallback that hid request-level SMS consent on schema errors
 - [ ] Redeploy `send-service-request-emails` after this correction (user)
 - [ ] Verify a fresh Text-only request against Twilio delivery logs (blocked until redeploy/live request)

@@ -45,6 +45,10 @@ alter table public.notification_deliveries add constraint notification_deliverie
 alter table public.notification_deliveries
   add column if not exists provider_message_id text;
 
+-- Make newly added columns visible to Edge Functions immediately. Without this,
+-- PostgREST can temporarily serve the pre-0024 shape and hide SMS consent.
+notify pgrst, 'reload schema';
+
 -- Future event types (not sent yet — no scheduling exists):
 -- appointment_requested, appointment_confirmed, appointment_rescheduled,
 -- appointment_cancelled, appointment_reminder. The delivery function already
