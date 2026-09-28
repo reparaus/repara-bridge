@@ -299,8 +299,9 @@ function ConcernCard({
 
       {/* Shorthand → AI cleanup → approve. */}
       <label className="block space-y-1.5">
-        <span className="text-xs text-muted-foreground">
-          Your notes — write them however you want
+        <span className="text-sm font-medium text-foreground">What did you find?</span>
+        <span className="block text-xs text-muted-foreground">
+          Type it however you'd say it — Repara AI organizes it for you.
         </span>
         <Textarea
           rows={3}
