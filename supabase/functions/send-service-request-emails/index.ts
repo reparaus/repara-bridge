@@ -298,7 +298,8 @@ Deno.serve(async (req) => {
     }
     results.sms = smsOutcome;
   }
-  const emailWanted = !smsWanted || preferred === "both" || smsOutcome !== "sent";
+  // Text-only customers never get the confirmation email; failures are logged for admin.
+  const emailWanted = !smsWanted || preferred === "both";
 
   if (emailWanted && validEmail && !request.customer_email_sent_at) {
     const intro = outside
