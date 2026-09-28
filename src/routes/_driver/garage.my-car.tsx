@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { ChevronRight } from "lucide-react";
 
 import { GarageShell } from "@/components/garage/GarageShell";
+import { VehicleVisual } from "@/components/garage/VehicleVisual";
+import { formatMileage } from "@/lib/mileage";
 import { Button } from "@/components/ui/button";
 import { LoadError, RowSkeletons } from "@/components/garage/GarageSkeletons";
 import { getGarageHome } from "@/lib/garage.functions";
@@ -48,13 +51,35 @@ function MyCar() {
           </Button>
         </div>
       ) : null}
-      <div className="mt-6 space-y-3">
+      <div className="mt-6 space-y-3 animate-in fade-in duration-200">
         {vehicles.map((vehicle) => (
-          <Link key={vehicle.id} to="/garage/vehicle/$id" params={{ id: vehicle.id }} className="block border border-border bg-card p-5 transition-colors hover:border-primary">
-            <div className="flex items-center justify-between gap-3">
-              <div><p className="font-semibold text-foreground">{vehicle.nickname ?? vehicle.label}</p><p className="mt-1 text-sm text-muted-foreground">{vehicle.currentMileage ? `${vehicle.currentMileage.toLocaleString()} mi` : "Mileage unknown"}</p></div>
-              {vehicle.isPrimary ? <span className="text-xs text-primary">Primary</span> : null}
-            </div>
+          <Link
+            key={vehicle.id}
+            to="/garage/vehicle/$id"
+            params={{ id: vehicle.id }}
+            className="flex items-center gap-4 rounded-2xl border border-border/60 bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
+          >
+            <VehicleVisual
+              year={vehicle.year}
+              make={vehicle.make}
+              model={vehicle.model}
+              trim={vehicle.trim}
+              className="h-14 w-20 shrink-0"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-2">
+                <span className="truncate text-base font-semibold text-foreground">{vehicle.nickname ?? vehicle.label}</span>
+                {vehicle.isPrimary ? (
+                  <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground">Primary</span>
+                ) : null}
+              </span>
+              <span className="block text-sm text-muted-foreground">
+                {vehicle.currentMileage
+                  ? formatMileage(vehicle.currentMileage, vehicle.mileageConfidence)
+                  : "Mileage not added yet"}
+              </span>
+            </span>
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
           </Link>
         ))}
       </div>

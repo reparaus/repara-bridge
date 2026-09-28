@@ -42,3 +42,9 @@
 - [x] Remove the legacy read fallback that hid request-level SMS consent on schema errors
 - [ ] Redeploy `send-service-request-emails` after this correction (user)
 - [ ] Verify a fresh Text-only request against Twilio delivery logs (blocked until redeploy/live request)
+
+# UI polish pass
+- [x] Build studio: 3D loading placeholder, save states (unsaved/saving/saved/failed+retry), edits locked while saving, clearer selected wheel
+- [x] My Car matches Garage cards
+- [x] Signed-in confirmation leads with View Request
+- [ ] Remaining brief items (diagnosis/findings/quote regrouping, provider detail skeletons) — next pass

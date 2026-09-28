@@ -42,11 +42,13 @@ export function BuildStudio({
   vehicleLabel,
   saved,
   saving,
+  saveFailed = false,
   onSave,
 }: {
   vehicleLabel: string;
   saved: VisualConfig;
   saving: boolean;
+  saveFailed?: boolean;
   onSave: (c: VisualConfig) => void;
 }) {
   const [config, setConfig] = useState<VisualConfig>(saved);
@@ -59,6 +61,7 @@ export function BuildStudio({
   useEffect(() => setConfig(saved), [saved]);
 
   const change = (patch: Partial<VisualConfig>) => {
+    if (saving) return;
     setHistory((h) => [...h.slice(-19), config]);
     setConfig((c) => ({ ...c, ...patch }));
   };
@@ -68,10 +71,12 @@ export function BuildStudio({
     <div className="overflow-hidden rounded-3xl border border-border/60 bg-card">
       <div className="relative h-72 bg-muted sm:h-96">
         {mounted ? (
-          <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading 3D preview…</div>}>
+          <Suspense fallback={<div className="flex h-full animate-pulse flex-col items-center justify-center gap-3 bg-muted text-sm text-muted-foreground" role="status"><div className="h-16 w-48 rounded-[40%] border-2 border-dashed border-border" /><span className="flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading 3D preview…</span></div>}>
             <Viewer config={config} view={view} viewNonce={nonce} />
           </Suspense>
-        ) : null}
+        ) : (
+          <div className="h-full animate-pulse bg-muted" aria-hidden />
+        )}
         <span className="absolute left-3 top-3 rounded-full bg-background/80 px-2.5 py-1 text-[11px] font-medium text-foreground backdrop-blur">
           Fallback 3D model — not your {vehicleLabel}
         </span>
@@ -104,7 +109,7 @@ export function BuildStudio({
             <div className="grid grid-cols-3 gap-2">
               {WHEELS.map((w) => (
                 <button key={w.key} type="button" onClick={() => change({ wheel: w.key })}
-                  className={cn("h-11 rounded-xl border text-sm", config.wheel === w.key ? "border-primary bg-primary/10" : "border-border/60")}>
+                  className={cn("h-11 rounded-xl border text-sm transition-colors", config.wheel === w.key ? "border-2 border-primary bg-primary/15 font-semibold" : "border-border/60")}>
                   {w.label}
                 </button>
               ))}
@@ -134,16 +139,19 @@ export function BuildStudio({
           )}
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <Button variant="outline" className="h-11" disabled={!history.length}
+        <p role="status" aria-live="polite" className={cn("mt-4 text-xs", saveFailed && !saving ? "text-destructive" : "text-muted-foreground")}>
+          {saving ? "Saving…" : saveFailed && dirty ? "Couldn't save your changes. Try again." : dirty ? "Unsaved changes" : "All changes saved"}
+        </p>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <Button variant="outline" className="h-11" disabled={!history.length || saving}
             onClick={() => { setConfig(history[history.length - 1]); setHistory((h) => h.slice(0, -1)); }}>
             Undo
           </Button>
-          <Button variant="outline" className="h-11" onClick={() => change(DEFAULT)} disabled={JSON.stringify(config) === JSON.stringify(DEFAULT)}>
+          <Button variant="outline" className="h-11" onClick={() => change(DEFAULT)} disabled={saving || JSON.stringify(config) === JSON.stringify(DEFAULT)}>
             <RotateCcw className="h-4 w-4" /> Reset
           </Button>
           <Button className="h-11" disabled={!dirty || saving} onClick={() => onSave(config)}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {saveFailed && dirty && !saving ? "Retry" : "Save"}
           </Button>
         </div>
       </div>
