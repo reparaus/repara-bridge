@@ -94,7 +94,7 @@ export const Route = createFileRoute("/quote/")({
    */
   validateSearch: (
     search: Record<string, unknown>,
-  ): { service?: ServiceKey; v?: string; p?: string; cat?: string; b?: string } => {
+  ): { service?: ServiceKey; v?: string; p?: string; cat?: string; b?: string; step?: string } => {
     const raw = typeof search.service === "string" ? search.service : undefined;
     // `?v=<vehicleId>` comes from a signed-in driver's Garage: the vehicle and
     // contact details are prefilled so nothing is entered twice.
@@ -105,12 +105,16 @@ export const Route = createFileRoute("/quote/")({
     const category = typeof search.cat === "string" ? search.cat : undefined;
     // `?b=<buildId>` comes from a Garage build's "Request Actual Quotes".
     const build = typeof search.b === "string" ? search.b : undefined;
+    // `?step=contact` opens the form directly on the contact step (used as the
+    // public SMS opt-in proof link for carrier registration).
+    const step = typeof search.step === "string" ? search.step : undefined;
     return {
       ...(raw && isServiceKey(raw) ? { service: raw } : {}),
       ...(vehicle ? { v: vehicle } : {}),
       ...(provider ? { p: provider } : {}),
       ...(category ? { cat: category } : {}),
       ...(build ? { b: build } : {}),
+      ...(step === "contact" ? { step } : {}),
     };
   },
   head: () => ({
@@ -319,6 +323,7 @@ function QuoteFlow() {
     p: chosenProviderId,
     cat: chosenCategoryKey,
     b: buildId,
+    step: startStep,
   } = Route.useSearch();
   const loadGaragePrefill = useServerFn(getServiceRequestPrefill);
   const loadBuildPrefill = useServerFn(getBuildRequestPrefill);
@@ -342,7 +347,7 @@ function QuoteFlow() {
     };
   }, [buildId, loadBuildPrefill]);
 
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(startStep === "contact" ? STEP_CONTACT : 0);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [hydrated, setHydrated] = useState(false);
@@ -358,7 +363,9 @@ function QuoteFlow() {
   } | null>(null);
 
   useEffect(() => {
-    const draft = loadDraft();
+    // Deep link to the contact step: skip any saved draft so the opt-in
+    // screen is shown immediately and exactly as a fresh visitor sees it.
+    const draft = startStep === "contact" ? null : loadDraft();
     if (draft?.data) setPendingDraft(draft);
     if (preselectedService) {
       // A specific taxonomy service (tint, detail, tires…) carried in `cat`
