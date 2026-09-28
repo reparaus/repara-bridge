@@ -38,6 +38,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { track } from "@/lib/analytics";
 import type { IntakeFollowup, IntakeQuestion } from "@/lib/ai/intake-types";
 import { useI18n } from "@/lib/i18n";
+import { LegalLinks } from "@/components/legal/LegalPage";
 import {
   localizedAnswerLabel,
   localizedPhotoPrompt,

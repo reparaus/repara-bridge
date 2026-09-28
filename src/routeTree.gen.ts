@@ -14,7 +14,9 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as DriverRouteRouteImport } from './routes/_driver/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CardRouteImport } from './routes/card'
+import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
 import { Route as SigninRouteImport } from './routes/signin'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminResetPasswordRouteImport } from './routes/admin.reset-password'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
@@ -67,9 +69,19 @@ const CardRoute = CardRouteImport.update({
   path: '/card',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
+  id: '/privacy-policy',
+  path: '/privacy-policy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SigninRoute = SigninRouteImport.update({
   id: '/signin',
   path: '/signin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminLoginRoute = AdminLoginRouteImport.update({
@@ -224,7 +236,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/signin': typeof SigninRoute
+  '/terms': typeof TermsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/providers/$id': typeof ProvidersIdRoute
@@ -258,7 +272,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/signin': typeof SigninRoute
+  '/terms': typeof TermsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/providers/$id': typeof ProvidersIdRoute
@@ -295,7 +311,9 @@ export interface FileRoutesById {
   '/_driver': typeof DriverRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/card': typeof CardRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/signin': typeof SigninRoute
+  '/terms': typeof TermsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/reset-password': typeof AdminResetPasswordRoute
   '/providers/$id': typeof ProvidersIdRoute
@@ -331,7 +349,9 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/card'
+    | '/privacy-policy'
     | '/signin'
+    | '/terms'
     | '/admin/login'
     | '/admin/reset-password'
     | '/providers/$id'
@@ -365,7 +385,9 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/card'
+    | '/privacy-policy'
     | '/signin'
+    | '/terms'
     | '/admin/login'
     | '/admin/reset-password'
     | '/providers/$id'
@@ -401,7 +423,9 @@ export interface FileRouteTypes {
     | '/_driver'
     | '/auth'
     | '/card'
+    | '/privacy-policy'
     | '/signin'
+    | '/terms'
     | '/admin/login'
     | '/admin/reset-password'
     | '/providers/$id'
@@ -438,7 +462,9 @@ export interface RootRouteChildren {
   DriverRouteRoute: typeof DriverRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   CardRoute: typeof CardRoute
+  PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   SigninRoute: typeof SigninRoute
+  TermsRoute: typeof TermsRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminResetPasswordRoute: typeof AdminResetPasswordRoute
   ProvidersIdRoute: typeof ProvidersIdRoute
@@ -485,11 +511,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy-policy': {
+      id: '/privacy-policy'
+      path: '/privacy-policy'
+      fullPath: '/privacy-policy'
+      preLoaderRoute: typeof PrivacyPolicyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signin': {
       id: '/signin'
       path: '/signin'
       fullPath: '/signin'
       preLoaderRoute: typeof SigninRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/login': {
@@ -758,7 +798,9 @@ const rootRouteChildren: RootRouteChildren = {
   DriverRouteRoute: DriverRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   CardRoute: CardRoute,
+  PrivacyPolicyRoute: PrivacyPolicyRoute,
   SigninRoute: SigninRoute,
+  TermsRoute: TermsRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminResetPasswordRoute: AdminResetPasswordRoute,
   ProvidersIdRoute: ProvidersIdRoute,
