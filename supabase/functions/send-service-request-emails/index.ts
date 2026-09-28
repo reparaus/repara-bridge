@@ -23,6 +23,7 @@ const FROM_EMAIL = Deno.env.get("REPARA_FROM_EMAIL") ?? "Repara <requests@repara
 const ADMIN_EMAIL = Deno.env.get("REPARA_ADMIN_EMAIL") ?? "repara.us@gmail.com";
 const SITE_URL = (Deno.env.get("REPARA_SITE_URL") ?? "https://reparaus.com").replace(/\/$/, "");
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const FUNCTION_VERSION = "repara-sms-0024.3";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -112,7 +113,7 @@ Deno.serve(async (req) => {
         results.push("failed");
       }
     }
-    return json({ ok: true, results });
+    return json({ ok: true, version: FUNCTION_VERSION, results });
   }
 
   // Admin-confirmed quote delivery. Same service-role gate as clarification:
@@ -393,7 +394,7 @@ Deno.serve(async (req) => {
     .eq("id", request.id);
 
   // Never leak customer data or provider errors in the response body.
-  return json({ ok: errors.length === 0, results });
+  return json({ ok: errors.length === 0, version: FUNCTION_VERSION, results });
 });
 
 function shell(inner: string) {
