@@ -229,6 +229,7 @@ function BuildPage() {
           vehicleLabel={[vehicle?.year, vehicle?.make, vehicle?.model].filter(Boolean).join(" ") || "car"}
           saved={normalizeVisual(build.visualConfig)}
           saving={visualMut.isPending}
+          saveFailed={visualMut.isError}
           onSave={(c) => visualMut.mutate(c)}
         />
       </div>

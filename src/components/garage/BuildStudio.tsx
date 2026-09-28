@@ -42,11 +42,13 @@ export function BuildStudio({
   vehicleLabel,
   saved,
   saving,
+  saveFailed = false,
   onSave,
 }: {
   vehicleLabel: string;
   saved: VisualConfig;
   saving: boolean;
+  saveFailed?: boolean;
   onSave: (c: VisualConfig) => void;
 }) {
   const [config, setConfig] = useState<VisualConfig>(saved);
