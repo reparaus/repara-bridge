@@ -45,6 +45,14 @@ const CONDITION_DOT: Record<string, string> = Object.fromEntries(
   CONDITIONS.map((c) => [c.value, c.dot]),
 );
 
+/** Design-system colors for the traffic-light conditions (no emoji). */
+const CONDITION_TONE: Record<string, { dot: string; edge: string; active: string }> = {
+  good: { dot: "bg-success", edge: "border-l-success", active: "border-success bg-success/15" },
+  monitor: { dot: "bg-warning", edge: "border-l-warning", active: "border-warning bg-warning/15" },
+  needs_attention: { dot: "bg-destructive", edge: "border-l-destructive", active: "border-destructive bg-destructive/10" },
+  not_inspected: { dot: "bg-muted-foreground/40", edge: "border-l-border", active: "border-primary bg-primary/10" },
+};
+
 const SYSTEMS = [
   "Brakes",
   "Electrical",
@@ -314,15 +322,14 @@ export function JobFindings({
               key={c.value}
               type="button"
               onClick={() => setCondition(c.value)}
-              className={`h-11 rounded-lg border px-3 text-xs font-medium ${
+              aria-pressed={condition === c.value}
+              className={`inline-flex h-11 items-center rounded-lg border px-3 text-xs font-medium transition-colors ${
                 condition === c.value
-                  ? "border-primary bg-primary/10 text-foreground"
+                  ? `${CONDITION_TONE[c.value].active} text-foreground`
                   : "border-border bg-surface text-muted-foreground"
               }`}
             >
-              <span aria-hidden className="mr-1.5">
-                {c.dot}
-              </span>
+              <span aria-hidden className={`mr-1.5 size-2.5 rounded-full ${CONDITION_TONE[c.value].dot}`} />
               {c.label}
             </button>
           ))}
@@ -428,13 +435,14 @@ export function JobFindings({
             {groupFindings.map((finding) => (
               <li
                 key={finding.id}
-                className="space-y-2 border-b border-border pb-3 last:border-0 last:pb-0"
+                className={`space-y-2 border-b border-l-4 border-border pb-3 pl-3 last:border-b-0 last:pb-0 ${CONDITION_TONE[finding.condition]?.edge ?? "border-l-border"}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span aria-hidden className="text-[11px]">
-                        {CONDITION_DOT[finding.condition] ?? "⚪"}
+                      <span aria-hidden className={`size-2.5 rounded-full ${CONDITION_TONE[finding.condition]?.dot ?? "bg-muted-foreground/40"}`} />
+                      <span className="text-[11px] font-medium text-foreground">
+                        {CONDITIONS.find((c) => c.value === finding.condition)?.label ?? "Not inspected"}
                       </span>
                       {finding.safetyConcern && (
                         <span className="text-[10px] font-medium text-destructive">
