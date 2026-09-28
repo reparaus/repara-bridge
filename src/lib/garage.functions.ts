@@ -24,6 +24,7 @@ import {
   updateProfile,
 } from "@/lib/garage/garage.server";
 import { askRepara, type AskTurn } from "@/lib/garage/ask.server";
+import { buildVehicleIntelligence, renderIntelligence } from "@/lib/garage/intelligence.server";
 
 type Db = { from: (table: string) => any };
 
@@ -222,6 +223,16 @@ export const getVehicle = createServerFn({ method: "POST" })
     return { ...detail, timeline: buildTimeline(detail) };
   });
 
+/** "What's Next" for one Garage vehicle — aggregated from existing records. */
+export const getVehicleIntelligence = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => vehicleId.parse(data))
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as unknown as Db;
+    const detail = await getVehicleDetail(db, context.userId, data.vehicleId);
+    return buildVehicleIntelligence(db, context.userId, detail);
+  });
+
 export const updateMileage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) =>
@@ -272,8 +283,10 @@ export const askReparaFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const db = context.supabase as unknown as Db;
     const detail = await getVehicleDetail(db, context.userId, data.vehicleId);
+    const intel = await buildVehicleIntelligence(db, context.userId, detail).catch(() => null);
     return askRepara({
       detail,
+      intelligence: intel ? renderIntelligence(intel) : undefined,
       turns: (data.turns ?? []) as AskTurn[],
       message: data.message,
       language: data.language ?? "en",
