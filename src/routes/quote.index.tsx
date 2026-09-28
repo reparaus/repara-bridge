@@ -38,6 +38,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { track } from "@/lib/analytics";
 import type { IntakeFollowup, IntakeQuestion } from "@/lib/ai/intake-types";
 import { useI18n } from "@/lib/i18n";
+import { LegalLinks } from "@/components/legal/LegalPage";
 import {
   localizedAnswerLabel,
   localizedPhotoPrompt,
@@ -1791,6 +1792,7 @@ function ContactStep({
             />
             <span className="text-muted-foreground">{t("quote.contact.smsConsent")}</span>
           </label>
+          <LegalLinks className="mt-2 block text-xs text-muted-foreground" />
           {errors.smsConsent && <p className="mt-2 text-sm text-destructive">{errors.smsConsent}</p>}
         </div>
       )}
