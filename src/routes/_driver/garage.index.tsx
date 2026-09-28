@@ -8,6 +8,7 @@ import { GarageShell, SectionTitle, StatusDot } from "@/components/garage/Garage
 import { formatMileage, mileageBadge, mileageTone } from "@/lib/mileage";
 import { buildProgressLine, useBuilds } from "@/components/garage/BuildsPanel";
 import { VehicleVisual } from "@/components/garage/VehicleVisual";
+import { WhatsNext } from "@/components/garage/WhatsNext";
 import { Button } from "@/components/ui/button";
 import { LoadError, RefreshingDot, RowSkeletons, VehicleHeroSkeleton } from "@/components/garage/GarageSkeletons";
 import { claimMyRequests, getGarageHome } from "@/lib/garage.functions";
@@ -182,6 +183,8 @@ function GarageHome() {
           </div>
         </section>
       )}
+
+      {primary && <WhatsNext vehicleId={primary.id} />}
 
       {others.length > 0 && (
         <section className="mt-10">
