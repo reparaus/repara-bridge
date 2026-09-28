@@ -47,4 +47,5 @@
 - [x] Build studio: 3D loading placeholder, save states (unsaved/saving/saved/failed+retry), edits locked while saving, clearer selected wheel
 - [x] My Car matches Garage cards
 - [x] Signed-in confirmation leads with View Request
-- [ ] Remaining brief items (diagnosis/findings/quote regrouping, provider detail skeletons) — next pass
+- [x] Diagnosis "What did you find?" prompt; color-coded Findings (green/yellow/red)
+- [ ] Quote overview regrouping + full mobile sweep — next pass
