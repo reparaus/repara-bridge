@@ -1,5 +1,5 @@
 /**
- * Vehicle Intelligence — "What's Next" (SERVER ONLY).
+ * Vehicle Intelligence — Garage service guidance (SERVER ONLY).
  *
  * Aggregates what Repara ALREADY knows about one Garage vehicle (vehicle
  * profile, mileage, service records, maintenance state, recalls, service
@@ -12,6 +12,7 @@
  */
 
 import type { getVehicleDetail } from "./garage.server";
+import { bestServiceCategory } from "@/lib/service-network";
 
 type Db = { from: (table: string) => any };
 type Row = Record<string, any>;
@@ -24,10 +25,12 @@ export type InsightSource =
   | "Vehicle Data"
   | "Provider Record"
   | "Your request"
-  | "Manufacturer data";
+  | "Manufacturer data"
+  | "AI Recommendation";
 
 export type InsightAction =
   | { kind: "quote"; label: string; service?: string; cat?: string; concern?: string }
+  | { kind: "find"; label: string; cat?: string }
   | { kind: "request"; label: string; requestId: string }
   | { kind: "vehicle"; label: string }
   | { kind: "ask"; label: string };
@@ -57,7 +60,14 @@ export type VehicleIntelligence = {
   activeRequests: ActiveRequest[];
   /** True when Repara has too little to say anything useful. */
   insufficient: boolean;
+  /** Maintenance records exist and nothing is coming up. */
+  upToDate: boolean;
 };
+
+function roundMiles(n: number): string {
+  const r = n >= 1000 ? Math.round(n / 100) * 100 : Math.max(50, Math.round(n / 50) * 50);
+  return r.toLocaleString();
+}
 
 const CLOSED = new Set(["completed", "closed", "declined", "cancelled"]);
 
@@ -156,7 +166,7 @@ export async function buildVehicleIntelligence(
     insights.push({
       id: `rec-${rec.id}`,
       tone: rec.priority === "urgent" ? "attention" : "recommended",
-      title: rec.title,
+      title: `${rec.title} was recommended at your last service`,
       reason: `Recorded by the technician during your ${shortDate(String(request['updated_at'] ?? request['created_at']))} service${
         rec.description ? `: “${clip(rec.description, 120)}”` : "."
       }`,
@@ -195,20 +205,51 @@ export async function buildVehicleIntelligence(
     }
   }
 
-  // --------------------------------- source-backed maintenance state
+  // ------------------------ mileage-aware maintenance guidance
+  // Uses the vehicle's maintenance state (interval-derived due mileage and the
+  // last completed service). Intervals are never invented here: without a due
+  // mileage we only speak when the stored status already says due/overdue.
+  const current = detail.vehicle.currentMileage ? Number(detail.vehicle.currentMileage) : null;
   for (const item of detail.maintenance) {
-    if (item.status !== "due" && item.status !== "overdue") continue;
-    const since =
-      detail.vehicle.currentMileage && item.lastCompletedMileage
-        ? ` Last recorded ${(Number(detail.vehicle.currentMileage) - Number(item.lastCompletedMileage)).toLocaleString()} miles ago.`
-        : "";
+    const due = item.dueMileage ? Number(item.dueMileage) : null;
+    const remaining = current !== null && due !== null ? due - current : null;
+    const flaggedDue = item.status === "due" || item.status === "overdue";
+    let tone: InsightTone;
+    let title: string;
+    const label = item.label;
+    const lower = label.charAt(0).toLowerCase() + label.slice(1);
+    if ((remaining !== null && remaining <= 0) || (remaining === null && flaggedDue)) {
+      tone = "recommended";
+      title = `Your ${lower} may be due`;
+    } else if (remaining !== null && remaining <= 1500) {
+      tone = "recommended";
+      title = `Your ${lower} may be coming up in about ${roundMiles(remaining)} miles`;
+    } else if (remaining !== null && remaining <= 5000) {
+      tone = "info";
+      title = `Next ${lower} in about ${roundMiles(remaining)} miles`;
+    } else continue;
+
+    const facts: string[] = [];
+    if (item.lastCompletedMileage) {
+      facts.push(
+        `Last recorded ${lower}: ${Number(item.lastCompletedMileage).toLocaleString()} mi${item.lastCompletedDate ? ` (${shortDate(String(item.lastCompletedDate))})` : ""}.`,
+      );
+    }
+    if (due) facts.push(`The next recorded interval is around ${due.toLocaleString()} mi.`);
+    if (current) facts.push(`Your current mileage is ${current.toLocaleString()} mi.`);
+    const manufacturer = /manufacturer|oem/i.test(String(item.source ?? ""));
+    const cat = bestServiceCategory(label) || "maintenance";
     insights.push({
       id: `maint-${item.id}`,
-      tone: item.status === "overdue" ? "attention" : "recommended",
-      title: `${item.label} ${item.status === "overdue" ? "may be overdue" : "may be due"}`,
-      reason: `Based on your recorded service history${item.dueMileage ? ` (around ${Number(item.dueMileage).toLocaleString()} mi)` : ""}.${since}`,
-      source: "Vehicle Data",
-      actions: [{ kind: "quote", label: "Request a quote", concern: item.label }],
+      tone,
+      title,
+      reason: `${manufacturer ? "Based on the manufacturer schedule and your records." : "Based on the service information Repara has — an estimate, not a confirmed need."} ${facts.join(" ")}`.trim(),
+      source: manufacturer ? "Manufacturer data" : "AI Recommendation",
+      actions: [
+        { kind: "find", label: "Find service", cat },
+        { kind: "quote", label: "Request a quote", cat, concern: `Upcoming maintenance: ${label}` },
+        { kind: "ask", label: "Ask Repara" },
+      ],
     });
   }
 
@@ -243,8 +284,9 @@ export async function buildVehicleIntelligence(
     !activeRequests.length &&
     !insights.some((i) => i.tone !== "unknown") &&
     detail.history.length === 0;
+  const upToDate = !insufficient && insights.length === 0 && detail.maintenance.some((m) => m.status === "up_to_date");
 
-  return { insights: insights.slice(0, 6), activeRequests, insufficient };
+  return { insights: insights.slice(0, 4), activeRequests, insufficient, upToDate };
 }
 
 /**
@@ -287,7 +329,7 @@ export function renderIntelligence(intel: VehicleIntelligence): string {
     for (const r of intel.activeRequests) lines.push(`- ${r.title}: ${r.statusLabel}`);
   }
   if (intel.insights.length) {
-    lines.push("WHAT'S NEXT (each item has a real source; do not upgrade recommendations to facts):");
+    lines.push("SERVICE GUIDANCE shown in the Garage (same data; each item has a source; AI Recommendation = estimate, never a confirmed need):");
     for (const i of intel.insights) lines.push(`- [${i.source}] ${i.title} — ${i.reason}`);
   }
   if (intel.insufficient) lines.push("Repara has very little history for this vehicle yet. Say so honestly.");

@@ -510,6 +510,8 @@ export async function getVehicleDetail(db: Db, userId: string, vehicleId: string
       dueMileage: s['estimated_due_mileage'] ?? null,
       dueDate: s['estimated_due_date'] ?? null,
       lastCompletedMileage: s['last_completed_mileage'] ?? null,
+      lastCompletedDate: s['last_completed_date'] ?? null,
+      source: s['source'] ? String(s['source']) : null,
     })),
     history,
     mileageReadings,
