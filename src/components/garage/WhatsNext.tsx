@@ -8,8 +8,13 @@ import { SectionTitle } from "@/components/garage/GarageShell";
 import { LoadError, RowSkeletons } from "@/components/garage/GarageSkeletons";
 import { Button } from "@/components/ui/button";
 import { getVehicleIntelligence } from "@/lib/garage.functions";
-import type { Insight, InsightAction, InsightTone } from "@/lib/garage/intelligence.server";
-import { isServiceKey, requestServiceKeyFor } from "@/lib/service-network";
+import { requestServiceKeyFor } from "@/lib/service-network";
+import { isServiceKey } from "@/lib/services";
+
+type Intel = Awaited<ReturnType<typeof getVehicleIntelligence>>;
+type Insight = Intel["insights"][number];
+type InsightAction = Insight["actions"][number];
+type InsightTone = Insight["tone"];
 import { cn } from "@/lib/utils";
 
 const TONE_DOT: Record<InsightTone, string> = {
