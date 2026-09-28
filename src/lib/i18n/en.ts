@@ -168,8 +168,11 @@ export const en = {
       photoTooLarge: "{name} is too large. Keep photos under 8 MB.",
     },
     followups: {
-      title: "Help us understand this better",
-      sub: "A few quick service-advisor questions about what you described. Answer what you know — you can skip anything you're unsure about.",
+      title: "Let's figure this out together",
+      sub: "A couple of quick questions about what you described. Answer what you know — skip anything you're unsure about.",
+      subMore: "Just a couple more details…",
+      edit: "Edit",
+      skipped: "Skipped",
       answerPlaceholder: "Type your answer…",
       skipQuestion: "Skip this question",
       answerLabel: "Your answer",
