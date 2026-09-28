@@ -1979,16 +1979,8 @@ function Confirmation({
 
         {signedIn ? (
           <div className="mt-8 space-y-3">
-            <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
-              <Link to="/garage">{lang === "es" ? "Volver a Mi Garage" : "Return to My Garage"}</Link>
-            </Button>
             {linkedVehicleId ? (
-              <Button
-                asChild
-                variant="outline"
-                size="lg"
-                className="h-13 w-full rounded-full border-border bg-transparent text-sm tracking-[0.12em]"
-              >
+              <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
                 {linkedRequestId ? (
                   <Link to="/garage/request/$id" params={{ id: linkedRequestId }}>
                     {lang === "es" ? "Ver solicitud" : "View Request"}
