@@ -75,12 +75,14 @@ function GarageHome() {
       <header>
         <div className="flex items-center gap-2">
           <h1 className="text-[27px] font-semibold leading-tight tracking-tight text-foreground">
-            {greeting()}
-            {data?.profile.firstName ? `, ${data.profile.firstName}` : ""}
+            Everything your car needs, in one place.
           </h1>
           <RefreshingDot active={isFetching && !isLoading} />
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">Your car, understood.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {greeting()}
+          {data?.profile.firstName ? `, ${data.profile.firstName}` : ""} — Your car, understood.
+        </p>
       </header>
 
       {isLoading && (
