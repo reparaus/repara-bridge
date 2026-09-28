@@ -119,12 +119,12 @@ export async function persistQuoteRequest(data: QuoteInput) {
   if (customerId) {
     await supabaseAdmin
       .from("customers")
-      .update({ ...customerFields, updated_at: new Date().toISOString() })
+      .update({ ...customerFields, ...smsFields, updated_at: new Date().toISOString() })
       .eq("id", customerId);
   } else {
     const { data: customer, error } = await supabaseAdmin
       .from("customers")
-      .insert(customerFields)
+      .insert({ ...customerFields, ...smsFields })
       .select("id")
       .single();
     if (error || !customer) throw new Error("Could not save your contact details.");
@@ -310,10 +310,12 @@ export async function persistQuoteRequest(data: QuoteInput) {
     throw new Error("Could not submit your request.");
   }
 
-  // Tolerate a database that has not run migrations 0002/0004 yet: fall back to
-  // the original column set rather than failing a real customer submission.
+  // Do not silently discard the selected contact channel or SMS consent. Those
+  // fields decide whether sending email is allowed, so an older-schema fallback
+  // would turn a text-only request into an email request.
   if (requestError && /column|schema cache/i.test(requestError.message ?? "")) {
-    ({ data: request, error: requestError } = await insertRequest(baseRequest));
+    await rollbackVehicle();
+    throw new Error("Text notifications are temporarily unavailable. Please try again shortly.");
   }
 
 

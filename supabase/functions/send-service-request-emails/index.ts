@@ -159,11 +159,6 @@ Deno.serve(async (req) => {
 
   if (!UUID.test(requestId)) return json({ error: "invalid_request_id" }, 400);
 
-  if (!RESEND_API_KEY) {
-    console.error("[emails] RESEND_API_KEY is not configured");
-    return json({ error: "email_not_configured" }, 500);
-  }
-
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -221,8 +216,7 @@ Deno.serve(async (req) => {
     .join(" · ") || "—";
 
   // Preferred channel for this request (per-request snapshot, falling back to
-  // the customer profile). SMS has no provider yet, so email is the carrier and
-  // the SMS intent is logged instead of being silently dropped.
+  // the customer profile). A text-only selection must never send customer email.
   const preferred = String(
     (request as any).preferred_contact_method ?? customer.preferred_contact_method ?? "text",
   );
@@ -266,8 +260,7 @@ Deno.serve(async (req) => {
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(customerEmail);
 
   // SMS first (0024): text/both preference, explicit consent, valid E.164.
-  // If SMS can't go out, email is used as a fallback so the customer still
-  // gets their private link. Deduped per request; never retried in a loop.
+  // Failures are logged; text-only never falls back to customer email.
   const smsWanted = preferred === "text" || preferred === "both";
   let smsOutcome = "not_wanted";
   let guestLink = "";
@@ -301,7 +294,7 @@ Deno.serve(async (req) => {
   // Text-only customers never get the confirmation email; failures are logged for admin.
   const emailWanted = !smsWanted || preferred === "both";
 
-  if (emailWanted && validEmail && !request.customer_email_sent_at) {
+  if (emailWanted && validEmail && !request.customer_email_sent_at && RESEND_API_KEY) {
     const intro = outside
       ? "Your request has been received. Repara does not currently service your area, but we've saved your request as we evaluate future service areas."
       : "Your service request has been received. We'll review the details and contact you shortly.";
@@ -345,13 +338,19 @@ Deno.serve(async (req) => {
       });
     }
   } else {
-    results.customer = !emailWanted ? "skipped_pref" : validEmail ? "already_sent" : "skipped_no_email";
+    results.customer = !emailWanted
+      ? "skipped_pref"
+      : !validEmail
+        ? "skipped_no_email"
+        : !RESEND_API_KEY
+          ? "not_configured"
+          : "already_sent";
   }
 
 
 
   // ---------------------------------------------------------------- admin
-  if (!request.admin_email_sent_at) {
+  if (!request.admin_email_sent_at && RESEND_API_KEY) {
     const rows: [string, string][] = [
       ["Request", `${request.request_number ?? ""} (${request.id})`],
       ["Submitted", new Date(String(request.created_at)).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })],
@@ -391,7 +390,7 @@ Deno.serve(async (req) => {
       console.error("[emails] admin send failed", (e as Error).message);
     }
   } else {
-    results.admin = "already_sent";
+    results.admin = RESEND_API_KEY ? "already_sent" : "not_configured";
   }
 
   await supabase
@@ -766,11 +765,9 @@ ${n.link ? button(link, "Open in Repara") : ""}`),
     const { data: r } = await sb.from("service_requests").select("*, customers(email, first_name, phone, preferred_contact_method), vehicles(year, make, model)").eq("id", requestId).maybeSingle();
     if (!r || r.user_id) return "not_guest";
     const pref = String(r.preferred_contact_method ?? r.customers?.preferred_contact_method ?? "email");
-    // text → SMS, both → both, email/call → email. If SMS can't be attempted
-    // (no consent / bad number) the guest still gets the email with their link.
+    // text → SMS, both → both, email/call → email. Text-only never falls back
+    // to email, including when consent, phone validation or Twilio fails.
     const phone = toE164(r.phone_e164 ?? r.customers?.phone);
-    const smsPossible = !!r.sms_consent_at && !!phone && !!Deno.env.get("TWILIO_ACCOUNT_SID");
-    void smsPossible;
     const channel = pref === "both" ? "both" : pref === "text" ? "sms" : "email";
     const vehicle = [r.vehicles?.year, r.vehicles?.make, r.vehicles?.model].filter(Boolean).join(" ") || `Request ${r.request_number}`;
     const provider = String(item["providerName"] ?? "Your provider").slice(0, 120);
