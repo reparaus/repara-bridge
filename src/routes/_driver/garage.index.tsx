@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_driver/garage/")({
         content: "Your vehicles, upcoming maintenance, recall information and service history in one calm place.",
       },
       { property: "og:title", content: "My Garage — Repara" },
-      { property: "og:description", content: "Your car, understood." },
+      { property: "og:description", content: "Everything your car needs, in one place." },
           { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
