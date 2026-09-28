@@ -94,7 +94,7 @@ export const Route = createFileRoute("/quote/")({
    */
   validateSearch: (
     search: Record<string, unknown>,
-  ): { service?: ServiceKey; v?: string; p?: string; cat?: string; b?: string } => {
+  ): { service?: ServiceKey; v?: string; p?: string; cat?: string; b?: string; step?: string } => {
     const raw = typeof search.service === "string" ? search.service : undefined;
     // `?v=<vehicleId>` comes from a signed-in driver's Garage: the vehicle and
     // contact details are prefilled so nothing is entered twice.
@@ -105,6 +105,9 @@ export const Route = createFileRoute("/quote/")({
     const category = typeof search.cat === "string" ? search.cat : undefined;
     // `?b=<buildId>` comes from a Garage build's "Request Actual Quotes".
     const build = typeof search.b === "string" ? search.b : undefined;
+    // `?step=contact` opens the form directly on the contact step (used as the
+    // public SMS opt-in proof link for carrier registration).
+    const step = typeof search.step === "string" ? search.step : undefined;
     return {
       ...(raw && isServiceKey(raw) ? { service: raw } : {}),
       ...(vehicle ? { v: vehicle } : {}),
