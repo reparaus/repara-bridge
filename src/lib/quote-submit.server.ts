@@ -114,15 +114,27 @@ export async function persistQuoteRequest(data: QuoteInput) {
         ? new Date().toISOString()
         : null,
   };
+  // 0024 columns are intentionally ahead of the generated external-project
+  // types. Keep this narrow client shim until those types are regenerated.
+  const customerStore = supabaseAdmin as unknown as {
+    from: (table: "customers") => {
+      update: (row: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<unknown> };
+      insert: (row: Record<string, unknown>) => {
+        select: (columns: string) => {
+          single: () => Promise<{ data: { id: string } | null; error: { message: string } | null }>;
+        };
+      };
+    };
+  };
 
   let createdCustomerId: string | null = null;
   if (customerId) {
-    await supabaseAdmin
+    await customerStore
       .from("customers")
       .update({ ...customerFields, ...smsFields, updated_at: new Date().toISOString() })
       .eq("id", customerId);
   } else {
-    const { data: customer, error } = await supabaseAdmin
+    const { data: customer, error } = await customerStore
       .from("customers")
       .insert({ ...customerFields, ...smsFields })
       .select("id")
