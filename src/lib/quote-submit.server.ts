@@ -114,17 +114,29 @@ export async function persistQuoteRequest(data: QuoteInput) {
         ? new Date().toISOString()
         : null,
   };
+  // 0024 columns are intentionally ahead of the generated external-project
+  // types. Keep this narrow client shim until those types are regenerated.
+  const customerStore = supabaseAdmin as unknown as {
+    from: (table: "customers") => {
+      update: (row: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<unknown> };
+      insert: (row: Record<string, unknown>) => {
+        select: (columns: string) => {
+          single: () => Promise<{ data: { id: string } | null; error: { message: string } | null }>;
+        };
+      };
+    };
+  };
 
   let createdCustomerId: string | null = null;
   if (customerId) {
-    await supabaseAdmin
+    await customerStore
       .from("customers")
-      .update({ ...customerFields, updated_at: new Date().toISOString() })
+      .update({ ...customerFields, ...smsFields, updated_at: new Date().toISOString() })
       .eq("id", customerId);
   } else {
-    const { data: customer, error } = await supabaseAdmin
+    const { data: customer, error } = await customerStore
       .from("customers")
-      .insert(customerFields)
+      .insert({ ...customerFields, ...smsFields })
       .select("id")
       .single();
     if (error || !customer) throw new Error("Could not save your contact details.");
@@ -310,10 +322,12 @@ export async function persistQuoteRequest(data: QuoteInput) {
     throw new Error("Could not submit your request.");
   }
 
-  // Tolerate a database that has not run migrations 0002/0004 yet: fall back to
-  // the original column set rather than failing a real customer submission.
+  // Do not silently discard the selected contact channel or SMS consent. Those
+  // fields decide whether sending email is allowed, so an older-schema fallback
+  // would turn a text-only request into an email request.
   if (requestError && /column|schema cache/i.test(requestError.message ?? "")) {
-    ({ data: request, error: requestError } = await insertRequest(baseRequest));
+    await rollbackVehicle();
+    throw new Error("Text notifications are temporarily unavailable. Please try again shortly.");
   }
 
 
