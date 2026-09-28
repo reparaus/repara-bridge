@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/common/LoadingState";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -95,7 +96,7 @@ export const Route = createFileRoute("/quote/")({
    */
   validateSearch: (
     search: Record<string, unknown>,
-  ): { service?: ServiceKey; v?: string; p?: string; cat?: string; b?: string; step?: string } => {
+  ): { service?: ServiceKey; v?: string; p?: string; cat?: string; b?: string; step?: string; concern?: string } => {
     const raw = typeof search.service === "string" ? search.service : undefined;
     // `?v=<vehicleId>` comes from a signed-in driver's Garage: the vehicle and
     // contact details are prefilled so nothing is entered twice.
@@ -109,7 +110,13 @@ export const Route = createFileRoute("/quote/")({
     // `?step=contact` opens the form directly on the contact step (used as the
     // public SMS opt-in proof link for carrier registration).
     const step = typeof search.step === "string" ? search.step : undefined;
+    // `?concern=` carries the driver's own words from Ask Repara into the notes.
+    const concern =
+      typeof search.concern === "string" && search.concern.trim()
+        ? search.concern.trim().slice(0, 500)
+        : undefined;
     return {
+      ...(concern ? { concern } : {}),
       ...(raw && isServiceKey(raw) ? { service: raw } : {}),
       ...(vehicle ? { v: vehicle } : {}),
       ...(provider ? { p: provider } : {}),
@@ -325,7 +332,10 @@ function QuoteFlow() {
     cat: chosenCategoryKey,
     b: buildId,
     step: startStep,
+    concern: carriedConcern,
   } = Route.useSearch();
+  /** True while a Garage vehicle is loading, so the empty vehicle step never flashes. */
+  const [prefilling, setPrefilling] = useState(Boolean(garageVehicleId));
   const loadGaragePrefill = useServerFn(getServiceRequestPrefill);
   const loadBuildPrefill = useServerFn(getBuildRequestPrefill);
 
@@ -387,6 +397,7 @@ function QuoteFlow() {
         return { ...f, services, answers };
       });
     }
+    if (carriedConcern) setForm((f) => (f.notes ? f : { ...f, notes: carriedConcern }));
     // One idempotency key per quote attempt, reused across retries.
     setForm((f) => (f.submissionId ? f : { ...f, submissionId: crypto.randomUUID() }));
     // Do not save the empty initial state over a draft while the choice is open.
@@ -419,11 +430,19 @@ function QuoteFlow() {
           lastName: prefill.lastName || f.lastName,
           phone: prefill.phone || f.phone,
           email: prefill.email || f.email,
+          notes: f.notes || carriedConcern || "",
         }));
+        // The vehicle is already known: skip "What do you drive?" and continue
+        // at the service step, or at details when the service is also known.
+        if (prefill.year && prefill.make && prefill.model) {
+          setStep(preselectedService ? STEP_DETAILS : STEP_SERVICE);
+        }
         setPendingDraft(null);
         setHydrated(true);
       } catch {
         // Not signed in, or not their vehicle — the normal flow still works.
+      } finally {
+        if (!cancelled) setPrefilling(false);
       }
     })();
     return () => {
@@ -795,6 +814,15 @@ function QuoteFlow() {
           setConfirmation(null);
         }}
       />
+    );
+  }
+
+
+  if (prefilling) {
+    return (
+      <div className="mx-auto max-w-xl px-4 py-16">
+        <LoadingState label="Preparing your request" />
+      </div>
     );
   }
 

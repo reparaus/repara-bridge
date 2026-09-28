@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { GarageShell, SectionTitle } from "@/components/garage/GarageShell";
@@ -59,6 +59,9 @@ function AskRepara() {
   /** Service categories Repara recognised in the driver's own words. */
   const [categories, setCategories] = useState<string[]>([]);
   const [failedMessage, setFailedMessage] = useState<string | null>(null);
+  /** Set when the driver asked for a quote and the service is known. */
+  const [handoff, setHandoff] = useState<{ category: string; concern: string } | null>(null);
+  const navigate = useNavigate();
 
   const vehicles = data?.vehicles ?? [];
   const vehicleId = selected ?? vehicles.find((v) => v.isPrimary)?.id ?? vehicles[0]?.id ?? null;
@@ -80,6 +83,13 @@ function AskRepara() {
       setFollowUp(answer.followUp);
       setSuggestService(answer.suggestService);
       setCategories(answer.categories ?? []);
+      const firstCategory = answer.categories?.[0];
+      if (answer.wantsQuote && firstCategory) {
+        const concern =
+          answer.concernSummary ||
+          nextTurns.filter((t) => t.role === "driver").map((t) => t.content).join(" ");
+        setHandoff({ category: firstCategory, concern });
+      }
     } catch (error) {
       setFailedMessage(clean);
       toast.error((error as Error).message || "Repara couldn't answer just now.");
@@ -87,6 +97,28 @@ function AskRepara() {
       setBusy(false);
     }
   }
+
+  /**
+   * Quote handoff: open the existing request flow with this Garage vehicle,
+   * the recognised service and the driver's concern already filled in. The
+   * driver still reviews and submits — nothing is sent from here.
+   */
+  useEffect(() => {
+    if (!handoff || !vehicleId) return;
+    const serviceKey = requestServiceKeyFor(handoff.category);
+    const timer = window.setTimeout(() => {
+      void navigate({
+        to: "/quote",
+        search: {
+          ...(isServiceKey(serviceKey) ? { service: serviceKey } : {}),
+          cat: handoff.category,
+          v: vehicleId,
+          concern: handoff.concern.slice(0, 500),
+        },
+      });
+    }, 1400);
+    return () => window.clearTimeout(timer);
+  }, [handoff, vehicleId, navigate]);
 
   if (isLoading) {
     return (
@@ -156,6 +188,9 @@ function AskRepara() {
             {turn.content}
           </div>
         ))}
+        {handoff && (
+          <p className="text-sm text-muted-foreground">Opening your quote request…</p>
+        )}
         {busy && <p className="text-sm text-muted-foreground">Repara is thinking…</p>}
         {failedMessage && !busy ? (
           <div className="border border-border bg-card p-4">
