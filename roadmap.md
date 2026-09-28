@@ -48,4 +48,4 @@
 - [x] My Car matches Garage cards
 - [x] Signed-in confirmation leads with View Request
 - [x] Diagnosis "What did you find?" prompt; color-coded Findings (green/yellow/red)
-- [ ] Quote overview regrouping + full mobile sweep — next pass
+- [x] Customer quote: total + action first, notes before line items, line items collapsible; public pages checked at phone width

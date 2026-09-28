@@ -121,8 +121,33 @@ function PublicQuote() {
               )}
             </section>
 
+            <section className="surface-panel flex items-end justify-between gap-4 p-5">
+              <div>
+                <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">Quoted total</p>
+                <p className="mt-1 font-display text-3xl font-extrabold tabular-nums">{formatCurrency(query.data.quote.estimatedTotal)}</p>
+              </div>
+              {query.data.quote.status === "sent" && !query.data.expired ? (
+                <p className="text-right text-xs text-muted-foreground">Your approval is needed<br />before work begins</p>
+              ) : null}
+            </section>
+
+            {query.data.quote.customerNotes && (
+              <section className="surface-panel p-5">
+                <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">
+                  Notes from your technician
+                </p>
+                <p className="mt-2 text-sm whitespace-pre-line">{query.data.quote.customerNotes}</p>
+              </section>
+            )}
+
             {query.data.items.length > 0 && (
-              <section className="surface-panel divide-y divide-border p-0">
+              <details className="surface-panel group p-0">
+                <summary className="flex cursor-pointer items-center justify-between p-4 text-sm font-medium">
+                  <span>Line items ({query.data.items.length})</span>
+                  <span className="text-xs text-muted-foreground group-open:hidden">Show details</span>
+                  <span className="hidden text-xs text-muted-foreground group-open:inline">Hide</span>
+                </summary>
+                <div className="divide-y divide-border border-t border-border">
                 {query.data.items.map((item) => (
                   <div key={item.id} className="flex items-start justify-between gap-4 p-4">
                     <div>
@@ -134,7 +159,8 @@ function PublicQuote() {
                     <span className="text-sm tabular-nums">{formatCurrency(item.lineTotal)}</span>
                   </div>
                 ))}
-              </section>
+                </div>
+              </details>
             )}
 
             <PriceSummary
@@ -145,15 +171,6 @@ function PublicQuote() {
               tax={query.data.quote.taxTotal}
               total={query.data.quote.estimatedTotal}
             />
-
-            {query.data.quote.customerNotes && (
-              <section className="surface-panel p-5">
-                <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">
-                  Notes from your technician
-                </p>
-                <p className="mt-2 text-sm whitespace-pre-line">{query.data.quote.customerNotes}</p>
-              </section>
-            )}
 
             <p className="text-xs leading-relaxed text-muted-foreground">
               Final pricing may change if additional issues are discovered or the requested service
