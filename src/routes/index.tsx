@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { ArrowRight, Wrench, BadgeCheck, Car } from "lucide-react";
+import { ArrowRight, Car, Sparkles, Wrench } from "lucide-react";
 
 import heroVehicle from "@/assets/hero-vehicle.jpg";
 import { Logo } from "@/components/brand/Logo";
@@ -18,17 +18,17 @@ import { LegalLinks } from "@/components/legal/LegalPage";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Repara — Your car, understood." },
+      { title: "Repara — Everything your car needs, in one place." },
       {
         name: "description",
         content:
-          "Keep your vehicle, maintenance, service history, trusted guidance, and real service requests connected in one place.",
+          "Know your car. Understand what it needs. Find the right service when you need it — garage, guidance and service requests together.",
       },
-      { property: "og:title", content: "Repara — Your car, understood." },
+      { property: "og:title", content: "Repara — Everything your car needs, in one place." },
       {
         property: "og:description",
         content:
-          "A connected home for your vehicle, service history, guidance, and care.",
+          "Your car, understood. Garage, AI guidance and real service in one place.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -45,10 +45,10 @@ const STEP_KEYS = [
   { title: "home.steps.s4t", copy: "home.steps.s4c" },
 ];
 
-const TRUST_INDICATORS = [
-  { icon: Wrench, key: "years" },
-  { icon: BadgeCheck, key: "ase" },
-  { icon: Car, key: "brands" },
+const PILLARS = [
+  { icon: Car, key: "car" },
+  { icon: Sparkles, key: "ask" },
+  { icon: Wrench, key: "service" },
 ];
 
 const WHY_KEYS = [
@@ -150,7 +150,7 @@ function Landing() {
             </div>
 
             <ul className="mt-9 grid max-w-2xl grid-cols-1 gap-2.5 sm:mt-10 sm:grid-cols-3 sm:gap-3">
-              {TRUST_INDICATORS.map(({ icon: Icon, key }) => (
+              {PILLARS.map(({ icon: Icon, key }) => (
                 <li
                   key={key}
                   className="flex items-center gap-3 rounded-xl border border-border bg-surface/70 px-4 py-3 backdrop-blur hairline-top"
@@ -158,10 +158,10 @@ function Landing() {
                   <Icon className="size-4 shrink-0 text-chrome" aria-hidden />
                   <span className="min-w-0 leading-tight">
                     <span className="block text-sm font-semibold">
-                      {t(`home.trust.${key}.value`)}
+                      {t(`home.pillars.${key}.value`)}
                     </span>
                     <span className="block text-[11px] tracking-[0.16em] text-muted-foreground uppercase">
-                      {t(`home.trust.${key}.label`)}
+                      {t(`home.pillars.${key}.label`)}
                     </span>
                   </span>
                 </li>
