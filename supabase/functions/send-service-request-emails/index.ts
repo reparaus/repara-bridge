@@ -770,7 +770,8 @@ ${n.link ? button(link, "Open in Repara") : ""}`),
     // (no consent / bad number) the guest still gets the email with their link.
     const phone = toE164(r.phone_e164 ?? r.customers?.phone);
     const smsPossible = !!r.sms_consent_at && !!phone && !!Deno.env.get("TWILIO_ACCOUNT_SID");
-    const channel = pref === "both" ? "both" : pref === "text" ? (smsPossible ? "sms" : "both") : "email";
+    void smsPossible;
+    const channel = pref === "both" ? "both" : pref === "text" ? "sms" : "email";
     const vehicle = [r.vehicles?.year, r.vehicles?.make, r.vehicles?.model].filter(Boolean).join(" ") || `Request ${r.request_number}`;
     const provider = String(item["providerName"] ?? "Your provider").slice(0, 120);
     const total = typeof item["totalCents"] === "number" ? `$${((item["totalCents"] as number) / 100).toFixed(0)}` : "";
