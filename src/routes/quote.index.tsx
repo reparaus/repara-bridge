@@ -203,6 +203,8 @@ type FormState = {
   intakeRound: number;
   /** True while the advisor logic may still add one more round of questions. */
   intakeMayContinue: boolean;
+  /** Index of the first question in the active (unanswered) round. */
+  intakeActiveFrom?: number;
   /** Service-advisor restatement of the answers, for the admin/technician. */
   intakeSummary: string;
 };
@@ -729,6 +731,7 @@ function QuoteFlow() {
       if (round.questions.length) {
         patch({
           intakeQuestions: round.questions,
+          intakeActiveFrom: 0,
           intakeRound: 1,
           intakeMayContinue: round.mayContinue,
         });
@@ -750,7 +753,7 @@ function QuoteFlow() {
       // could still add value, the customer engaged, and we stay under the cap.
       if (
         form.intakeMayContinue &&
-        form.intakeRound < 2 &&
+        form.intakeRound < 3 &&
         answeredCount > 0 &&
         form.intakeQuestions.length < MAX_INTAKE_QUESTIONS
       ) {
@@ -758,11 +761,19 @@ function QuoteFlow() {
         if (round.questions.length) {
           patch({
             intakeQuestions: [...form.intakeQuestions, ...round.questions],
+            intakeActiveFrom: form.intakeQuestions.length,
             intakeRound: form.intakeRound + 1,
-            intakeMayContinue: false,
+            intakeMayContinue: round.mayContinue,
           });
           track("intake_questions_shown", { count: round.questions.length });
-          window.scrollTo({ top: 0, behavior: "smooth" });
+          // Bring the new question into view instead of jumping to the top.
+          window.setTimeout(() => {
+            const el = document.getElementById("intake-active");
+            if (!el) return;
+            const top = el.getBoundingClientRect().top + window.scrollY - 96;
+            window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+            el.focus({ preventScroll: true });
+          }, 60);
           return;
         }
         patch({ intakeMayContinue: false });
@@ -1634,6 +1645,8 @@ function FollowupsStep({
   preparing?: boolean;
 }) {
   const { t } = useI18n();
+  const [editing, setEditing] = useState<string[]>([]);
+  const hasEarlier = (form.intakeActiveFrom ?? 0) > 0;
 
   function setSelection(id: string, next: string[]) {
     patch({ intakeAnswers: { ...form.intakeAnswers, [id]: next } });
@@ -1654,13 +1667,40 @@ function FollowupsStep({
     <div className="space-y-7">
       <div>
         <h1 className="font-display text-3xl font-extrabold">{t("quote.followups.title")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{t("quote.followups.sub")}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t(hasEarlier ? "quote.followups.subMore" : "quote.followups.sub")}
+        </p>
       </div>
 
       {form.intakeQuestions.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("quote.followups.unavailable")}</p>
       ) : (
-        form.intakeQuestions.map((question) => {
+        form.intakeQuestions.map((question, index) => {
+          const activeFrom = form.intakeActiveFrom ?? 0;
+          const completed = index < activeFrom && !editing.includes(question.id);
+          const summaryAnswer =
+            [answerList(form.intakeAnswers[question.id]).join(", "), (form.intakeOther[question.id] ?? "").trim()]
+              .filter(Boolean)
+              .join(" — ") || t("quote.followups.skipped");
+          if (completed) {
+            return (
+              <div key={question.id} className="flex items-start gap-3 rounded-lg border border-border px-4 py-3">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-muted-foreground">{question.question}</p>
+                  <p className="text-sm font-medium">{summaryAnswer}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditing([...editing, question.id])}
+                  className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                >
+                  {t("quote.followups.edit")}
+                </button>
+              </div>
+            );
+          }
+          const isFirstActive = index === activeFrom;
           const selected = answerList(form.intakeAnswers[question.id]);
           const otherText = form.intakeOther[question.id] ?? "";
           const id = `intake-${question.id}`;
@@ -1673,13 +1713,13 @@ function FollowupsStep({
           const otherChosen = !!otherOption && selected.includes(otherOption);
 
           return (
-            <section key={question.id} className="surface-panel space-y-3 p-5">
-              {question.concernLabel && (
-                <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-                  {t("quote.followups.concernLabel", { concern: question.concernLabel })}
-                </p>
-              )}
-              <h2 className="text-sm font-medium">{question.question}</h2>
+            <section
+              key={question.id}
+              id={isFirstActive ? "intake-active" : undefined}
+              tabIndex={isFirstActive ? -1 : undefined}
+              className="surface-panel scroll-mt-24 space-y-3 p-5 outline-none"
+            >
+              <h2 className="text-base font-semibold">{question.question}</h2>
               {multiple && (
                 <p className="text-xs text-muted-foreground">{t("quote.followups.multiHint")}</p>
               )}
