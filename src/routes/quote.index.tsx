@@ -347,7 +347,7 @@ function QuoteFlow() {
     };
   }, [buildId, loadBuildPrefill]);
 
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(startStep === "contact" ? STEP_CONTACT : 0);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [hydrated, setHydrated] = useState(false);
@@ -363,7 +363,9 @@ function QuoteFlow() {
   } | null>(null);
 
   useEffect(() => {
-    const draft = loadDraft();
+    // Deep link to the contact step: skip any saved draft so the opt-in
+    // screen is shown immediately and exactly as a fresh visitor sees it.
+    const draft = startStep === "contact" ? null : loadDraft();
     if (draft?.data) setPendingDraft(draft);
     if (preselectedService) {
       // A specific taxonomy service (tint, detail, tires…) carried in `cat`
