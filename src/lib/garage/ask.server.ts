@@ -38,7 +38,17 @@ export type AskAnswer = {
    * never a diagnosis.
    */
   categories: string[];
+  /** Driver asked Repara to get a quote / find a shop — hand off to the request flow. */
+  wantsQuote: boolean;
 };
+
+/** Plain-language quote / provider intent, so the exact phrase is never required. */
+const QUOTE_INTENT =
+  /\b(quote|quotes|estimate|cotizaci[oó]n|presupuesto|find (me )?(a |someone|somebody)|(a )?shop|mechanic|get (this|it) (fixed|repaired|done)|request (a )?service|send (this|it) out|someone who can)\b/i;
+
+export function detectQuoteIntent(text: string): boolean {
+  return QUOTE_INTENT.test(text);
+}
 
 function renderContext(detail: Detail, language: string): string {
   const lines: string[] = [];
@@ -103,10 +113,11 @@ Rules you must not break:
 - Never invent trouble codes, measurements, bulletin numbers, recall numbers, repair procedures, torque or fluid specifications, or maintenance intervals. If Repara has no source-backed information, say it is not available.
 - Ask AT MOST ONE short follow-up question per reply, and only when the answer would change what you say. Offer 2-4 simple choices plus "Not sure" when choices make sense.
 - When the vehicle likely needs hands-on attention, set suggestService true.
+- If the driver wants a quote, a repair, a shop, or wants Repara to find someone (or says yes to your offer to request a quote), set wants_quote true. Then say plainly you'll set up a quote request for that service on their vehicle using what's already in their Garage — never say it was sent or submitted; they review and submit it themselves. If you cannot tell which service it is, ask one short question instead.
 - Keep the reply under 120 words.
 
 Return ONLY JSON:
-{"reply":"...","follow_up":{"question":"...","options":["..."]}|null,"suggest_service":true|false,"concern_summary":"one short sentence describing the concern in the owner's own terms, or null"}`;
+{"reply":"...","follow_up":{"question":"...","options":["..."]}|null,"suggest_service":true|false,"wants_quote":true|false,"concern_summary":"one short sentence describing the concern in the owner's own terms, or null"}`;
 
 export async function askRepara(input: {
   detail: Detail;
@@ -122,6 +133,7 @@ export async function askRepara(input: {
       suggestService: true,
       concernSummary: input.message.slice(0, 200),
       categories: detectServiceCategories(input.message),
+      wantsQuote: detectQuoteIntent(input.message),
     };
   }
 
@@ -154,9 +166,11 @@ export async function askRepara(input: {
           : null,
       suggestService: Boolean(json['suggest_service']),
       concernSummary: json['concern_summary'] ? String(json['concern_summary']) : null,
+      // Include earlier driver turns so "get me a quote" keeps the brake concern.
       categories: detectServiceCategories(
-        `${input.message} ${String(json['concern_summary'] ?? "")}`,
+        `${input.turns.filter((t) => t.role === "driver").map((t) => t.content).join(" ")} ${input.message} ${String(json['concern_summary'] ?? "")}`,
       ),
+      wantsQuote: Boolean(json['wants_quote']) || detectQuoteIntent(input.message),
     };
   } catch (error) {
     console.error("[ask-repara] failed", (error as Error).message);
@@ -167,6 +181,7 @@ export async function askRepara(input: {
       suggestService: true,
       concernSummary: input.message.slice(0, 200),
       categories: detectServiceCategories(input.message),
+      wantsQuote: detectQuoteIntent(input.message),
     };
   }
 }
