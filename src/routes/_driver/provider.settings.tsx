@@ -138,6 +138,18 @@ function ProviderSettings() {
         <Button asChild variant="outline" className="mt-4 h-11 w-full">
           <Link to="/garage">Go to my garage</Link>
         </Button>
+        <Button
+          variant="ghost"
+          className="mt-3 h-11 w-full text-muted-foreground"
+          onClick={async () => {
+            await queryClient.cancelQueries();
+            queryClient.clear();
+            await supabase.auth.signOut();
+            navigate({ to: "/provider/login", replace: true });
+          }}
+        >
+          Sign out
+        </Button>
       </div>
     </ProviderShell>
   );
