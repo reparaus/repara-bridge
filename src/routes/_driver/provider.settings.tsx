@@ -32,6 +32,7 @@ export const Route = createFileRoute("/_driver/provider/settings")({
 });
 
 function ProviderSettings() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const load = useServerFn(getMyProviderFn);
   const setStatus = useServerFn(setMyProviderStatusFn);
