@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
+
+import { supabase } from "@/integrations/supabase/client";
 
 import { ContactChannelSettings } from "@/components/common/ContactChannelSettings";
 import { EmailPreferences } from "@/components/common/EmailPreferences";
@@ -30,6 +32,7 @@ export const Route = createFileRoute("/_driver/provider/settings")({
 });
 
 function ProviderSettings() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const load = useServerFn(getMyProviderFn);
   const setStatus = useServerFn(setMyProviderStatusFn);
@@ -134,6 +137,18 @@ function ProviderSettings() {
         </p>
         <Button asChild variant="outline" className="mt-4 h-11 w-full">
           <Link to="/garage">Go to my garage</Link>
+        </Button>
+        <Button
+          variant="ghost"
+          className="mt-3 h-11 w-full text-muted-foreground"
+          onClick={async () => {
+            await queryClient.cancelQueries();
+            queryClient.clear();
+            await supabase.auth.signOut();
+            navigate({ to: "/provider/login", replace: true });
+          }}
+        >
+          Sign out
         </Button>
       </div>
     </ProviderShell>
