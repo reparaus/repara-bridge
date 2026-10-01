@@ -385,6 +385,7 @@ export const getMyRequest = createServerFn({ method: "POST" })
       })),
       invites: ((invites.data ?? []) as any[]).map((i: any): { providerId: string; status: string } => ({ providerId: String(i.provider_id), status: String(i.status) })),
       quotes: ((quotes.data ?? []) as any[]).map(mapQuote),
+      quoteLines: await customerQuoteLines(db, ((quotes.data ?? []) as any[]).map((q) => String(q.id))),
       events: ((events.data ?? []) as any[]).map((e: any): { kind: string; actor: string; providerId: string | null; createdAt: string } => ({
         kind: String(e.kind),
         actor: String(e.actor),

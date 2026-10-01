@@ -362,6 +362,7 @@ export const getGuestRequest = createServerFn({ method: "POST" })
         area: [p.city, p.region].filter(Boolean).join(", ") || null,
         inviteStatus: String(((invites.data ?? []) as any[]).find((i) => String(i.provider_id) === String(p.id))?.status ?? "invited"),
       })),
+      quoteLines: await (await import("./provider-quotes.functions")).customerQuoteLines(db, ((quotes.data ?? []) as any[]).map((q) => String(q.id))),
       quotes: ((quotes.data ?? []) as any[]).map((q) => ({
         id: String(q.id),
         providerId: String(q.provider_id),
