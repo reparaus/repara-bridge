@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { formatCents } from "@/lib/money";
 import { getMyRequest, respondToQuote } from "@/lib/provider-quotes.functions";
+import { QuoteLines } from "@/components/common/QuoteLines";
 import { serviceCategoryLabel } from "@/lib/service-network";
 
 export const Route = createFileRoute("/_driver/garage/request/$id")({
@@ -149,6 +150,7 @@ function RequestTracking() {
                     {q.feesCents > 0 && (<><dt className="text-muted-foreground">Other fees</dt><dd className="text-right">{formatCents(q.feesCents)}</dd></>)}
                     {q.taxCents > 0 && (<><dt className="text-muted-foreground">Tax</dt><dd className="text-right">{formatCents(q.taxCents)}</dd></>)}
                   </dl>
+                  <QuoteLines quoteId={q.id} lines={data.quoteLines} />
                   {q.timeframe && <p className="mt-2 text-sm text-muted-foreground">Timing: {q.timeframe}</p>}
                   {q.warranty && <p className="mt-1 text-sm text-muted-foreground">Warranty: {q.warranty}</p>}
                   {q.notes && <p className="mt-2 whitespace-pre-line text-sm text-foreground">{q.notes}</p>}

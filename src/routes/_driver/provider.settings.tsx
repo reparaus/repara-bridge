@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ContactChannelSettings } from "@/components/common/ContactChannelSettings";
 import { EmailPreferences } from "@/components/common/EmailPreferences";
 import { ServicePricing } from "@/components/provider/ServicePricing";
+import { LaborRateSetting } from "@/components/provider/LaborRateSetting";
 import { ProviderShell, ProviderStatusPill } from "@/components/provider/ProviderShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -114,6 +115,11 @@ function ProviderSettings() {
       <section className="mt-6">
         <p className="mb-2 text-sm font-medium text-foreground">Services &amp; preset pricing</p>
         <ServicePricing />
+      </section>
+
+      <section className="mt-6">
+        <p className="mb-2 text-sm font-medium text-foreground">Labor rate</p>
+        <LaborRateSetting />
       </section>
 
       <section className="mt-6">

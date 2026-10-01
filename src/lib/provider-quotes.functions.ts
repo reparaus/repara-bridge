@@ -113,6 +113,18 @@ export const getProviderBrief = createServerFn({ method: "POST" })
       zip: (b.zip_code as string | null) ?? null,
       locationType: (b.location_type as string | null) ?? null,
       vehicleLabel: [b.vehicle?.year, b.vehicle?.make, b.vehicle?.model, b.vehicle?.trim].filter(Boolean).join(" "),
+      // VIN is intentionally never part of the provider brief.
+      vehicle: {
+        year: (b.vehicle?.year as number | null) ?? null,
+        make: (b.vehicle?.make as string | null) ?? null,
+        model: (b.vehicle?.model as string | null) ?? null,
+        trim: (b.vehicle?.trim as string | null) ?? null,
+        engine: engineLabel(b.vehicle),
+        fuelType: (b.vehicle?.fuel_type as string | null) ?? null,
+        drivetrain: b.vehicle?.drivetrain && b.vehicle.drivetrain !== "unknown" ? String(b.vehicle.drivetrain).toUpperCase() : null,
+      },
+      laborRateCents: await myLaborRate(context),
+      items: await ownQuoteItems(context, ((b.quotes ?? []) as any[]).map((q) => String(q.id))),
       build: b.build
         ? {
             name: String(b.build.name),
@@ -170,6 +182,153 @@ export const submitProviderQuote = createServerFn({ method: "POST" })
     return { id: String(id) };
   });
 
+export type ProviderQuoteItem = {
+  quoteId: string;
+  kind: "part" | "labor" | "fee";
+  name: string;
+  quantity: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+  brand: string | null;
+  partNumber: string | null;
+  providerUnitCostCents: number | null;
+  supplier: string | null;
+  laborHours: number | null;
+  laborRateCents: number | null;
+};
+
+function engineLabel(v: any): string | null {
+  if (!v) return null;
+  const disp = Number(v.engine_displacement);
+  const parts = [
+    Number.isFinite(disp) && disp > 0 ? `${disp}L` : null,
+    v.cylinder_count ? `${v.cylinder_count}-cyl` : null,
+    v.engine_code || null,
+    v.is_hybrid ? "Hybrid" : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" ") : null;
+}
+
+async function myLaborRate(context: { supabase: unknown; userId: string }): Promise<number | null> {
+  const { data } = await asDb(context.supabase).from("service_providers").select("labor_rate_cents").eq("owner_user_id", context.userId).maybeSingle();
+  return (data?.labor_rate_cents as number | null) ?? null;
+}
+
+/** RLS limits these rows (incl. private cost/supplier) to the owning provider. */
+async function ownQuoteItems(context: { supabase: unknown }, quoteIds: string[]): Promise<ProviderQuoteItem[]> {
+  if (!quoteIds.length) return [];
+  const { data } = await asDb(context.supabase).from("provider_quote_items").select("*").in("quote_id", quoteIds).order("sort_order");
+  return ((data ?? []) as any[]).map((i) => ({
+    quoteId: String(i.quote_id),
+    kind: i.kind,
+    name: String(i.name),
+    quantity: Number(i.quantity),
+    unitPriceCents: Number(i.unit_price_cents),
+    lineTotalCents: Number(i.line_total_cents),
+    brand: i.brand ?? null,
+    partNumber: i.part_number ?? null,
+    providerUnitCostCents: i.provider_unit_cost_cents ?? null,
+    supplier: i.supplier ?? null,
+    laborHours: i.labor_hours === null ? null : Number(i.labor_hours),
+    laborRateCents: i.labor_rate_cents ?? null,
+  }));
+}
+
+export type CustomerQuoteLine = { quoteId: string; kind: string; name: string; quantity: number; unitPriceCents: number; lineTotalCents: number };
+
+/** Customer-safe lines (no cost/supplier) via the definer projection. */
+export async function customerQuoteLines(db: unknown, quoteIds: string[]): Promise<CustomerQuoteLine[]> {
+  if (!quoteIds.length) return [];
+  const { data, error } = await asDb(db).rpc("provider_quote_customer_items", { _quote_ids: quoteIds });
+  if (error) return []; // e.g. 0026 not applied yet — totals still render
+  return ((data ?? []) as any[]).map((i) => ({
+    quoteId: String(i.quote_id),
+    kind: String(i.kind),
+    name: String(i.name),
+    quantity: Number(i.quantity),
+    unitPriceCents: Number(i.unit_price_cents),
+    lineTotalCents: Number(i.line_total_cents),
+  }));
+}
+
+const lineSchema = z.object({
+  kind: z.enum(["part", "labor", "fee"]),
+  name: z.string().trim().min(1).max(200),
+  quantity: z.number().positive().max(10000),
+  unitPriceCents: cents,
+  brand: z.string().max(120).default(""),
+  partNumber: z.string().max(120).default(""),
+  providerUnitCostCents: cents.nullable().default(null),
+  supplier: z.string().max(120).default(""),
+  laborHours: z.number().min(0).max(1000).nullable().default(null),
+  laborRateCents: cents.nullable().default(null),
+});
+
+export const submitProviderQuoteLines = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        requestId: z.string().uuid(),
+        items: z.array(lineSchema).min(1).max(60),
+        taxCents: cents,
+        notes: z.string().max(2000).default(""),
+        timeframe: z.string().max(200).default(""),
+        warranty: z.string().max(500).default(""),
+        fitmentConfirmed: z.boolean(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: id, error } = await asDb(context.supabase).rpc("submit_provider_quote_lines", {
+      _request_id: data.requestId,
+      _items: data.items.map((i) => ({
+        kind: i.kind,
+        name: i.name,
+        quantity: i.quantity,
+        unit_price_cents: i.unitPriceCents,
+        brand: i.brand,
+        part_number: i.partNumber,
+        provider_unit_cost_cents: i.providerUnitCostCents,
+        supplier: i.supplier,
+        labor_hours: i.laborHours,
+        labor_rate_cents: i.laborRateCents,
+      })),
+      _tax: data.taxCents,
+      _notes: data.notes,
+      _timeframe: data.timeframe,
+      _warranty: data.warranty,
+      _fitment_confirmed: data.fitmentConfirmed,
+    });
+    if (error) {
+      if (String(error.message ?? "").includes("Confirm part fitment")) fail("Confirm part fitment before sending.", error);
+      friendly(error, "Couldn't send the quote.");
+    }
+    try {
+      const notify = await import("./notify.server");
+      await notify.dispatchNotifications(await notify.quoteSentItems(String(id)));
+    } catch (e) {
+      console.error("[notify] quote delivery failed", e);
+    }
+    return { id: String(id) };
+  });
+
+export const saveLaborRate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ laborRateCents: cents.nullable() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { error } = await asDb(context.supabase)
+      .from("service_providers")
+      .update({ labor_rate_cents: data.laborRateCents })
+      .eq("owner_user_id", context.userId);
+    if (error) fail("Couldn't save your labor rate.", error);
+    return { ok: true };
+  });
+
+export const getLaborRate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => ({ laborRateCents: await myLaborRate(context) }));
+
 export const declineProviderInvite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ requestId: z.string().uuid(), reason: z.string().max(500).default("") }).parse(d))
@@ -226,6 +385,7 @@ export const getMyRequest = createServerFn({ method: "POST" })
       })),
       invites: ((invites.data ?? []) as any[]).map((i: any): { providerId: string; status: string } => ({ providerId: String(i.provider_id), status: String(i.status) })),
       quotes: ((quotes.data ?? []) as any[]).map(mapQuote),
+      quoteLines: await customerQuoteLines(db, ((quotes.data ?? []) as any[]).map((q) => String(q.id))),
       events: ((events.data ?? []) as any[]).map((e: any): { kind: string; actor: string; providerId: string | null; createdAt: string } => ({
         kind: String(e.kind),
         actor: String(e.actor),
