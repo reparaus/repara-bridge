@@ -46,6 +46,9 @@ function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  // Set when sign-up reveals the email already has an account.
+  const [accountExists, setAccountExists] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -53,12 +56,27 @@ function SignIn() {
     });
   }, [navigate, next]);
 
+  async function resetPassword() {
+    const target = email.trim();
+    if (!target) {
+      toast.error("Enter your email first, then tap Forgot password.");
+      return;
+    }
+    setResetting(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: `${window.location.origin}/admin/reset-password`,
+    });
+    setResetting(false);
+    if (error) toast.error(error.message || "Couldn't send the reset email.");
+    else toast.success("If that email has an account, a reset link is on its way.");
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
@@ -67,6 +85,14 @@ function SignIn() {
           },
         });
         if (error) throw error;
+        // With email confirmation on, signing up an already-registered email
+        // returns a user with no identities (no error, no email sent). Detect
+        // that placeholder response and guide the user to sign in instead.
+        if (data.user && (data.user.identities?.length ?? 0) === 0) {
+          setAccountExists(true);
+          return;
+        }
+        setAccountExists(false);
         const { data: session } = await supabase.auth.getSession();
         if (!session.session) {
           toast.success("Check your email to confirm your account, then sign in.");
@@ -108,6 +134,37 @@ function SignIn() {
             : "Sign in to open your garage."}
         </p>
 
+        {accountExists ? (
+          <div className="mt-6 space-y-3 rounded-xl border border-border bg-surface p-4">
+            <p className="text-sm text-foreground">
+              An account already exists with this email. Try signing in instead, or reset your
+              password if you don't remember it.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                className="h-11 flex-1"
+                onClick={() => {
+                  setAccountExists(false);
+                  setPassword("");
+                  setMode("signin");
+                }}
+              >
+                Sign in
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 flex-1"
+                disabled={resetting}
+                onClick={() => void resetPassword()}
+              >
+                {resetting ? "Sending…" : "Reset password"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         <form onSubmit={submit} className="mt-6 space-y-4">
           {mode === "signup" && (
             <div className="space-y-1.5">
@@ -128,7 +185,10 @@ function SignIn() {
               type="email"
               required
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setAccountExists(false);
+              }}
               autoComplete="email"
               className="h-12"
             />
@@ -151,9 +211,23 @@ function SignIn() {
           </Button>
         </form>
 
+        {mode === "signin" ? (
+          <button
+            type="button"
+            onClick={() => void resetPassword()}
+            disabled={resetting}
+            className="mt-4 self-start text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            {resetting ? "Sending…" : "Forgot password?"}
+          </button>
+        ) : null}
+
         <button
           type="button"
-          onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
+          onClick={() => {
+            setAccountExists(false);
+            setMode(mode === "signup" ? "signin" : "signup");
+          }}
           className="mt-6 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
         >
           {mode === "signup" ? "I already have an account" : "I need an account"}
