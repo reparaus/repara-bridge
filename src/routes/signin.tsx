@@ -134,6 +134,37 @@ function SignIn() {
             : "Sign in to open your garage."}
         </p>
 
+        {accountExists ? (
+          <div className="mt-6 space-y-3 rounded-xl border border-border bg-surface p-4">
+            <p className="text-sm text-foreground">
+              An account already exists with this email. Try signing in instead, or reset your
+              password if you don't remember it.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                className="h-11 flex-1"
+                onClick={() => {
+                  setAccountExists(false);
+                  setPassword("");
+                  setMode("signin");
+                }}
+              >
+                Sign in
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 flex-1"
+                disabled={resetting}
+                onClick={() => void resetPassword()}
+              >
+                {resetting ? "Sending…" : "Reset password"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         <form onSubmit={submit} className="mt-6 space-y-4">
           {mode === "signup" && (
             <div className="space-y-1.5">
@@ -154,7 +185,10 @@ function SignIn() {
               type="email"
               required
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setAccountExists(false);
+              }}
               autoComplete="email"
               className="h-12"
             />
@@ -177,9 +211,23 @@ function SignIn() {
           </Button>
         </form>
 
+        {mode === "signin" ? (
+          <button
+            type="button"
+            onClick={() => void resetPassword()}
+            disabled={resetting}
+            className="mt-4 self-start text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            {resetting ? "Sending…" : "Forgot password?"}
+          </button>
+        ) : null}
+
         <button
           type="button"
-          onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
+          onClick={() => {
+            setAccountExists(false);
+            setMode(mode === "signup" ? "signin" : "signup");
+          }}
           className="mt-6 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
         >
           {mode === "signup" ? "I already have an account" : "I need an account"}
