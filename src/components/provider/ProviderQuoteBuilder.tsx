@@ -33,6 +33,7 @@ export function ProviderQuoteBuilder({
   categoryKey,
   notes,
   laborRateCents,
+  presetLaborCents,
   revising,
   onDone,
   onCancel,
@@ -44,6 +45,7 @@ export function ProviderQuoteBuilder({
   categoryKey: string | null;
   notes: string | null;
   laborRateCents: number | null;
+  presetLaborCents?: number | null;
   revising: boolean;
   onDone: () => void;
   onCancel: () => void;
@@ -53,7 +55,7 @@ export function ProviderQuoteBuilder({
   const [parts, setParts] = useState<PartRow[]>([]);
   const [hours, setHours] = useState("");
   const [rate, setRate] = useState(laborRateCents !== null ? (laborRateCents / 100).toFixed(2) : "");
-  const [manualLabor, setManualLabor] = useState("");
+  const [manualLabor, setManualLabor] = useState(presetLaborCents ? (presetLaborCents / 100).toFixed(2) : "");
   const [fees, setFees] = useState<FeeRow[]>([]);
   const [tax, setTax] = useState("");
   const [timeframe, setTimeframe] = useState("");
