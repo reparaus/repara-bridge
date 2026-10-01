@@ -117,6 +117,11 @@ function ProviderSettings() {
       </section>
 
       <section className="mt-6">
+        <p className="mb-2 text-sm font-medium text-foreground">Labor rate</p>
+        <LaborRateSetting />
+      </section>
+
+      <section className="mt-6">
         <p className="mb-2 text-sm font-medium text-foreground">Notifications</p>
         <ContactChannelSettings audience="provider" />
         <div className="mt-3" />

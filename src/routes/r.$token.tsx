@@ -12,6 +12,7 @@ import { getGuestRequest, guestRespondToQuote, sendGuestMessage } from "@/lib/me
 import { formatCents } from "@/lib/money";
 import { serviceCategoryLabel } from "@/lib/service-network";
 import { cn } from "@/lib/utils";
+import { QuoteLines } from "@/components/common/QuoteLines";
 
 /** Secure request-specific page for customers without an account. */
 export const Route = createFileRoute("/r/$token")({
@@ -131,6 +132,7 @@ function GuestRequest() {
                 {q.feesCents > 0 && (<><dt className="text-muted-foreground">Other fees</dt><dd className="text-right">{formatCents(q.feesCents)}</dd></>)}
                 {q.taxCents > 0 && (<><dt className="text-muted-foreground">Tax</dt><dd className="text-right">{formatCents(q.taxCents)}</dd></>)}
               </dl>
+              <QuoteLines quoteId={q.id} lines={data.quoteLines} />
               {q.timeframe && <p className="mt-2 text-sm text-muted-foreground">Timing: {q.timeframe}</p>}
               {q.warranty && <p className="mt-1 text-sm text-muted-foreground">Warranty: {q.warranty}</p>}
               {q.notes && <p className="mt-2 whitespace-pre-line text-sm text-foreground">{q.notes}</p>}
