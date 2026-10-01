@@ -46,6 +46,9 @@ function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  // Set when sign-up reveals the email already has an account.
+  const [accountExists, setAccountExists] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -53,12 +56,27 @@ function SignIn() {
     });
   }, [navigate, next]);
 
+  async function resetPassword() {
+    const target = email.trim();
+    if (!target) {
+      toast.error("Enter your email first, then tap Forgot password.");
+      return;
+    }
+    setResetting(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: `${window.location.origin}/admin/reset-password`,
+    });
+    setResetting(false);
+    if (error) toast.error(error.message || "Couldn't send the reset email.");
+    else toast.success("If that email has an account, a reset link is on its way.");
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
@@ -67,6 +85,14 @@ function SignIn() {
           },
         });
         if (error) throw error;
+        // With email confirmation on, signing up an already-registered email
+        // returns a user with no identities (no error, no email sent). Detect
+        // that placeholder response and guide the user to sign in instead.
+        if (data.user && (data.user.identities?.length ?? 0) === 0) {
+          setAccountExists(true);
+          return;
+        }
+        setAccountExists(false);
         const { data: session } = await supabase.auth.getSession();
         if (!session.session) {
           toast.success("Check your email to confirm your account, then sign in.");
