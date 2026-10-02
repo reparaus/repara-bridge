@@ -117,9 +117,18 @@ export function ProviderBusinessSection({ values, set, language = "en" }: Sectio
 }
 
 /** Step 2 — how a driver reaches you, and where you work. */
-export function ProviderContactSection({ values, set }: SectionProps) {
+export type ContactPart = "contact" | "location" | "format" | "coverage";
+const ALL_CONTACT_PARTS: ContactPart[] = ["contact", "location", "format", "coverage"];
+
+export function ProviderContactSection({
+  values,
+  set,
+  parts = ALL_CONTACT_PARTS,
+}: SectionProps & { parts?: ContactPart[] }) {
+  const show = (part: ContactPart) => parts.includes(part);
   return (
     <div className="space-y-5">
+      {show("contact") && (<>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="phone">Phone</Label>
@@ -164,7 +173,9 @@ export function ProviderContactSection({ values, set }: SectionProps) {
           className="h-12 text-base"
         />
       </div>
+      </>)}
 
+      {show("location") && (
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="city">City</Label>
@@ -196,7 +207,9 @@ export function ProviderContactSection({ values, set }: SectionProps) {
           />
         </div>
       </div>
+      )}
 
+      {show("format") && (
       <div className="space-y-3 rounded-2xl border border-border/70 bg-card p-4">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -219,7 +232,9 @@ export function ProviderContactSection({ values, set }: SectionProps) {
           />
         </div>
       </div>
+      )}
 
+      {show("coverage") && (
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="radius">How far do you travel? (miles)</Label>
@@ -242,6 +257,7 @@ export function ProviderContactSection({ values, set }: SectionProps) {
           />
         </div>
       </div>
+      )}
     </div>
   );
 }
