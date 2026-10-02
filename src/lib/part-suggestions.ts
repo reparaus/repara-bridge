@@ -28,9 +28,15 @@ const TEXT_HINTS: [RegExp, string][] = [
   [/tire/i, "tires"],
 ];
 
-export function suggestParts(categoryKey: string | null, services: string[]): string[] {
+/** Service categories a request touches (request category + text hints). */
+export function relatedCategories(categoryKey: string | null, services: string[]): string[] {
   const keys = new Set<string>();
-  if (categoryKey && BY_CATEGORY[categoryKey]) keys.add(categoryKey);
+  if (categoryKey) keys.add(categoryKey);
   for (const s of services) for (const [re, k] of TEXT_HINTS) if (re.test(s)) keys.add(k);
+  return [...keys];
+}
+
+export function suggestParts(categoryKey: string | null, services: string[]): string[] {
+  const keys = new Set(relatedCategories(categoryKey, services).filter((k) => BY_CATEGORY[k]));
   return [...new Set([...keys].flatMap((k) => BY_CATEGORY[k] ?? []))].slice(0, 8);
 }

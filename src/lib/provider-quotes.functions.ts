@@ -262,6 +262,9 @@ const lineSchema = z.object({
   supplier: z.string().max(120).default(""),
   laborHours: z.number().min(0).max(1000).nullable().default(null),
   laborRateCents: cents.nullable().default(null),
+  operationKey: z.string().max(80).nullable().default(null),
+  laborTimeSource: z.enum(["reference", "licensed", "repara_observed", "provider_default", "manual"]).nullable().default(null),
+  suggestedLaborHours: z.number().min(0).max(1000).nullable().default(null),
 });
 
 export const submitProviderQuoteLines = createServerFn({ method: "POST" })
@@ -293,6 +296,9 @@ export const submitProviderQuoteLines = createServerFn({ method: "POST" })
         supplier: i.supplier,
         labor_hours: i.laborHours,
         labor_rate_cents: i.laborRateCents,
+        operation_key: i.operationKey,
+        labor_time_source: i.laborTimeSource,
+        suggested_labor_hours: i.suggestedLaborHours,
       })),
       _tax: data.taxCents,
       _notes: data.notes,
