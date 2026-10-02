@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_KINDS } from "@/lib/provider-kinds";
 import { groupedCategories } from "@/lib/service-network";
+import { isValidTravelRadius, TRAVEL_RADIUS_OPTIONS } from "@/lib/geo/geo";
 import { cn } from "@/lib/utils";
 
 export type ProviderFormValues = {
@@ -126,6 +127,14 @@ export function ProviderContactSection({
   parts = ALL_CONTACT_PARTS,
 }: SectionProps & { parts?: ContactPart[] }) {
   const show = (part: ContactPart) => parts.includes(part);
+  const mobileOnly = values.offersMobile && !values.offersInShop;
+  const both = values.offersMobile && values.offersInShop;
+  const zipLabel = mobileOnly ? "Base ZIP code" : both ? "Shop / base ZIP code" : "Service ZIP code";
+  const zipHelp = mobileOnly
+    ? "Where you usually start from. Used with your travel radius below."
+    : both
+      ? "Your shop location. Customers can visit you here, and your travel radius below applies to mobile jobs."
+      : "Customers travel to your location, so we'll use your service ZIP to help match you with nearby requests.";
   return (
     <div className="space-y-5">
       {show("contact") && (<>
