@@ -264,6 +264,21 @@ export async function getPublicProvider(db: Db, providerId: string) {
   if (!data) return null;
   const relations = await loadRelations(db, providerId);
   const profile = toProfile(data, relations.categories, relations.areas);
+  // Only the provider's standard public labor rate; private pricing defaults
+  // (warranty, shop supplies, disposal) are deliberately never selected here.
+  let laborRateCents: number | null = null;
+  try {
+    const { data: rate } = await db
+      .from("service_providers")
+      .select("labor_rate_cents")
+      .eq("id", providerId)
+      .eq("status", "active")
+      .maybeSingle();
+    const value = (rate as { labor_rate_cents?: number | null } | null)?.labor_rate_cents;
+    laborRateCents = typeof value === "number" && value > 0 ? value : null;
+  } catch {
+    laborRateCents = null;
+  }
   // Customer-facing shape: no internal fields, no fabricated signals.
   return {
     id: profile.id,
@@ -283,6 +298,7 @@ export async function getPublicProvider(db: Db, providerId: string) {
     hours: profile.hours,
     categories: profile.categories,
     areas: profile.areas,
+    laborRateCents,
   };
 }
 
