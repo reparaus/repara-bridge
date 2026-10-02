@@ -1982,8 +1982,8 @@ function Confirmation({
           {outsideArea
             ? t("quote.confirm.bodyOutside", { zip: snapshot.zipCode.trim().slice(0, 5) })
             : lang === "es"
-              ? "Tu solicitud fue enviada a los proveedores de Repara adecuados."
-              : "Your request has been sent to relevant Repara providers."}
+              ? "Puedes ver tu solicitud y seguir las cotizaciones de los proveedores desde aquí."
+              : "You can view your request and track provider quotes from here."}
         </p>
 
         <div className="surface-panel mt-8 space-y-4 p-5 text-left">

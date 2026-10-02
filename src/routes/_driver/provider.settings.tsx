@@ -8,7 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { ContactChannelSettings } from "@/components/common/ContactChannelSettings";
 import { EmailPreferences } from "@/components/common/EmailPreferences";
 import { ServicePricing } from "@/components/provider/ServicePricing";
-import { PricingSettings } from "@/components/provider/PricingSettings";
 import { ProviderShell, ProviderStatusPill } from "@/components/provider/ProviderShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -117,9 +116,14 @@ function ProviderSettings() {
         <ServicePricing />
       </section>
 
-      <section className="mt-6">
-        <p className="mb-2 text-sm font-medium text-foreground">Pricing &amp; rates</p>
-        <PricingSettings />
+      <section className="mt-6 rounded-2xl border border-border/70 bg-card p-5">
+        <p className="text-sm font-medium text-foreground">Pricing &amp; rates</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Your labor rate and quote defaults now live with your profile.
+        </p>
+        <Button asChild variant="outline" className="mt-4 h-11 w-full">
+          <Link to="/provider/profile">Edit pricing &amp; rates</Link>
+        </Button>
       </section>
 
       <section className="mt-6">

@@ -106,10 +106,8 @@ function PublicProviderProfile() {
                   {provider.businessName}
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {providerKindLabel(provider.providerKind)}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
                   {[
+                    providerKindLabel(provider.providerKind),
                     provider.offersMobile ? "Comes to you" : null,
                     provider.offersInShop ? "In-shop" : null,
                   ]
@@ -134,9 +132,14 @@ function PublicProviderProfile() {
             </Button>
 
             {provider.description && (
-              <p className="mt-8 whitespace-pre-line text-base leading-relaxed text-foreground">
-                {provider.description}
-              </p>
+              <section className="mt-8">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  About
+                </h2>
+                <p className="mt-3 whitespace-pre-line text-base leading-relaxed text-foreground">
+                  {provider.description}
+                </p>
+              </section>
             )}
 
             {provider.categories.length > 0 && (
@@ -156,6 +159,21 @@ function PublicProviderProfile() {
                 </div>
               </section>
             )}
+
+            {provider.laborRateCents ? (
+              <section className="mt-8">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Labor rate
+                </h2>
+                <p className="mt-3 text-2xl font-semibold text-foreground">
+                  ${(provider.laborRateCents / 100).toFixed(provider.laborRateCents % 100 ? 2 : 0)}
+                  <span className="text-base font-normal text-muted-foreground">/hr</span>
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Standard labor rate. Final pricing depends on the vehicle, parts, and work required.
+                </p>
+              </section>
+            ) : null}
 
             <section className="mt-8">
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
