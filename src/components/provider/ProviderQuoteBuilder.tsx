@@ -203,26 +203,62 @@ export function ProviderQuoteBuilder({
       )}
 
       {step === 2 && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="hours">Hours</Label>
-              <Input id="hours" className="mt-1 h-11" inputMode="decimal" placeholder="1.5" value={hours} onChange={(e) => setHours(e.target.value)} aria-invalid={!Number.isFinite(h) || h < 0} />
+        <div className="space-y-4">
+          <div className="rounded-xl bg-secondary/60 p-3 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">Labor rate</span>
+              {overrideRate ? (
+                <Input aria-label="Labor rate for this quote" className="h-9 w-28" inputMode="decimal" placeholder="$0" value={rate} onChange={(e) => setRate(e.target.value)} aria-invalid={rateCents === null} />
+              ) : (
+                <span className="font-medium text-foreground">{savedRate !== null ? `${formatCents(savedRate)} / hr` : "Not set"}</span>
+              )}
             </div>
-            <div>
-              <Label htmlFor="rate">Rate / hr</Label>
-              <Input id="rate" className="mt-1 h-11" inputMode="decimal" placeholder="$0" value={rate} onChange={(e) => setRate(e.target.value)} aria-invalid={rateCents === null} />
-            </div>
+            <button type="button" className="mt-1 text-xs text-primary underline-offset-2 hover:underline" onClick={() => { if (overrideRate) setRate(savedRate !== null ? (savedRate / 100).toFixed(2) : ""); setOverrideRate((v) => !v); }}>
+              {overrideRate ? "Use my saved rate" : savedRate !== null ? "Override for this quote only" : "Enter a rate for this quote"}
+            </button>
           </div>
-          {useRate ? (
-            <p className="text-sm text-foreground">{h} hr × {formatCents(rateCents!)} = {formatCents(laborTotal)}</p>
-          ) : (
+
+          {labor.map((row, i) => (
+            <LaborOperationRow
+              key={row.id}
+              row={row}
+              vehicle={vehicle}
+              rateCents={rateCents}
+              onChange={(patch) => setLabor((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))}
+              onRemove={() => setLabor((rows) => rows.filter((_, j) => j !== i))}
+            />
+          ))}
+
+          {operations.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground">Add a repair operation</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[...operations].sort((a, b) => Number(b.related) - Number(a.related)).slice(0, showAllOps ? undefined : 6).map((op) => {
+                  const added = labor.some((l) => l.operationKey === op.key);
+                  return (
+                    <Button key={op.key} type="button" size="sm" variant={added ? "secondary" : "outline"} disabled={added} onClick={() => setLabor((r) => [...r, newLabor(op.key, op.name)])}>
+                      {added ? "✓ " : "+ "}{op.name}
+                    </Button>
+                  );
+                })}
+                {operations.length > 6 && (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllOps((v) => !v)}>{showAllOps ? "Fewer" : "More…"}</Button>
+                )}
+              </div>
+            </div>
+          )}
+          <Button type="button" variant="outline" className="h-10" onClick={() => setLabor((r) => [...r, newLabor(null, "")])}>
+            <Plus className="h-4 w-4" /> Add other labor
+          </Button>
+
+          {!hasRate && (
             <div>
               <Label htmlFor="manualLabor">Labor amount</Label>
               <Input id="manualLabor" className="mt-1 h-11" inputMode="decimal" placeholder="$0" value={manualLabor} onChange={(e) => setManualLabor(e.target.value)} aria-invalid={manualCents === null} />
-              <p className="mt-1 text-xs text-muted-foreground">Or enter hours and a rate to calculate it.</p>
+              <p className="mt-1 text-xs text-muted-foreground">No labor rate set — enter the labor total, or set a rate above to calculate it from hours.</p>
             </div>
           )}
+          <p className="text-sm font-medium text-foreground">Labor total {formatCents(laborTotal)}{hasRate && laborHours > 0 ? ` · ${laborHours} hr × ${formatCents(rateCents!)}` : ""}</p>
         </div>
       )}
 
