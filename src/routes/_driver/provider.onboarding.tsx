@@ -12,6 +12,7 @@ import {
   ProviderServicesSection,
   type ProviderFormValues,
 } from "@/components/provider/ProviderForm";
+import { PricingSettings } from "@/components/provider/PricingSettings";
 import { Button } from "@/components/ui/button";
 import { getMyProviderFn, saveMyProviderFn, setMyProviderStatusFn } from "@/lib/provider.functions";
 import { useI18n } from "@/lib/i18n";
@@ -37,6 +38,7 @@ const STEPS = [
   { title: "Your business", hint: "Tell drivers who you are." },
   { title: "Contact & service area", hint: "How drivers reach you, and where you work." },
   { title: "Services you offer", hint: "Only what you actually do." },
+  { title: "Pricing & rates", hint: "Optional — used to fill in new quotes. You can change it later in Settings." },
 ] as const;
 
 function ProviderOnboarding() {
@@ -147,6 +149,7 @@ function ProviderOnboarding() {
         {step === 0 && <ProviderBusinessSection values={values} set={set} language={lang} />}
         {step === 1 && <ProviderContactSection values={values} set={set} language={lang} />}
         {step === 2 && <ProviderServicesSection values={values} set={set} language={lang} />}
+        {step === 3 && <PricingSettings />}
       </div>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -160,8 +163,8 @@ function ProviderOnboarding() {
             className="h-12 flex-1 text-base"
             disabled={!canContinue || mutation.isPending}
             onClick={() => {
-              mutation.mutate(false);
-              setStep(step + 1);
+              const next = step + 1;
+              mutation.mutate(false, { onSuccess: () => setStep(next) });
             }}
           >
             Continue
