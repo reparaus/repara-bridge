@@ -108,7 +108,28 @@ function GuestRequest() {
         <Line label="Submitted" value={new Date(data.createdAt).toLocaleString()} />
       </div>
 
-      <h2 className="mt-8 text-sm font-semibold text-foreground">Quotes</h2>
+      <h2 className="mt-8 text-sm font-semibold text-foreground">Estimated price range</h2>
+      <div className="mt-2 rounded-2xl border border-border/60 bg-card p-5 text-sm">
+        {data.estimate.available ? (
+          <>
+            <p className="text-2xl font-semibold text-foreground">
+              {data.estimate.lowCents === data.estimate.highCents
+                ? `About ${formatCents(data.estimate.lowCents)}`
+                : `${formatCents(data.estimate.lowCents)}–${formatCents(data.estimate.highCents)}`}
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              For {data.estimate.operationName}, based on vehicle-specific labor time, provider labor rates and estimated parts pricing.
+            </p>
+          </>
+        ) : (
+          <p className="text-muted-foreground">An estimate isn't available yet for this request. Providers will send their actual prices.</p>
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">
+          This is an estimate, not a final quote. Actual provider pricing may be higher or lower depending on the provider, parts selected, vehicle condition, and additional findings.
+        </p>
+      </div>
+
+      <h2 className="mt-8 text-sm font-semibold text-foreground">Provider quotes</h2>
       {data.quotes.length === 0 ? (
         <p className="mt-2 rounded-2xl border border-border/60 bg-card p-5 text-sm text-muted-foreground">
           {data.providers.length ? "No quotes yet. We'll email you when a provider responds." : "Repara is finding providers for this work."}

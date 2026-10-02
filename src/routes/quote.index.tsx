@@ -2075,9 +2075,16 @@ function Confirmation({
           <>
             <div className="mt-8 space-y-3">
               {viewToken ? (
-                <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
-                  <Link to="/r/$token" params={{ token: viewToken }}>{lang === "es" ? "Ver solicitud" : "View Request"}</Link>
-                </Button>
+                <>
+                  <p className="text-center text-sm text-muted-foreground">
+                    {lang === "es"
+                      ? "Estamos enviando tu solicitud a proveedores compatibles. Ve tu precio estimado (si está disponible) en tu solicitud."
+                      : "We're sending your request to matching providers. See your estimated price range, when available, on your request."}
+                  </p>
+                  <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
+                    <Link to="/r/$token" params={{ token: viewToken }}>{lang === "es" ? "Ver mi solicitud" : "View My Request"}</Link>
+                  </Button>
+                </>
               ) : null}
               <Button asChild size="lg" variant={viewToken ? "ghost" : "default"} className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
                 <Link to="/">{t("quote.confirm.backHome")}</Link>
