@@ -283,7 +283,25 @@ export async function persistQuoteRequest(data: QuoteInput) {
     ...(data.providerId ? { provider_id: data.providerId } : {}),
     ...(data.serviceCategoryKey ? { service_category_key: data.serviceCategoryKey } : {}),
     ...(submissionId ? { submission_id: submissionId } : {}),
+    // 0028: optional customer distance preference for in-shop providers.
+    ...(data.details.providerDistanceMiles ? { provider_distance_miles: data.details.providerDistanceMiles } : {}),
   });
+
+  // Database without 0028 yet: save the request without the preference.
+  if (requestError && /provider_distance_miles/i.test(requestError.message ?? "") && data.details.providerDistanceMiles) {
+    ({ data: request, error: requestError } = await insertRequest({
+      ...baseRequest,
+      service_area_status: area.status,
+      city: area.city,
+      preferred_language: data.preferredLanguage,
+      intake_followups: data.intakeFollowups,
+      preferred_contact_method: data.contact.preferredContactMethod,
+      ...smsFields,
+      ...(data.providerId ? { provider_id: data.providerId } : {}),
+      ...(data.serviceCategoryKey ? { service_category_key: data.serviceCategoryKey } : {}),
+      ...(submissionId ? { submission_id: submissionId } : {}),
+    }));
+  }
 
   // A unique-violation on submission_id means a concurrent copy of the SAME
   // submission (double click / retry) won the race: return that row.

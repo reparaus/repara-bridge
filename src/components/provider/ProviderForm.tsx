@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_KINDS } from "@/lib/provider-kinds";
 import { groupedCategories } from "@/lib/service-network";
+import { isValidTravelRadius, TRAVEL_RADIUS_OPTIONS } from "@/lib/geo/geo";
 import { cn } from "@/lib/utils";
 
 export type ProviderFormValues = {
@@ -126,6 +127,14 @@ export function ProviderContactSection({
   parts = ALL_CONTACT_PARTS,
 }: SectionProps & { parts?: ContactPart[] }) {
   const show = (part: ContactPart) => parts.includes(part);
+  const mobileOnly = values.offersMobile && !values.offersInShop;
+  const both = values.offersMobile && values.offersInShop;
+  const zipLabel = mobileOnly ? "Base ZIP code" : both ? "Shop / base ZIP code" : "Service ZIP code";
+  const zipHelp = mobileOnly
+    ? "Where you usually start from. Used with your travel radius below."
+    : both
+      ? "Your shop location. Customers can visit you here, and your travel radius below applies to mobile jobs."
+      : "Customers travel to your location, so we'll use your service ZIP to help match you with nearby requests.";
   return (
     <div className="space-y-5">
       {show("contact") && (<>
@@ -197,15 +206,17 @@ export function ProviderContactSection({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="postalCode">ZIP</Label>
+          <Label htmlFor="postalCode">{zipLabel}</Label>
           <Input
             id="postalCode"
             value={values.postalCode}
-            onChange={(e) => set({ postalCode: e.target.value })}
+            onChange={(e) => set({ postalCode: e.target.value.replace(/[^\d]/g, "").slice(0, 5) })}
             inputMode="numeric"
+            maxLength={5}
             className="h-12 text-base"
           />
         </div>
+        <p className="text-xs text-muted-foreground sm:col-span-3">{zipHelp}</p>
       </div>
       )}
 
@@ -234,28 +245,32 @@ export function ProviderContactSection({
       </div>
       )}
 
-      {show("coverage") && (
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="radius">How far do you travel? (miles)</Label>
-          <Input
-            id="radius"
-            value={values.serviceRadiusMiles}
-            onChange={(e) => set({ serviceRadiusMiles: e.target.value.replace(/\D/g, "") })}
-            inputMode="numeric"
-            className="h-12 text-base"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="zips">ZIP codes you cover (optional)</Label>
-          <Input
-            id="zips"
-            value={values.areaPostalCodes}
-            onChange={(e) => set({ areaPostalCodes: e.target.value })}
-            placeholder="90601, 90605, 90660"
-            className="h-12 text-base"
-          />
-        </div>
+      {show("coverage") && values.offersMobile && (
+      <div className="space-y-2 rounded-2xl border border-border/70 bg-card p-4">
+        <Label htmlFor="radius">Travel radius</Label>
+        <select
+          id="radius"
+          value={isValidTravelRadius(values.serviceRadiusMiles) ? values.serviceRadiusMiles : ""}
+          onChange={(e) => set({ serviceRadiusMiles: e.target.value })}
+          className="h-12 w-full rounded-md border border-input bg-background px-3 text-base"
+        >
+          <option value="" disabled>
+            Choose a radius
+          </option>
+          {TRAVEL_RADIUS_OPTIONS.map((r) => (
+            <option key={r} value={r}>
+              {r} miles
+            </option>
+          ))}
+        </select>
+        {!isValidTravelRadius(values.serviceRadiusMiles) ? (
+          <p className="text-xs text-destructive">
+            Choose how far you travel. Mobile requests can't be matched to you until a radius is set.
+          </p>
+        ) : null}
+        <p className="text-xs text-muted-foreground">
+          We'll use your base ZIP and travel radius to match you with customers you can reach.
+        </p>
       </div>
       )}
     </div>

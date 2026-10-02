@@ -185,7 +185,7 @@ function ProviderProfileEditor() {
 
         <EditorSection
           title="Service area"
-          hint="Determines which customer requests can be matched to you. Shown on your public page."
+          hint="Your ZIP (and travel radius, if you offer mobile service) decides which nearby requests can be matched to you."
         >
           <ProviderContactSection
             values={values}

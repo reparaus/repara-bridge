@@ -90,12 +90,61 @@ export async function notificationIdsFor(eventKeys: string[]): Promise<NotifyIte
   return ((data ?? []) as { id: string }[]).map((n) => ({ kind: "user" as const, notificationId: String(n.id) }));
 }
 
+/**
+ * Auto-invite (unchanged trigger point): active, non-demo providers that offer
+ * the request's category AND pass the shared ZIP-distance rules in geo.ts.
+ * Closest first, max 10. Never prefix matching; unknown distance never invites.
+ */
+async function inviteGeographicallyEligibleProviders(db: any, requestId: string): Promise<void> {
+  let { data: req, error } = await db
+    .from("service_requests")
+    .select("id, zip_code, service_category_key, provider_distance_miles")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (error) ({ data: req, error } = await db.from("service_requests").select("id, zip_code, service_category_key").eq("id", requestId).maybeSingle());
+  if (error || !req) return;
+  const cat = req.service_category_key;
+  if (!cat || cat === "other") return;
+  const { data: rows } = await db
+    .from("service_providers")
+    .select("id, postal_code, service_radius_miles, offers_mobile, offers_in_shop, is_demo, provider_services!inner(category_key, is_active)")
+    .eq("status", "active")
+    .eq("provider_services.category_key", cat)
+    .eq("provider_services.is_active", true)
+    .limit(500);
+  const { isProviderGeographicallyEligible } = await import("@/lib/geo/geo");
+  const { getZipLookup } = await import("@/lib/geo/zip-location.server");
+  const lookup = await getZipLookup();
+  const picks = ((rows ?? []) as any[])
+    .filter((p) => !p.is_demo)
+    .map((p) => ({
+      id: String(p.id),
+      geo: isProviderGeographicallyEligible(
+        { zip: p.postal_code, offersMobile: Boolean(p.offers_mobile), offersInShop: Boolean(p.offers_in_shop), travelRadiusMiles: p.service_radius_miles ?? null },
+        req.zip_code,
+        lookup,
+        req.provider_distance_miles ?? null,
+      ),
+    }))
+    .filter((p) => p.geo.eligible)
+    .sort((a, b) => (a.geo.distanceMiles ?? 0) - (b.geo.distanceMiles ?? 0))
+    .slice(0, 10);
+  if (!picks.length) return;
+  const { data: inserted, error: insErr } = await db
+    .from("request_provider_invites")
+    .upsert(picks.map((p) => ({ request_id: requestId, provider_id: p.id })), { onConflict: "request_id,provider_id", ignoreDuplicates: true })
+    .select("id");
+  if (insErr) return console.error("[match] invite failed", insErr.message);
+  const n = (inserted ?? []).length;
+  if (n > 0)
+    await db.from("request_events").insert({ request_id: requestId, kind: "providers_invited", actor: "system", detail: { count: n } });
+}
+
 /** Auto-match providers for a new request and email the invited providers. */
 export async function matchAndNotifyProviders(requestId: string): Promise<void> {
   try {
     const db = await admin();
-    const { error } = await db.rpc("match_request_providers", { _request_id: requestId, _limit: 10 });
-    if (error) console.error("[match] failed", error.message);
+    await inviteGeographicallyEligibleProviders(db, requestId);
     const { data } = await db
       .from("notifications")
       .select("id")

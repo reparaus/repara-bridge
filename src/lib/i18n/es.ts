@@ -156,6 +156,12 @@ export const es: Dictionary = {
       zipHint:
         "Vamos hasta ti — el código postal nos permite confirmar que estás en nuestra zona de servicio. La dirección exacta la das al agendar.",
       errZip: "Ingresa un código postal válido",
+      distance: "¿Qué tan lejos irías a un taller?",
+      distanceHint: "Solo aplica a talleres que visitarías. Los proveedores a domicilio igual van hasta ti.",
+      distanceNearby: "Búscame proveedores cercanos",
+      distance10: "A menos de 10 millas",
+      distance25: "A menos de 25 millas",
+      distance50: "A menos de 50 millas",
       notes: "¿Algo más que debamos saber?",
       notesPlaceholder: "Tiempos, trabajos anteriores, síntomas, cualquier detalle que ayude…",
       photos: "Fotos",

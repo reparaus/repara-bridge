@@ -177,6 +177,8 @@ type FormState = {
   answers: Record<string, Record<string, AnswerValue>>;
   mileage: string;
   zipCode: string;
+  /** Optional in-shop distance preference; "" = nearby default. */
+  distanceMiles: "" | "10" | "25" | "50";
   notes: string;
   /** Files stay in browser memory until final submission. */
   photos: File[];
@@ -224,6 +226,7 @@ const EMPTY: FormState = {
   answers: {},
   mileage: "",
   zipCode: "",
+  distanceMiles: "",
   notes: "",
   photos: [],
   firstName: "",
@@ -517,6 +520,7 @@ function QuoteFlow() {
       details: {
         mileage: form.mileage,
         zipCode: form.zipCode,
+        ...(form.distanceMiles ? { providerDistanceMiles: Number(form.distanceMiles) as 10 | 25 | 50 } : {}),
         notes: form.notes,
         photoPaths: [] as string[],
       },
@@ -1567,6 +1571,20 @@ function DetailsStep({
           onChange={(e) => patch({ zipCode: e.target.value })}
           className="h-12"
         />
+      </Field>
+
+      <Field label={t("quote.details.distance")} optional htmlFor="distance" hint={t("quote.details.distanceHint")}>
+        <select
+          id="distance"
+          value={form.distanceMiles ?? ""}
+          onChange={(e) => patch({ distanceMiles: e.target.value as FormState["distanceMiles"] })}
+          className="h-12 w-full rounded-md border border-input bg-background px-3 text-base"
+        >
+          <option value="">{t("quote.details.distanceNearby")}</option>
+          <option value="10">{t("quote.details.distance10")}</option>
+          <option value="25">{t("quote.details.distance25")}</option>
+          <option value="50">{t("quote.details.distance50")}</option>
+        </select>
       </Field>
 
       <Field label={t("quote.details.notes")} optional htmlFor="notes">

@@ -156,6 +156,12 @@ export const en = {
       zipHint:
         "We come to you — ZIP code lets us confirm you're in our service area. You'll provide the exact service address when scheduling.",
       errZip: "Enter a valid ZIP code",
+      distance: "How far would you go to visit a shop?",
+      distanceHint: "Only used for shops you'd visit. Mobile providers still come to you.",
+      distanceNearby: "Find nearby providers for me",
+      distance10: "Within 10 miles",
+      distance25: "Within 25 miles",
+      distance50: "Within 50 miles",
       notes: "Anything else we should know?",
       notesPlaceholder: "Timing, previous work, symptoms, anything else that may help…",
       photos: "Photos",
