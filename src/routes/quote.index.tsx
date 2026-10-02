@@ -2078,8 +2078,12 @@ function Confirmation({
                 <>
                   <p className="text-center text-sm text-muted-foreground">
                     {lang === "es"
-                      ? "Estamos enviando tu solicitud a proveedores compatibles. Ve tu precio estimado (si está disponible) en tu solicitud."
-                      : "We're sending your request to matching providers. See your estimated price range, when available, on your request."}
+                      ? "Tu solicitud está lista."
+                      : "Your request is ready"}
+                    <br />
+                    {lang === "es"
+                      ? "Puedes ver tu solicitud y seguir las cotizaciones de los proveedores desde aquí."
+                      : "You can view your request and track provider quotes from here."}
                   </p>
                   <Button asChild size="lg" className="h-13 w-full rounded-full text-sm tracking-[0.12em]">
                     <Link to="/r/$token" params={{ token: viewToken }}>{lang === "es" ? "Ver mi solicitud" : "View My Request"}</Link>
