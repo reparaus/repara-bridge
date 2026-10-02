@@ -13,7 +13,18 @@ import {
   ProviderServicesSection,
   type ProviderFormValues,
 } from "@/components/provider/ProviderForm";
+import { PricingSettings } from "@/components/provider/PricingSettings";
 import { Button } from "@/components/ui/button";
+
+function EditorSection({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-border/70 bg-card p-5">
+      <h2 className="text-base font-semibold text-foreground">{title}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{hint}</p>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
 import { Skeleton } from "@/components/ui/skeleton";
 import { getMyProviderFn, saveMyProviderFn } from "@/lib/provider.functions";
 import { useI18n } from "@/lib/i18n";
@@ -145,44 +156,67 @@ function ProviderProfileEditor() {
         )}
       </div>
 
-      <div className="mt-6 space-y-8">
-        <section>
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Business
-          </p>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Business information, services and service area appear on your public page. Pricing defaults
+        stay private, except your standard labor rate.
+      </p>
+
+      <div className="mt-6 space-y-6">
+        <EditorSection
+          title="Business information"
+          hint="Shown at the top of your public page."
+        >
           <ProviderBusinessSection values={values} set={set} language={lang} />
-        </section>
+          <div className="mt-5 space-y-2">
+            <p className="text-sm font-medium text-foreground">Service format</p>
+            <ProviderContactSection values={values} set={set} language={lang} parts={["format"]} />
+          </div>
+          <div className="mt-5">
+            <ProviderContactSection values={values} set={set} language={lang} parts={["contact"]} />
+          </div>
+        </EditorSection>
 
-        <section>
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Contact & service area
-          </p>
-          <ProviderContactSection values={values} set={set} language={lang} />
-        </section>
-
-        <section>
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Services
-          </p>
+        <EditorSection
+          title="Services"
+          hint="Shown on your public page and used to decide which requests are relevant to you."
+        >
           <ProviderServicesSection values={values} set={set} language={lang} />
-        </section>
+        </EditorSection>
 
-        <section>
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Hours (optional)
-          </p>
+        <EditorSection
+          title="Service area"
+          hint="Determines which customer requests can be matched to you. Shown on your public page."
+        >
+          <ProviderContactSection
+            values={values}
+            set={set}
+            language={lang}
+            parts={["location", "coverage"]}
+          />
+        </EditorSection>
+
+        <EditorSection title="Hours (optional)" hint="Shown on your public page only when filled in.">
           <ProviderHoursSection values={values} set={set} language={lang} />
-        </section>
+        </EditorSection>
       </div>
 
-      <div className="sticky bottom-20 mt-8 sm:bottom-4">
+      <div className="sticky bottom-20 mt-6 sm:bottom-4">
         <Button
           className="h-12 w-full text-base"
           disabled={mutation.isPending || !dirty}
           onClick={() => mutation.mutate()}
         >
-          {mutation.isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
+          {mutation.isPending ? "Saving…" : dirty ? "Save profile changes" : "Profile saved"}
         </Button>
+      </div>
+
+      <div className="mt-8">
+        <EditorSection
+          title="Pricing & rates"
+          hint="Your standard labor rate is the default on new quotes and is shown on your public page. Warranty, shop supplies and disposal defaults stay private. Saved separately."
+        >
+          <PricingSettings />
+        </EditorSection>
       </div>
     </ProviderShell>
   );
