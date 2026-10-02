@@ -468,26 +468,32 @@ export type MatchedProvider = {
   inShop: boolean;
   services: string[];
   servesArea: "yes" | "unconfirmed";
+  /** How this provider would serve the customer, when known. */
+  mode: "in_shop" | "mobile" | null;
+  /** Approximate miles from the request ZIP, or null when unknown. */
+  distanceMiles: number | null;
+  travelRadiusMiles: number | null;
 };
 
-const zip3 = (z: unknown) => String(z ?? "").replace(/\D/g, "").slice(0, 3);
-
 /**
- * Active providers that offer at least one of the request's services. Area is
- * "yes" only when a listed postal code shares the driver's ZIP prefix; no
- * distances, rankings, availability or ratings are ever computed.
+ * Active providers that offer at least one of the request's services AND pass
+ * the shared geographic rules (src/lib/geo/geo.ts). Sorted closest first; the
+ * customer's optional distance preference caps in-shop distance. Providers
+ * without any ZIP are kept as "not confirmed" so the driver can still choose.
  */
 export const matchProvidersForRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ requestId: z.string().uuid() }).parse(d))
+  .inputValidator((d) =>
+    z
+      .object({ requestId: z.string().uuid(), maxMiles: z.union([z.literal(10), z.literal(25), z.literal(50)]).nullable().optional() })
+      .parse(d),
+  )
   .handler(async ({ data, context }) => {
     const db = asDb(context.supabase);
-    const { data: req, error } = await db
-      .from("service_requests")
-      .select("id, zip_code, service_category_key, build_id")
-      .eq("id", data.requestId)
-      .eq("user_id", context.userId)
-      .maybeSingle();
+    const loadReq = (cols: string) =>
+      db.from("service_requests").select(cols).eq("id", data.requestId).eq("user_id", context.userId).maybeSingle();
+    let { data: req, error } = await loadReq("id, zip_code, service_category_key, build_id, provider_distance_miles");
+    if (error) ({ data: req, error } = await loadReq("id, zip_code, service_category_key, build_id"));
     if (error || !req) fail("Couldn't load your request right now.", error);
     const { serviceRequirements } = await import("@/lib/build-catalog");
     const keys = new Set<string>();
@@ -503,37 +509,57 @@ export const matchProvidersForRequest = createServerFn({ method: "POST" })
     const categories = [...keys];
     const { data: rows, error: pErr } = await db
       .from("service_providers")
-      .select("id, business_name, city, region, postal_code, offers_mobile, offers_in_shop, provider_services(category_key), provider_service_areas(postal_code)")
+      .select("id, business_name, city, region, postal_code, service_radius_miles, offers_mobile, offers_in_shop, provider_services(category_key)")
       .eq("status", "active")
       .eq("is_demo", false)
       .limit(200);
     if (pErr) fail("Provider availability could not be loaded.", pErr);
-    const want = zip3(req.zip_code);
-    const providers: MatchedProvider[] = ((rows ?? []) as any[])
-      .map((p) => {
-        const offered = ((p.provider_services ?? []) as any[]).map((s) => String(s.category_key));
-        const services = categories.length ? offered.filter((k) => keys.has(k)) : [];
-        const zips = [p.postal_code, ...((p.provider_service_areas ?? []) as any[]).map((a) => a.postal_code)].map(zip3).filter(Boolean);
-        return {
-          id: String(p.id),
-          name: String(p.business_name ?? "Provider"),
-          area: [p.city, p.region].filter(Boolean).join(", ") || null,
-          mobile: Boolean(p.offers_mobile),
-          inShop: Boolean(p.offers_in_shop),
-          services,
-          servesArea: (want && zips.includes(want) ? "yes" : "unconfirmed") as MatchedProvider["servesArea"],
-          outOfArea: Boolean(want && zips.length && !zips.includes(want)),
-        };
-      })
-      .filter((p) => p.services.length > 0 && !p.outOfArea)
-      .map(({ outOfArea: _o, ...p }) => p);
+    const { isProviderGeographicallyEligible, normalizeZip } = await import("@/lib/geo/geo");
+    const { getZipLookup } = await import("@/lib/geo/zip-location.server");
+    const lookup = await getZipLookup();
+    const savedPref = req.provider_distance_miles ?? null;
+    const maxMiles = data.maxMiles === undefined ? savedPref : data.maxMiles;
+    const providers: MatchedProvider[] = [];
+    for (const p of (rows ?? []) as any[]) {
+      const offered = ((p.provider_services ?? []) as any[]).map((s) => String(s.category_key));
+      const services = categories.length ? offered.filter((k) => keys.has(k)) : [];
+      if (!services.length) continue;
+      const base = {
+        id: String(p.id),
+        name: String(p.business_name ?? "Provider"),
+        area: [p.city, p.region].filter(Boolean).join(", ") || null,
+        mobile: Boolean(p.offers_mobile),
+        inShop: Boolean(p.offers_in_shop),
+        services,
+        travelRadiusMiles: p.service_radius_miles ?? null,
+      };
+      if (!normalizeZip(p.postal_code)) {
+        providers.push({ ...base, servesArea: "unconfirmed", mode: null, distanceMiles: null });
+        continue;
+      }
+      const geo = isProviderGeographicallyEligible(
+        { zip: p.postal_code, offersMobile: base.mobile, offersInShop: base.inShop, travelRadiusMiles: base.travelRadiusMiles },
+        req.zip_code,
+        lookup,
+        maxMiles,
+      );
+      if (!geo.eligible) continue;
+      providers.push({ ...base, servesArea: "yes", mode: geo.mode, distanceMiles: geo.distanceMiles });
+    }
+    providers.sort((a, b) => (a.distanceMiles ?? Infinity) - (b.distanceMiles ?? Infinity) || a.name.localeCompare(b.name));
     const { data: alert } = await db
       .from("provider_availability_alerts")
       .select("id")
       .eq("service_request_id", data.requestId)
       .eq("status", "active")
       .maybeSingle();
-    return { providers, categories, zip: (req.zip_code as string | null) ?? null, alertActive: Boolean(alert) };
+    return {
+      providers,
+      categories,
+      zip: (req.zip_code as string | null) ?? null,
+      maxMiles: (maxMiles as number | null) ?? null,
+      alertActive: Boolean(alert),
+    };
   });
 
 export const driverInviteProviders = createServerFn({ method: "POST" })
