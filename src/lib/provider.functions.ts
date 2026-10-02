@@ -6,6 +6,7 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { isValidTravelRadius } from "@/lib/geo/geo";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
@@ -77,6 +78,9 @@ export const saveMyProviderFn = createServerFn({ method: "POST" })
       city: data.city || undefined,
       region: data.region || undefined,
       postalCode: data.postalCode || undefined,
+      // Travel radius only applies to mobile service, and only the offered options.
+      serviceRadiusMiles:
+        data.offersMobile && isValidTravelRadius(data.serviceRadiusMiles) ? data.serviceRadiusMiles : undefined,
     };
     const profile = await saveMyProvider(context.supabase as unknown as Db, context.userId, clean);
     return { provider: profile, completion: profileCompletion(profile) };
