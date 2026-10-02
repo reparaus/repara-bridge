@@ -325,7 +325,7 @@ export const getGuestRequest = createServerFn({ method: "POST" })
     const [req, invites, quotes, messages, appt] = await Promise.all([
       db
         .from("service_requests")
-        .select("id, request_number, status, created_at, mileage, notes, service_category_key, services, vehicles(year, make, model, trim)")
+        .select("id, request_number, status, created_at, mileage, notes, service_category_key, services, vehicle_id, vehicles(year, make, model, trim)")
         .eq("id", requestId)
         .maybeSingle(),
       db.from("request_provider_invites").select("provider_id, status").eq("request_id", requestId),
@@ -347,7 +347,24 @@ export const getGuestRequest = createServerFn({ method: "POST" })
       .is("read_at", null);
     const r = req.data;
     const v = r.vehicles;
+    const { estimateForRequest } = await import("./estimate.server");
+    const vid = (r as any).vehicle_id as string | null;
+    const { data: vfull } = vid
+      ? await db.from("vehicles").select("year, make, model, trim, engine_code, engine_displacement, drivetrain").eq("id", vid).maybeSingle()
+      : { data: null };
+    const estimate = await estimateForRequest(db, {
+      categoryKey: (r.service_category_key as string | null) ?? null,
+      vehicle: vfull
+        ? {
+            year: vfull.year ?? null, make: vfull.make ?? null, model: vfull.model ?? null, trim: vfull.trim ?? null,
+            engine: [vfull.engine_displacement ? `${vfull.engine_displacement}` : null, vfull.engine_code].filter(Boolean).join(" ") || null,
+            drivetrain: vfull.drivetrain && vfull.drivetrain !== "unknown" ? String(vfull.drivetrain) : null,
+          }
+        : null,
+      invitedProviderIds: providerIds,
+    });
     return {
+      estimate,
       requestNumber: String(r.request_number),
       status: String(r.status),
       createdAt: String(r.created_at),
