@@ -186,9 +186,9 @@ function PublicProviderProfile() {
                     {[provider.city, provider.region, provider.postalCode].filter(Boolean).join(", ")}
                   </p>
                 )}
-                {provider.serviceRadiusMiles ? (
+                {provider.offersMobile && provider.serviceRadiusMiles ? (
                   <p className="text-muted-foreground">
-                    Travels up to {provider.serviceRadiusMiles} miles
+                    Mobile service · Travels up to {provider.serviceRadiusMiles} miles
                   </p>
                 ) : null}
                 {provider.areas.length > 0 && (

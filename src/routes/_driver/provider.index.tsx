@@ -156,7 +156,11 @@ function ProviderHome() {
               : "Not set yet"}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {provider.serviceRadiusMiles ? `Up to ${provider.serviceRadiusMiles} miles` : ""}
+            {provider.offersMobile
+              ? provider.serviceRadiusMiles && [5, 10, 15, 25, 50].includes(provider.serviceRadiusMiles)
+                ? `Travels up to ${provider.serviceRadiusMiles} miles`
+                : "Set a travel radius so mobile requests can be matched to you"
+              : ""}
             {provider.areas.length ? ` · ${provider.areas.length} ZIP codes listed` : ""}
           </p>
           <p className="mt-2 text-sm text-muted-foreground">

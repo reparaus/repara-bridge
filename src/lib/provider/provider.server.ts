@@ -215,6 +215,9 @@ export function profileCompletion(profile: ProviderProfile) {
       label: "Mobile or in-shop",
       done: profile.offersMobile || profile.offersInShop,
     },
+    ...(profile.offersMobile
+      ? [{ label: "Travel radius (mobile)", done: [5, 10, 15, 25, 50].includes(Number(profile.serviceRadiusMiles)) }]
+      : []),
   ];
   const done = checks.filter((c) => c.done).length;
   return { checks, done, total: checks.length, percent: Math.round((done / checks.length) * 100) };
