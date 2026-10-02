@@ -103,6 +103,8 @@ export const quoteRequestSchema = z.object({
       .trim()
       .regex(/^\d{5}(-\d{4})?$/, "Enter a valid ZIP code"),
     notes: z.string().trim().max(2000).optional().or(z.literal("")),
+    /** Optional: how far the customer will travel to an in-shop provider. */
+    providerDistanceMiles: z.union([z.literal(10), z.literal(25), z.literal(50)]).optional(),
     photoPaths: z.array(z.string().max(300)).max(8).default([]),
   }),
   contact: z
