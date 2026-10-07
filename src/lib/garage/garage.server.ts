@@ -32,6 +32,18 @@ export function normalizeVin(vin: string | null | undefined): string | null {
   return clean.length ? clean : null;
 }
 
+/**
+ * The account's email ONLY when the auth provider has confirmed it. Profile
+ * email/phone are self-entered and never prove who submitted a guest request.
+ */
+export async function verifiedAccountEmail(userId: string): Promise<string | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+  const user = data?.user;
+  if (error || !user?.email || !user.email_confirmed_at) return null;
+  return user.email.trim().toLowerCase();
+}
+
 function maskVin(vin: string | null): string | null {
   const clean = normalizeVin(vin);
   if (!clean) return null;
@@ -300,27 +312,40 @@ export async function addVehicleToGarage(db: Db, userId: string, input: AddVehic
     }
   }
 
-  // A vehicle row may already exist from a GUEST service request. Adopt it only
-  // when no one else actively owns it, so history stays on one canonical record
-  // without ever exposing another driver's vehicle.
+  // A vehicle row may already exist from a GUEST service request, or from this
+  // driver removing the car earlier. A VIN match alone never proves ownership,
+  // so an existing row is reused only when no OTHER account has ever had it in
+  // a garage (no silent hand-over between owners) AND either this driver had it
+  // before, or its guest contact email equals this account's CONFIRMED email.
+  // Otherwise the driver gets a fresh vehicle record.
   let vehicleId: string | null = null;
+  let adopted: Row | null = null;
   if (vin) {
     const { data: candidates } = await service
       .from("vehicles")
-      .select("id")
+      .select("*, customers(email)")
       .eq("vin_normalized", vin)
       .order("created_at", { ascending: true })
       .limit(10);
 
+    let accountEmail: string | null | undefined;
     for (const candidate of (candidates ?? []) as Row[]) {
-      const { data: owners } = await service
+      const { data: links } = await service
         .from("garage_vehicles")
-        .select("id")
-        .eq("vehicle_id", candidate['id'])
-        .is("ownership_ended_at", null)
-        .limit(1);
-      if (!owners?.length) {
+        .select("user_id")
+        .eq("vehicle_id", candidate['id']);
+      const linkUsers = ((links ?? []) as Row[]).map((l) => String(l['user_id']));
+      if (linkUsers.some((id) => id !== userId)) continue;
+
+      let proven = linkUsers.includes(userId);
+      if (!proven) {
+        if (accountEmail === undefined) accountEmail = await verifiedAccountEmail(userId);
+        const customerEmail = String(candidate['customers']?.['email'] ?? "").trim().toLowerCase();
+        proven = Boolean(accountEmail && customerEmail && customerEmail === accountEmail);
+      }
+      if (proven) {
         vehicleId = String(candidate['id']);
+        adopted = candidate;
         break;
       }
     }
@@ -343,8 +368,26 @@ export async function addVehicleToGarage(db: Db, userId: string, input: AddVehic
     updated_at: new Date().toISOString(),
   };
 
-  if (vehicleId) {
-    await service.from("vehicles").update(fields).eq("id", vehicleId);
+  if (vehicleId && adopted) {
+    // Keep the adopted record's identity; only fill details it is missing.
+    const patch: Row = {};
+    for (const [key, value] of Object.entries(fields)) {
+      if (key === "vin" || key === "updated_at") continue;
+      const current = adopted[key];
+      const missing =
+        current === null ||
+        current === undefined ||
+        (key === "drivetrain" && current === "unknown") ||
+        (key === "decoded_vehicle_metadata" && !Object.keys(current ?? {}).length);
+      const useful = value !== null && value !== undefined && !(key === "drivetrain" && value === "unknown");
+      if (missing && useful) patch[key] = value;
+    }
+    if (Object.keys(patch).length) {
+      await service
+        .from("vehicles")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", vehicleId);
+    }
   } else {
     const { data: created, error } = await service
       .from("vehicles")
@@ -377,12 +420,16 @@ export async function addVehicleToGarage(db: Db, userId: string, input: AddVehic
   return { vehicleId, reused: false as const };
 }
 
-export async function removeVehicleFromGarage(db: Db, userId: string, vehicleId: string) {
-  const { error } = await db
+export async function removeVehicleFromGarage(_db: Db, userId: string, vehicleId: string) {
+  // Ending ownership is server-only (0029): drivers can't edit
+  // ownership_ended_at, so an ended link can never be reactivated by them.
+  const service = await admin();
+  const { error } = await service
     .from("garage_vehicles")
-    .update({ ownership_ended_at: new Date().toISOString() })
+    .update({ ownership_ended_at: new Date().toISOString(), is_primary: false })
     .eq("user_id", userId)
-    .eq("vehicle_id", vehicleId);
+    .eq("vehicle_id", vehicleId)
+    .is("ownership_ended_at", null);
   if (error) throw new Error(error.message);
   return { ok: true as const };
 }

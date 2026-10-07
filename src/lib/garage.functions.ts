@@ -22,6 +22,7 @@ import {
   removeVehicleFromGarage,
   setPrimaryVehicle,
   updateProfile,
+  verifiedAccountEmail,
 } from "@/lib/garage/garage.server";
 import { askRepara, type AskTurn } from "@/lib/garage/ask.server";
 import { buildVehicleIntelligence, renderIntelligence } from "@/lib/garage/intelligence.server";
@@ -334,17 +335,15 @@ export const getServiceRequestPrefill = createServerFn({ method: "POST" })
  * Links previously submitted GUEST requests to this account.
  *
  * Deliberately strict: a VIN match alone is never enough (possession of a VIN
- * does not prove ownership), so the request's contact details must also match
- * the account's verified email or saved phone number.
+ * does not prove ownership), so the request's contact email must also match
+ * the account's CONFIRMED auth email. Profile email/phone are self-entered and
+ * phone numbers are not verified yet, so neither is accepted as proof.
  */
 export const claimMyRequests = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const db = context.supabase as unknown as Db;
-    const profile = await ensureProfile(db, context.userId);
-    const email = String(profile['email'] ?? "").trim().toLowerCase();
-    const phoneDigits = String(profile['phone'] ?? "").replace(/\D/g, "").slice(-10);
-    if (!email && phoneDigits.length < 10) return { claimed: 0 };
+    const email = await verifiedAccountEmail(context.userId);
+    if (!email) return { claimed: 0 };
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const service = supabaseAdmin as unknown as Db;
@@ -369,12 +368,12 @@ export const claimMyRequests = createServerFn({ method: "POST" })
     for (const request of (requests ?? []) as Record<string, any>[]) {
       const customer = request['customers'] as Record<string, any> | null;
       const customerEmail = String(customer?.['email'] ?? "").trim().toLowerCase();
-      const customerPhone = String(customer?.['phone'] ?? "").replace(/\D/g, "").slice(-10);
-      const matches =
-        (email && customerEmail && email === customerEmail) ||
-        (phoneDigits.length === 10 && customerPhone === phoneDigits);
-      if (!matches) continue;
-      await service.from("service_requests").update({ user_id: context.userId }).eq("id", request['id']);
+      if (!customerEmail || customerEmail !== email) continue;
+      await service
+        .from("service_requests")
+        .update({ user_id: context.userId })
+        .eq("id", request['id'])
+        .is("user_id", null);
       claimed += 1;
     }
     return { claimed };
