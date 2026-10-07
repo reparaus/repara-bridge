@@ -10,9 +10,6 @@
  * only reached after an admin explicitly confirms the (editable) question.
  */
 
-const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const DEFAULT_MODEL = "google/gemini-2.5-flash";
-
 export type AiAnalysis = {
   summary: string;
   needs_clarification: boolean;
@@ -147,45 +144,16 @@ function validateAnalysis(raw: string): AiAnalysis {
 }
 
 async function callModel(facts: string): Promise<AiAnalysis> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) throw new Error("AI is not configured (LOVABLE_API_KEY missing).");
-
-  const res = await fetch(GATEWAY_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "Lovable-API-Key": apiKey,
-      "X-Lovable-AIG-SDK": "fetch",
-    },
-    body: JSON.stringify({
-      model: process.env.REPARA_AI_MODEL || DEFAULT_MODEL,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Analyze this Repara service request and reply with the json object only.\n\n${facts}`,
-        },
-      ],
-    }),
+  // Goes through the provider abstraction like every other AI feature, so the
+  // vendor (Gemini, OpenAI, …) is configuration only.
+  const { runJsonCompletion } = await import("@/lib/ai/provider.server");
+  const { text } = await runJsonCompletion({
+    system: SYSTEM_PROMPT,
+    user: `Analyze this Repara service request and reply with the json object only.\n\n${facts}`,
+    maxOutputTokens: 1500,
+    temperature: 0.2,
   });
-
-  const text = await res.text();
-  if (!res.ok) {
-    if (res.status === 429) throw new Error("AI rate limit reached — try again in a moment.");
-    if (res.status === 402) throw new Error("AI credits are exhausted for this workspace.");
-    console.error("[repara-ai] gateway error", res.status, text.slice(0, 300));
-    throw new Error("The AI service returned an error.");
-  }
-
-  let content = "";
-  try {
-    content = JSON.parse(text)?.choices?.[0]?.message?.content ?? "";
-  } catch {
-    throw new Error("The AI service returned an unreadable response.");
-  }
-  return validateAnalysis(content);
+  return validateAnalysis(text);
 }
 
 /**
