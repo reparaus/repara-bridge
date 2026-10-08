@@ -114,7 +114,8 @@ export const findProviders = createServerFn({ method: "POST" })
       specialties: string[];
     };
 
-    const db = context.supabase as unknown as Db;
+    // Provider rows are server-only (0031): public fields via the server client.
+    const db = (await import("@/integrations/supabase/client.server")).supabaseAdmin as unknown as Db;
     const { data: rows, error } = await db
       .from("service_providers")
       .select(

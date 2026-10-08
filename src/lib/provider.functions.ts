@@ -101,31 +101,20 @@ export const findProvidersFn = createServerFn({ method: "POST" })
       .object({ categoryKey: z.string().max(60).optional(), postalCode: z.string().max(12).optional() })
       .parse(data),
   )
-  .handler(async ({ data, context }) => ({
-    providers: await findActiveProviders(context.supabase as unknown as Db, data),
-  }));
+  .handler(async ({ data }) => {
+    // Provider rows are server-only (0031): public fields via the server client.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    return { providers: await findActiveProviders(supabaseAdmin as unknown as Db, data) };
+  });
 
 /**
- * Public provider profile. Uses the publishable key with no session, so only
- * the narrow "active providers are public" policy applies.
+ * Public provider profile. Provider rows are server-only (0031), so this reads
+ * with the server client; getPublicProvider selects only public fields of an
+ * active, non-demo provider.
  */
 export const getProviderPublicFn = createServerFn({ method: "GET" })
   .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
-    const { createClient } = await import("@supabase/supabase-js");
-    const key = process.env['SUPABASE_PUBLISHABLE_KEY']!;
-    const client = createClient(process.env['SUPABASE_URL']!, key, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: {
-        fetch: (input: any, init: any) => {
-          const headers = new Headers(init?.headers);
-          if (key.startsWith("sb_") && headers.get("Authorization") === `Bearer ${key}`) {
-            headers.delete("Authorization");
-          }
-          headers.set("apikey", key);
-          return fetch(input, { ...init, headers });
-        },
-      },
-    });
-    return { provider: await getPublicProvider(client as unknown as Db, data.id) };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    return { provider: await getPublicProvider(supabaseAdmin as unknown as Db, data.id) };
   });

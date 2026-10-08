@@ -153,7 +153,9 @@ export const sendMessage = createServerFn({ method: "POST" })
     const { dispatchNotifications } = await import("./notify.server");
     if (res?.notification_id) await dispatchNotifications([{ kind: "user", notificationId: String(res.notification_id) }]);
     if (res?.guest_recipient) {
-      const { data: p } = await db.from("service_providers").select("business_name").eq("id", data.providerId).maybeSingle();
+      // Provider rows are server-only (0031); read the public name with the server client.
+      const directory = (await import("@/integrations/supabase/client.server")).supabaseAdmin as unknown as Db;
+      const { data: p } = await directory.from("service_providers").select("business_name").eq("id", data.providerId).maybeSingle();
       await dispatchNotifications([
         { kind: "guest", requestId: data.requestId, event: "message_received", ref: String(res.message_id), providerName: p?.business_name ?? undefined },
       ]);

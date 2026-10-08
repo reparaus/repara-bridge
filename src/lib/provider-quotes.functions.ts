@@ -365,8 +365,10 @@ export const getMyRequest = createServerFn({ method: "POST" })
     if (req.error) fail("Couldn't load your request right now.", req.error);
     if (!req.data) throw new Error("Request not found.");
     const providerIds = [...new Set([...(invites.data ?? []), ...(quotes.data ?? [])].map((r: any) => r.provider_id))];
+    // Provider rows are server-only (0031): public fields via the server client.
+    const directory = (await import("@/integrations/supabase/client.server")).supabaseAdmin as unknown as Db;
     const { data: providers } = providerIds.length
-      ? await db
+      ? await directory
           .from("service_providers")
           .select("id, business_name, city, region, offers_mobile, offers_in_shop")
           .in("id", providerIds)
@@ -507,7 +509,9 @@ export const matchProvidersForRequest = createServerFn({ method: "POST" })
       for (const k of serviceRequirements(((mods ?? []) as any[]).filter((m) => m.status !== "removed").map((m) => String(m.item)))) keys.add(k);
     }
     const categories = [...keys];
-    const { data: rows, error: pErr } = await db
+    // Provider rows are server-only (0031): public fields via the server client.
+    const directory = (await import("@/integrations/supabase/client.server")).supabaseAdmin as unknown as Db;
+    const { data: rows, error: pErr } = await directory
       .from("service_providers")
       .select("id, business_name, city, region, postal_code, service_radius_miles, offers_mobile, offers_in_shop, provider_services(category_key)")
       .eq("status", "active")

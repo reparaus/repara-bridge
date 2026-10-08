@@ -263,6 +263,7 @@ export async function getPublicProvider(db: Db, providerId: string) {
     .select(PROVIDER_COLUMNS)
     .eq("id", providerId)
     .eq("status", "active")
+    .eq("is_demo", false)
     .maybeSingle();
   if (!data) return null;
   const relations = await loadRelations(db, providerId);
@@ -339,6 +340,7 @@ export async function findActiveProviders(
     .from("service_providers")
     .select(PROVIDER_COLUMNS)
     .eq("status", "active")
+    .eq("is_demo", false)
     .order("business_name", { ascending: true })
     .limit(50);
   if (ids) query = query.in("id", ids);
