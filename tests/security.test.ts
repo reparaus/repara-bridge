@@ -1,6 +1,6 @@
 /**
- * Guest submission must never alter or redirect an existing customer
- * (security audit #3). Runs the real persistQuoteRequest against an in-memory
+ * Security regression tests (audit #3: guest submissions; audit #6: rate
+ * limits and photo uploads). Runs the real server code against an in-memory
  * database stand-in, so nothing touches Supabase or sends notifications.
  *
  *   bun test
@@ -67,8 +67,20 @@ function table(name: string) {
   return q;
 }
 
+/** Controls what public.consume_rate_limit returns in each test. */
+let rpcResult: { data: unknown; error: { message: string } | null } = { data: true, error: null };
+const rpcCalls: Array<Record<string, unknown>> = [];
+
 mock.module("@/integrations/supabase/client.server", () => ({
-  supabaseAdmin: { from: table, rpc: async () => ({ data: null, error: null }) },
+  supabaseAdmin: {
+    from: table,
+    rpc: async (_fn: string, args: Record<string, unknown>) => (rpcCalls.push(args), rpcResult),
+    storage: {
+      from: () => ({
+        createSignedUploadUrl: async (path: string) => ({ data: { path, token: `token-for-${path}` }, error: null }),
+      }),
+    },
+  },
 }));
 mock.module("@/lib/request-emails.server", () => ({ triggerRequestEmails: async () => {} }));
 mock.module("@/lib/notify.server", () => ({
@@ -78,6 +90,8 @@ mock.module("@/lib/notify.server", () => ({
 
 const { persistQuoteRequest } = await import("../src/lib/quote-submit.server");
 const { quoteRequestSchema } = await import("../src/lib/quote-schema");
+const { createPhotoUploads } = await import("../src/lib/quote-submit.server");
+const { consumeRateLimit, LIMITS } = await import("../src/lib/rate-limit.server");
 
 const VIN = "1HGCV1F30HA000001";
 
@@ -91,6 +105,8 @@ function submission(contact: Record<string, unknown>, vehicle: Record<string, un
 }
 
 beforeEach(() => {
+  rpcResult = { data: true, error: null };
+  rpcCalls.length = 0;
   for (const key of Object.keys(db)) delete db[key];
   db["customers"] = [
     { id: "victim", first_name: "Victim", phone: "(404) 555-1234", email: "victim@example.com", preferred_contact_method: "email" },
@@ -148,5 +164,42 @@ describe("guest submission vs existing customer", () => {
     await persistQuoteRequest(submission({ phone: "404-555-1234", email: "attacker@example.com" }, { make: "Ford" }));
     expect(db["vehicles"]!.find((v) => v.id === "victim-car")!.make).toBe("Honda");
     expect(db["vehicles"]!.length).toBe(2);
+  });
+});
+
+describe("rate limits", () => {
+  test("allowed and blocked follow consume_rate_limit", async () => {
+    expect(await consumeRateLimit("intakeQuestions", "visitor-1")).toBe(true);
+    expect(rpcCalls[0]).toEqual({
+      _key: "intakeQuestions:visitor-1",
+      _max: LIMITS.intakeQuestions.max,
+      _window_seconds: LIMITS.intakeQuestions.windowSeconds,
+    });
+    rpcResult = { data: false, error: null };
+    expect(await consumeRateLimit("intakeQuestions", "visitor-1")).toBe(false);
+  });
+
+  test("a database error fails open", async () => {
+    rpcResult = { data: null, error: { message: "function missing" } };
+    expect(await consumeRateLimit("askRepara", "user-1")).toBe(true);
+  });
+});
+
+describe("photo upload links", () => {
+  test("one random, sanitized path per file", async () => {
+    const { uploads } = await createPhotoUploads([
+      { name: "../../etc/passwd photo.jpg", type: "image/jpeg", size: 1000 },
+      { name: "b.png", type: "image/png", size: 1000 },
+    ]);
+    expect(uploads.length).toBe(2);
+    const [first, second] = uploads.map((u) => u.path);
+    expect(first!.split("/")[0]).toBe(second!.split("/")[0]);
+    expect(first).toMatch(/^[0-9a-f-]{36}\/[0-9a-f-]{36}-\.\._\.\._etc_passwd_photo\.jpg$/);
+    expect(rpcCalls.length).toBe(2);
+  });
+
+  test("refused once the visitor's limit is used up", async () => {
+    rpcResult = { data: false, error: null };
+    await expect(createPhotoUploads([{ name: "a.jpg", type: "image/jpeg", size: 1 }])).rejects.toThrow("Too many photo uploads");
   });
 });

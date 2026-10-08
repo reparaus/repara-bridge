@@ -128,11 +128,15 @@ export async function askRepara(input: {
   language: string;
   /** Vehicle Intelligence summary (active requests, service guidance, with sources). */
   intelligence?: string;
+  /** False when the caller's rate limit is used up; answers without AI. */
+  aiAllowed?: boolean;
 }): Promise<AskAnswer> {
-  if (!isAiConfigured()) {
+  if (!isAiConfigured() || input.aiAllowed === false) {
     return {
       reply:
-        "Repara AI isn't available right now. You can still request service and a technician will read your description.",
+        input.aiAllowed === false
+          ? "You've reached today's Repara AI limit. You can still request service and a technician will read your description."
+          : "Repara AI isn't available right now. You can still request service and a technician will read your description.",
       followUp: null,
       suggestService: true,
       concernSummary: input.message.slice(0, 200),

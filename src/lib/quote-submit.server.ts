@@ -484,6 +484,32 @@ export async function lookupServiceArea(
  * (submission failed or the customer abandoned the flow). Anything already
  * attached to a request is left untouched.
  */
+/**
+ * Issues one-time signed upload links for quote photos, after a per-visitor
+ * rate limit. Paths are random, so a link can't overwrite or target anything
+ * else; the bucket itself enforces type and size (0030).
+ */
+export async function createPhotoUploads(files: { name: string; type: string; size: number }[]) {
+  const { consumeRateLimit, visitorKey } = await import("./rate-limit.server");
+  const visitor = await visitorKey();
+  for (let i = 0; i < files.length; i++) {
+    if (!(await consumeRateLimit("photoUploads", visitor))) {
+      throw new Error("Too many photo uploads right now. Please try again later.");
+    }
+  }
+
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const folder = crypto.randomUUID();
+  const uploads: { path: string; token: string }[] = [];
+  for (const file of files) {
+    const path = `${folder}/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]/g, "_").slice(-80)}`;
+    const { data, error } = await supabaseAdmin.storage.from("request-photos").createSignedUploadUrl(path);
+    if (error || !data) throw new Error("Could not prepare the photo upload.");
+    uploads.push({ path: data.path, token: data.token });
+  }
+  return { uploads };
+}
+
 export async function discardUnusedPhotos(paths: string[]) {
   if (paths.length === 0) return { removed: 0 };
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

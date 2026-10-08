@@ -51,7 +51,8 @@ import {
 import { requestIntakeQuestions, requestIntakeSummary } from "@/lib/intake.functions";
 import { quoteRequestSchema } from "@/lib/quote-schema";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/quote-storage";
-import { discardQuotePhotos, submitQuoteRequest } from "@/lib/quote.functions";
+import { createQuotePhotoUploads, discardQuotePhotos, submitQuoteRequest } from "@/lib/quote.functions";
+import { QUOTE_PHOTO_MAX_BYTES, QUOTE_PHOTO_MAX_FILES, QUOTE_PHOTO_TYPES } from "@/lib/quote-schema";
 import {
   SERVICES,
   SERVICE_QUESTIONS,
@@ -151,8 +152,8 @@ const STEP_SERVICE = 1;
 const STEP_DETAILS = 2;
 const STEP_QUESTIONS = 3;
 const STEP_CONTACT = 4;
-const MAX_PHOTOS = 6;
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+const MAX_PHOTOS = QUOTE_PHOTO_MAX_FILES;
+const MAX_PHOTO_BYTES = QUOTE_PHOTO_MAX_BYTES;
 
 type AnswerValue = string | string[];
 
@@ -258,19 +259,29 @@ function answerList(value: unknown): string[] {
   return text ? [text] : [];
 }
 
-/** Uploads locally held photos at submission time and returns storage paths. */
+/**
+ * Uploads locally held photos at submission time and returns storage paths.
+ * Each photo goes through a one-time upload link from the server (the browser
+ * has no direct write access to storage).
+ */
 async function uploadQuotePhotos(photos: File[]): Promise<string[]> {
   if (photos.length === 0) return [];
-  const folder = crypto.randomUUID();
   const paths: string[] = [];
-  for (const file of photos) {
-    const path = `${folder}/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]/g, "_")}`;
-    const { error } = await supabase.storage.from("request-photos").upload(path, file, {
-      contentType: file.type,
-      upsert: false,
+  try {
+    const { uploads } = await createQuotePhotoUploads({
+      data: { files: photos.map((f) => ({ name: f.name, type: f.type as (typeof QUOTE_PHOTO_TYPES)[number], size: f.size })) },
     });
+    for (const [i, file] of photos.entries()) {
+      const target = uploads[i];
+      if (!target) continue;
+      const { error } = await supabase.storage
+        .from("request-photos")
+        .uploadToSignedUrl(target.path, target.token, file, { contentType: file.type });
+      if (!error) paths.push(target.path);
+    }
+  } catch (error) {
     // A photo failure must never void an otherwise valid request.
-    if (!error) paths.push(path);
+    console.error("[photos] upload failed", error);
   }
   return paths;
 }
@@ -1516,7 +1527,7 @@ function DetailsStep({
     // Files are held in browser memory and only uploaded on final submission.
     const accepted: File[] = [];
     for (const file of selected) {
-      if (!file.type.startsWith("image/")) {
+      if (!(QUOTE_PHOTO_TYPES as readonly string[]).includes(file.type)) {
         toast.error(t("quote.details.photoImagesOnly"));
         continue;
       }

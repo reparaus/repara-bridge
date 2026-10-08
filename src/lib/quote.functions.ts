@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { quoteRequestSchema } from "./quote-schema";
+import { QUOTE_PHOTO_MAX_BYTES, QUOTE_PHOTO_MAX_FILES, QUOTE_PHOTO_TYPES, quoteRequestSchema } from "./quote-schema";
 
 /**
  * Public (unauthenticated) server functions for the customer quote journey.
@@ -16,6 +16,33 @@ export const submitQuoteRequest = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { persistQuoteRequest } = await import("./quote-submit.server");
     return persistQuoteRequest(data);
+  });
+
+/**
+ * One-time upload links for quote photos. The browser can no longer write to
+ * storage on its own (0030), so every photo goes through this rate-limited,
+ * type- and size-checked step.
+ */
+export const createQuotePhotoUploads = createServerFn({ method: "POST" })
+  .inputValidator((data) =>
+    z
+      .object({
+        files: z
+          .array(
+            z.object({
+              name: z.string().trim().min(1).max(200),
+              type: z.enum(QUOTE_PHOTO_TYPES),
+              size: z.number().int().positive().max(QUOTE_PHOTO_MAX_BYTES),
+            }),
+          )
+          .min(1)
+          .max(QUOTE_PHOTO_MAX_FILES),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { createPhotoUploads } = await import("./quote-submit.server");
+    return createPhotoUploads(data.files);
   });
 
 /** Cleans up photos uploaded for a quote that was never submitted. */

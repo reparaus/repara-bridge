@@ -263,7 +263,7 @@ export async function generateIntakeQuestions(context: IntakeContext): Promise<I
 /* --------------------------- concern summarisation -------------------------- */
 
 /** Deterministic fallback: pure restatement of what the customer reported. */
-function fallbackSummary(followups: IntakeFollowup[], language: "en" | "es"): string {
+export function fallbackSummary(followups: IntakeFollowup[], language: "en" | "es"): string {
   const answered = followups.filter((f) => !f.skipped && f.answer.trim());
   if (answered.length === 0) return "";
   const lead = language === "es" ? "El cliente reporta:" : "Customer reports:";

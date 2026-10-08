@@ -285,12 +285,15 @@ export const askReparaFn = createServerFn({ method: "POST" })
     const db = context.supabase as unknown as Db;
     const detail = await getVehicleDetail(db, context.userId, data.vehicleId);
     const intel = await buildVehicleIntelligence(db, context.userId, detail).catch(() => null);
+    const { consumeRateLimit } = await import("@/lib/rate-limit.server");
+    const aiAllowed = await consumeRateLimit("askRepara", context.userId);
     return askRepara({
       detail,
       intelligence: intel ? renderIntelligence(intel) : undefined,
       turns: (data.turns ?? []) as AskTurn[],
       message: data.message,
       language: data.language ?? "en",
+      aiAllowed,
     });
   });
 

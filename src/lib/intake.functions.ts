@@ -6,7 +6,7 @@ import type { IntakeRound } from "@/lib/ai/intake-types";
 /**
  * Public server functions powering AI-assisted customer intake.
  *
- * They are intentionally read-only: they never write to the database, never see
+ * They never write customer data (only a hashed-IP rate-limit counter), never see
  * contact details, and degrade to an empty result on any AI failure so the quote
  * form always stays usable. The AI never diagnoses or prices anything.
  */
@@ -44,6 +44,10 @@ const contextSchema = z.object({
 export const requestIntakeQuestions = createServerFn({ method: "POST" })
   .inputValidator((data) => contextSchema.parse(data))
   .handler(async ({ data }): Promise<IntakeRound> => {
+    const { consumeRateLimit, visitorKey } = await import("@/lib/rate-limit.server");
+    if (!(await consumeRateLimit("intakeQuestions", await visitorKey()))) {
+      return { questions: [], mayContinue: false, degraded: true };
+    }
     const { generateIntakeQuestions } = await import("@/lib/ai/intake.server");
     return generateIntakeQuestions(data);
   });
@@ -72,6 +76,11 @@ const summarySchema = z.object({
 export const requestIntakeSummary = createServerFn({ method: "POST" })
   .inputValidator((data) => summarySchema.parse(data))
   .handler(async ({ data }): Promise<{ summary: string; degraded: boolean }> => {
-    const { summarizeIntake } = await import("@/lib/ai/intake.server");
+    const { consumeRateLimit, visitorKey } = await import("@/lib/rate-limit.server");
+    const { summarizeIntake, fallbackSummary } = await import("@/lib/ai/intake.server");
+    if (!(await consumeRateLimit("intakeSummary", await visitorKey()))) {
+      // Same no-AI restatement the form shows when the AI is unavailable.
+      return { summary: fallbackSummary(data.followups, data.language), degraded: true };
+    }
     return summarizeIntake(data);
   });

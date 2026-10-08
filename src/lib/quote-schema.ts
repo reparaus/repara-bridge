@@ -1,6 +1,11 @@
 import { toE164 } from "@/lib/phone";
 import { z } from "zod";
 
+/** Photo rules shared by the quote form, the upload-link server function and 0030's bucket limits. */
+export const QUOTE_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif"] as const;
+export const QUOTE_PHOTO_MAX_BYTES = 8 * 1024 * 1024;
+export const QUOTE_PHOTO_MAX_FILES = 6;
+
 /** Shared quote-request shape used by the customer form and the server function. */
 
 /** Answers to a service's conditional questions: choice ids or free text. */

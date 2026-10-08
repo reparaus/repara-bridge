@@ -127,6 +127,13 @@ export async function runJsonCompletion(
 ): Promise<JsonCompletionResult> {
   const config = resolveConfig();
 
+  // Hard daily ceiling across every AI feature (cost cap); callers already
+  // degrade gracefully on any ReparaAiError.
+  const { consumeRateLimit } = await import("@/lib/rate-limit.server");
+  if (!(await consumeRateLimit("aiGlobal", "all"))) {
+    throw new ReparaAiError("AI is temporarily unavailable — daily limit reached.", "rate_limited");
+  }
+
   const body: Record<string, unknown> = {
     model: config.model,
     temperature: request.temperature ?? 0.2,
