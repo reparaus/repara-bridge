@@ -9,6 +9,9 @@ import { GarageShell, SectionTitle } from "@/components/garage/GarageShell";
 import { CardSkeletons, LoadError, VehicleHeroSkeleton } from "@/components/garage/GarageSkeletons";
 import { BuildStudio, normalizeVisual } from "@/components/garage/BuildStudio";
 import type { VisualConfig } from "@/components/garage/Build3DViewer";
+import { assetFor } from "@/lib/build3d/assets";
+import { formatTireSize, formatWheel } from "@/lib/build3d/fitment";
+import { stockFitmentFor } from "@/lib/build3d/stock-fitment";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -129,11 +132,20 @@ function BuildPage() {
   const visualMut = useMutation({
     mutationFn: async (c: VisualConfig) => {
       await saveBuild({ data: { buildId, visualConfig: c } });
+      // Mirror studio choices into the build list (with real sizes) so they can be quoted.
       const have = new Set(data?.build.modifications.map((m) => m.item) ?? []);
       const adds: { category: string; item: string; detail: string }[] = [];
-      if (c.wheel !== "stock" && !have.has("wheels")) adds.push({ category: "wheels_tires", item: "wheels", detail: `Style: ${c.wheel === "dark" ? "Dark 5-spoke" : "Racing"} (3D preview)` });
-      if (c.rideHeightIn < 0 && !have.has("springs") && !have.has("coilovers")) adds.push({ category: "suspension", item: "springs", detail: `Lower about ${Math.abs(c.rideHeightIn)} in (3D preview)` });
-      if (c.paint && !have.has("paint")) adds.push({ category: "exterior", item: "paint", detail: `Color ${c.paint} (3D preview)` });
+      if (c.wheelDesign !== "stock" && c.wheelSpec && c.tireSpec && !have.has("wheel_tire_package"))
+        adds.push({
+          category: "wheels_tires",
+          item: "wheel_tire_package",
+          detail: `${formatWheel(c.wheelSpec)} wheels (${c.wheelDesign.replace("_", "-")}, ${c.wheelFinish.replace("_", " ")}) on ${formatTireSize(c.tireSpec)} (3D preview — fitment to be confirmed)`,
+        });
+      if (c.rideHeightIn < 0 && !have.has("springs") && !have.has("coilovers"))
+        adds.push({ category: "suspension", item: "springs", detail: `Lower about ${Math.abs(c.rideHeightIn)} in (3D preview)` });
+      if (c.paint && !have.has("paint")) adds.push({ category: "exterior", item: "paint", detail: `Color ${c.paint}, ${c.paintFinish} (3D preview)` });
+      if (c.tintPct !== null && !have.has("window_tint")) adds.push({ category: "exterior", item: "window_tint", detail: `${c.tintPct}% VLT (3D preview — check local tint laws)` });
+      if (c.hood === "carbon" && !have.has("exterior_other")) adds.push({ category: "exterior", item: "exterior_other", detail: "Carbon fiber hood (3D preview)" });
       for (const a of adds) await add({ data: { buildId, ...a, source: "owner" } });
     },
     onSuccess: async () => { toast.success("Build saved"); await refresh(); },
@@ -159,6 +171,9 @@ function BuildPage() {
   }
 
   const { build, vehicle } = data;
+  const vehicleKey = { year: vehicle?.year ?? null, make: vehicle?.make ?? null, model: vehicle?.model ?? null, trim: vehicle?.trim ?? null };
+  const vehicleAsset = assetFor(vehicleKey);
+  const stockFitment = stockFitmentFor(vehicleKey);
   const open = build.modifications.filter((m) => m.status === "planned");
   const requirements = serviceRequirements(open.map((m) => m.item));
   const vehicleLabel = vehicle ? [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ") : "";
@@ -228,6 +243,8 @@ function BuildPage() {
         <BuildStudio
           vehicleLabel={[vehicle?.year, vehicle?.make, vehicle?.model].filter(Boolean).join(" ") || "car"}
           saved={normalizeVisual(build.visualConfig)}
+          asset={vehicleAsset}
+          stock={stockFitment}
           saving={visualMut.isPending}
           saveFailed={visualMut.isError}
           onSave={(c) => visualMut.mutate(c)}

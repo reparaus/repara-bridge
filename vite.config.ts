@@ -20,7 +20,8 @@ export default defineConfig(({ command, mode }) => ({
             enhancedLogs: { enabled: false },
             consolePiping: { enabled: false },
             removeDevtoolsOnBuild: false,
-            injectSource: { enabled: true },
+            // Off: it stamps data-tsd-source on every JSX element, which React Three Fiber rejects.
+            injectSource: { enabled: false },
           }),
         ]
       : []),

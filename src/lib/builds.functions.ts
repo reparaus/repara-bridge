@@ -6,6 +6,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { normalizeVisual, visualConfigSchema, type VisualConfig } from "@/lib/build3d/visual-config";
+
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { buildItem, isBuildItem, PRESETS, serviceRequirements } from "@/lib/build-catalog";
 
@@ -31,7 +33,7 @@ export type BuildSummary = {
   isActive: boolean;
   budgetCents: number | null;
   notes: string | null;
-  visualConfig: { paint?: string | null; wheel?: string; rideHeightIn?: number } | null;
+  visualConfig: VisualConfig | null;
   modifications: BuildMod[];
   estimate: { totalLow: number; totalHigh: number; currency: string; source: string } | null;
 };
@@ -62,7 +64,7 @@ async function readBuilds(db: Db, vehicleId: string): Promise<BuildSummary[]> {
       isActive: b.is_active,
       budgetCents: b.budget_cents,
       notes: b.notes,
-      visualConfig: b.visual_config ?? null,
+      visualConfig: b.visual_config ? normalizeVisual(b.visual_config) : null,
       modifications: (b.build_modifications ?? [])
         .filter((m: any) => m.status !== "removed")
         .sort((a: any, c: any) => String(a.created_at).localeCompare(String(c.created_at)))
@@ -166,7 +168,7 @@ export const updateBuild = createServerFn({ method: "POST" })
         budgetCents: z.number().int().min(0).max(100_000_000).nullable().optional(),
         makeActive: z.boolean().optional(),
         archive: z.boolean().optional(),
-        visualConfig: z.object({ paint: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable(), wheel: z.enum(["stock", "dark", "racing"]), rideHeightIn: z.number().min(-3).max(0) }).optional(),
+        visualConfig: visualConfigSchema.optional(),
       })
       .parse(d),
   )
