@@ -673,6 +673,32 @@ Current 3D implementation is still experimental and should not be treated as com
 
 ---
 
+# 22a. MOBILE-READINESS RULES (iOS / Android later)
+
+Repara will become a native app (likely React Native / Expo) on the SAME
+backend (Supabase + Cloudflare). Every change should keep that move cheap:
+
+- Business logic lives in plain server modules (`*.server.ts`, e.g.
+  src/lib/garage/garage.server.ts) that take plain inputs. TanStack server
+  functions stay thin wrappers, so a mobile API route can call the same code.
+- Database security (RLS, grants, server-only tables) is the real boundary —
+  a mobile app talks to Supabase directly. Never rely on the web UI to enforce
+  a rule.
+- Shared shapes (zod schemas, constants such as quote-schema.ts) stay free of
+  DOM/React imports so they can move into a shared package.
+- 3D: vehicle models are glTF/GLB files; per-vehicle looks are plain JSON
+  (vehicle_builds.visual_config). Keep rendering code separate from that data
+  so a native renderer (react-three-fiber native, SceneKit/RealityKit,
+  Filament) can reuse the same models and configs. Models will move from
+  public/models to Storage with a DB mapping (make/model/body → model file)
+  when real per-vehicle models arrive.
+- Notifications are channel-based (notification_deliveries); push becomes
+  another channel, not a rewrite.
+- Do not build the mobile app or a public API speculatively; follow these
+  rules as features are touched.
+
+---
+
 # 23. DESIGN DIRECTION
 
 Repara should feel:
