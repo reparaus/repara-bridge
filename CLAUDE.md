@@ -673,6 +673,67 @@ Current 3D implementation is still experimental and should not be treated as com
 
 ---
 
+# 22b. 360° BUILD + CAR SCAN PLAN (agreed direction, October 2026)
+
+Goal: a car-community "future build" in the Garage. The owner spins a 360°
+model of THEIR car and swaps components — wheels, tires, ride height /
+suspension, paint, tint, carbon hood, spoilers, body kits (OEM or, mostly,
+aftermarket) — sees them fitted, and saves the build. Each component maps to
+a real part with real fitment, so a build can become a provider quote, then
+an install, then service history. This is a Repara moat, not a toy.
+
+## Architecture (layers)
+
+1. Identity — VIN decode (exists) → year / make / model / trim / body.
+2. Base 3D model — the VIN picks a clean, LICENSED glTF/GLB model of that
+   exact vehicle. Customization happens on this model, never on a raw scan.
+   Models carry named attachment points ("slots": wheel_FL…, hood, spoiler,
+   bumpers, glass, body paint) so parts swap by slot.
+3. Parts + fitment — every selectable part comes from real catalog/fitment
+   data (wheel diameter/width/offset/bolt pattern, tire sizes, body-part
+   applicability). Never invent fitment (§11, §13).
+4. Part visuals — wheels/tires can be largely procedural (generated from real
+   dimensions + finish); body parts (hoods, spoilers, kits) need per-vehicle
+   3D assets from a licensed source.
+5. Configurator — React Three Fiber today (Build3DViewer.tsx); rules in §22a
+   keep it portable to native. Paint/tint/ride height are material and
+   transform changes driven by visual_config.
+6. Persistence — reuse vehicle_builds (+ visual_config), build_modifications
+   and build_estimates (0019/0021/0022); "Request Actual Quotes" already links
+   a build to a service request.
+7. Customer capture (scan) — personalizes, does not replace, the base model.
+
+## Customer scan / capture — cross-platform by design
+
+- Phase A (any phone, web app today): guided photo walkaround (8–12 set
+  angles) saved to the vehicle as a dated condition record. Uses the secured
+  signed-upload path (0030). Feeds paint color, existing mods, damage.
+- Phase B: VIN-matched base model + configurator (the core build experience).
+- Phase C (native app): guided scan. The phone only CAPTURES (photos/video +
+  ARKit/ARCore pose/depth when available); a cloud GPU service reconstructs,
+  so iPhone and Android/Samsung get the same result (GLB/splat stored per
+  vehicle). iPhone on-device Object Capture is an optional fast path only.
+  Car paint/glass/chrome are hard for photogrammetry — scans are for
+  realism/condition, not the editable model.
+
+## Candidate vendors (to evaluate — NOT partners; verify terms/pricing)
+
+- Wheel/tire fitment + visualization: RideStyler (API, wheel/tire/suspension
+  visualizer, 490+ brands, 82k+ vehicles), Wheel-Size API, DriveRightData.
+- Aftermarket product data: SEMA Data (verify).
+- Licensed vehicle 3D models: TurboSquid (Hum3D/Squir collections; brand use
+  approved case-by-case by automakers), 3DTuning (large tuning library — ask
+  about B2B licensing), or commissioned models for top vehicles.
+- 3D configurator platforms (buy vs build): Threekit.
+- Scan processing: KIRI Engine, Luma AI (enterprise API), Polycam; or
+  self-hosted open-source photogrammetry/splats on a GPU host (Modal/RunPod).
+
+Rules: no scraped models or catalogs; automaker trade dress needs licensed
+assets; no fabricated parts, prices or fitment; start narrow (a few popular
+vehicles) and expand with real data.
+
+---
+
 # 22a. MOBILE-READINESS RULES (iOS / Android later)
 
 Repara will become a native app (likely React Native / Expo) on the SAME
