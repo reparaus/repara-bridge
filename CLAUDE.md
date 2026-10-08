@@ -730,9 +730,10 @@ Architecture:
 - AI: Google Gemini via src/lib/ai/provider.server.ts
 
 Database:
-- migrations 0001–0030 in supabase/external
+- migrations 0001–0031 in supabase/external
 - 0025, 0026 applied; 0027 appears live/applied
 - 0028 exists but was not confirmed/applied
+- 0031 (provider directory lockdown) applied October 2026; anonymous reads of provider tables and is_staff refused (401), public profile verified
 - 0030 (rate limits + upload lockdown) applied October 2026; verified live (limiter, policy removed, anonymous upload refused)
 - 0029 (garage link hardening) applied October 2026; supabase/external/tests/0029_garage_link_hardening.test.sql passed 13/13 on the live database
 
@@ -757,7 +758,7 @@ These are high-priority tasks.
 1. Vehicle IDOR / ownership linking — fixed (0029 + garage code), verified live
 2. VIN-only guest vehicle takeover — fixed with #1
 3. Guest submission overwriting existing customer information — fixed (customer reused only on exact phone+email match, never updated; vehicles never overwritten; tests/quote-submit.test.ts)
-4. Anonymous exposure of provider columns — open
+4. Anonymous exposure of provider columns — fixed (0031: provider tables server-only for non-owners; directory/profile read server-side with public fields; role-probe helpers not callable anonymously)
 5. Broad access to licensed labor/parts pricing — open
 6. Public AI/photo endpoints without sufficient rate limiting — fixed (0030: consume_rate_limit + src/lib/rate-limit.server.ts; signed photo uploads; bucket size/type limits)
 7. Database/repository migration drift — open
