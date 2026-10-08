@@ -733,7 +733,7 @@ Database:
 - migrations 0001–0029 in supabase/external
 - 0025, 0026 applied; 0027 appears live/applied
 - 0028 exists but was not confirmed/applied
-- 0029 (garage link hardening) written on branch security/garage-link-hardening, NOT applied yet: deploy that branch's code first, then apply 0029, then run supabase/external/tests/0029_garage_link_hardening.test.sql
+- 0029 (garage link hardening) applied October 2026; supabase/external/tests/0029_garage_link_hardening.test.sql passed 13/13 on the live database
 
 Important known issues:
 - stale generated Supabase types
@@ -753,8 +753,8 @@ Do not fix all of these at once.
 
 These are high-priority tasks.
 
-1. Vehicle IDOR / ownership linking — fix written (0029 + code), awaiting deploy/apply
-2. VIN-only guest vehicle takeover — same fix as #1
+1. Vehicle IDOR / ownership linking — fixed (0029 + garage code), verified live
+2. VIN-only guest vehicle takeover — fixed with #1
 3. Guest submission potentially overwriting existing customer information — open (claim spoofing part fixed with #1)
 4. Anonymous exposure of provider columns — open
 5. Broad access to licensed labor/parts pricing — open
