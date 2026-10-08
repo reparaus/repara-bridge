@@ -75,28 +75,25 @@ export async function persistQuoteRequest(data: QuoteInput) {
   const emailKey = data.contact.email ? normalizeEmail(data.contact.email) : "";
 
   // ------------------------------------------------------------- customer
-  // Reuse a returning customer's record so their history stays on one profile.
-  // This links records only — it never blocks or merges service requests.
+  // This form is public and nothing here proves who owns a phone number or
+  // email, so an existing customer is reused only when BOTH match, and is never
+  // updated from here (the per-request contact choices are stored on the
+  // request itself). Anything else gets its own customer record, so a
+  // submission can never redirect or alter another customer's details.
   let customerId: string | null = null;
 
-
-  if (phoneKey.length >= 10) {
+  if (phoneKey.length >= 10 && emailKey) {
+    // Look up by email (phones are stored as typed, e.g. "(404) 555-1234"),
+    // then require an exact normalized match on both.
     const { data: rows } = await supabaseAdmin
       .from("customers")
-      .select("id, phone")
-      .ilike("phone", `%${phoneKey.slice(-10)}%`)
-      .limit(20);
-    const hit = (rows ?? []).find((r) => normalizePhone(r.phone ?? "") === phoneKey);
-    if (hit) customerId = hit.id;
-  }
-
-  if (!customerId && emailKey) {
-    const { data: rows } = await supabaseAdmin
-      .from("customers")
-      .select("id, email")
+      .select("id, phone, email")
       .ilike("email", emailKey)
-      .limit(5);
-    if (rows?.length) customerId = rows[0].id;
+      .limit(20);
+    const hit = (rows ?? []).find(
+      (r) => normalizePhone(r.phone ?? "") === phoneKey && normalizeEmail(r.email ?? "") === emailKey,
+    );
+    if (hit) customerId = hit.id;
   }
 
   const customerFields = {
@@ -118,7 +115,6 @@ export async function persistQuoteRequest(data: QuoteInput) {
   // types. Keep this narrow client shim until those types are regenerated.
   const customerStore = supabaseAdmin as unknown as {
     from: (table: "customers") => {
-      update: (row: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<unknown> };
       insert: (row: Record<string, unknown>) => {
         select: (columns: string) => {
           single: () => Promise<{ data: { id: string } | null; error: { message: string } | null }>;
@@ -128,12 +124,7 @@ export async function persistQuoteRequest(data: QuoteInput) {
   };
 
   let createdCustomerId: string | null = null;
-  if (customerId) {
-    await customerStore
-      .from("customers")
-      .update({ ...customerFields, ...smsFields, updated_at: new Date().toISOString() })
-      .eq("id", customerId);
-  } else {
+  if (!customerId) {
     const { data: customer, error } = await customerStore
       .from("customers")
       .insert({ ...customerFields, ...smsFields })
@@ -158,14 +149,18 @@ export async function persistQuoteRequest(data: QuoteInput) {
   let vehicleId: string | null = null;
   let createdVehicleId: string | null = null;
 
+  let existingVehicle: Record<string, unknown> | null = null;
   if (vin) {
     const { data: rows } = await supabaseAdmin
       .from("vehicles")
-      .select("id")
+      .select("*")
       .eq("vin", vin)
       .eq("customer_id", customerId)
       .limit(1);
-    if (rows?.length) vehicleId = rows[0].id;
+    if (rows?.length) {
+      existingVehicle = rows[0] as Record<string, unknown>;
+      vehicleId = String(existingVehicle["id"]);
+    }
   }
 
   const vehicleFields = {
@@ -189,11 +184,23 @@ export async function persistQuoteRequest(data: QuoteInput) {
     mileage: data.details.mileage,
   };
 
-  if (vehicleId) {
-    await supabaseAdmin
-      .from("vehicles")
-      .update({ ...vehicleFields, updated_at: new Date().toISOString() })
-      .eq("id", vehicleId);
+  if (vehicleId && existingVehicle) {
+    // A guest submission never rewrites a known vehicle's identity: it only
+    // fills details the record is missing. This request's mileage is kept on
+    // the request itself.
+    const patch: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(vehicleFields)) {
+      const current = existingVehicle[key];
+      const missing = current === null || current === undefined || (key === "drivetrain" && current === "unknown");
+      const useful = value !== null && value !== undefined && value !== "" && !(key === "drivetrain" && value === "unknown");
+      if (missing && useful) patch[key] = value;
+    }
+    if (Object.keys(patch).length) {
+      await supabaseAdmin
+        .from("vehicles")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", vehicleId);
+    }
   } else {
     const { data: vehicle, error } = await supabaseAdmin
       .from("vehicles")
