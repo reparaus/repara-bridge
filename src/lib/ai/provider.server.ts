@@ -169,7 +169,10 @@ export async function runJsonCompletion(
       body: JSON.stringify(body),
     });
   } catch (error) {
-    throw new ReparaAiError(`AI service unreachable: ${(error as Error).message}`, "provider");
+    // Never echo the runtime's message: some runtimes include request headers
+    // (and therefore the API key) in fetch errors.
+    console.error("[repara-ai] request failed", config.id, (error as Error)?.name ?? "Error");
+    throw new ReparaAiError("AI service unreachable.", "provider");
   }
 
   const text = await res.text();
