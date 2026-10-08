@@ -9,7 +9,8 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "deploy": "bun run build && bunx wrangler@4 deploy --config .output/server/wrangler.json --name repara --var SUPABASE_URL:https://rlrpnsqrjxvuxisquric.supabase.co --var SUPABASE_PUBLISHABLE_KEY:sb_publishable_Wfird8xq1zO5xXAGgNj9gw_BZtDyBx6 --var SUPABASE_PROJECT_ID:rlrpnsqrjxvuxisquric --domain reparaus.com --domain www.reparaus.com"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

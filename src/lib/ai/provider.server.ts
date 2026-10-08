@@ -7,18 +7,13 @@
  *
  * Switching providers later is configuration, not a rewrite:
  *
- *   AI_PROVIDER = gemini | openai | openai-compatible | lovable
+ *   AI_PROVIDER = gemini | openai | openai-compatible     (default: gemini)
  *   AI_MODEL    = provider model id                        (optional override)
- *   AI_API_KEY  = credential for the selected provider
+ *   AI_API_KEY  = credential for the selected provider (GEMINI_API_KEY for gemini)
  *   AI_BASE_URL = base URL for `openai-compatible` only
- *
- * With no AI_PROVIDER set, the provider follows whichever key is present:
- * GEMINI_API_KEY → gemini (Google, called directly), otherwise the legacy
- * LOVABLE_API_KEY → lovable, so the current deployment keeps working until the
- * Lovable gateway is retired. REPARA_AI_MODEL is still honoured.
  */
 
-export type ReparaAiProviderId = "gemini" | "lovable" | "openai" | "openai-compatible";
+export type ReparaAiProviderId = "gemini" | "openai" | "openai-compatible";
 
 export type JsonCompletionRequest = {
   system: string;
@@ -56,11 +51,8 @@ type ProviderConfig = {
 };
 
 const DEFAULTS: Record<ReparaAiProviderId, { baseUrl: string; model: string }> = {
-  // Google's own OpenAI-compatible endpoint. gemini-2.5-flash (what the Lovable
-  // gateway used) is closed to new API accounts; 3.8 Flash is the current
-  // stable Flash model.
+  // Google's OpenAI-compatible endpoint; 3.8 Flash is the current stable Flash model.
   gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-3.8-flash" },
-  lovable: { baseUrl: "https://ai.gateway.lovable.dev/v1", model: "google/gemini-2.5-flash" },
   openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
   "openai-compatible": { baseUrl: "", model: "" },
 };
@@ -75,30 +67,13 @@ function resolveProviderId(): ReparaAiProviderId {
   if (raw === "openai") return "openai";
   if (raw === "openai-compatible" || raw === "custom" || raw === "compatible")
     return "openai-compatible";
-  if (raw === "lovable") return "lovable";
-  if (!raw && env("GEMINI_API_KEY")) return "gemini";
-  if (!raw && env("LOVABLE_API_KEY")) return "lovable";
   return "gemini";
 }
 
 /** Resolves provider + credentials at call time (env is injected per request). */
 function resolveConfig(): ProviderConfig {
   const id = resolveProviderId();
-  // REPARA_AI_MODEL is a legacy Lovable-gateway setting; it is not applied to
-  // Gemini so an old gateway model id can't silently override the default.
-  const model = env("AI_MODEL") || (id === "gemini" ? "" : env("REPARA_AI_MODEL")) || DEFAULTS[id].model;
-
-  if (id === "lovable") {
-    const key = env("LOVABLE_API_KEY") || env("AI_API_KEY");
-    if (!key) throw new ReparaAiError("AI is not configured.", "unconfigured");
-    return {
-      id,
-      url: `${DEFAULTS.lovable.baseUrl}/chat/completions`,
-      model,
-      headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "fetch" },
-      outputTokenField: "max_tokens",
-    };
-  }
+  const model = env("AI_MODEL") || DEFAULTS[id].model;
 
   if (id === "gemini") {
     const key = env("GEMINI_API_KEY") || env("AI_API_KEY");
@@ -106,8 +81,7 @@ function resolveConfig(): ProviderConfig {
     return {
       id,
       url: `${DEFAULTS.gemini.baseUrl}/chat/completions`,
-      // Gateway-style ids ("google/gemini-2.5-flash") also work here.
-      model: model.replace(/^google\//, ""),
+      model,
       headers: { authorization: `Bearer ${key}` },
       outputTokenField: "max_tokens",
     };
