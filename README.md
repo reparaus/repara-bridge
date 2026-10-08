@@ -1390,23 +1390,16 @@ Also generate:
 
 - notes explaining where VIN API, SMS, payment, and scheduling integrations should be added later
 
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/c1e96fde-0376-4118-b120-0b1788fe5017).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Requires [Bun](https://bun.sh) (`brew install oven-sh/bun/bun`).
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+bun install --frozen-lockfile
+cp .env.example .env        # then fill in the values
+bun run dev                 # http://localhost:8080
 ```
+
+Server-only secrets for local development go in `.env.local` (git-ignored).
+
+`bun run build` produces a Cloudflare Workers bundle in `.output/`.

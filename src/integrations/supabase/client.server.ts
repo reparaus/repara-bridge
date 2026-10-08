@@ -30,7 +30,7 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 }
 
 function createSupabaseAdminClient() {
-  // External (non-Lovable-Cloud) Supabase project.
+  // Repara's own Supabase project.
   // Public values come from the build-time VITE_* vars; the service role key is a runtime secret.
   const SUPABASE_URL = process.env.SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
   const SUPABASE_SERVICE_ROLE_KEY =
