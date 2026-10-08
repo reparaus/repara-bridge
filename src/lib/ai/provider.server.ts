@@ -56,9 +56,10 @@ type ProviderConfig = {
 };
 
 const DEFAULTS: Record<ReparaAiProviderId, { baseUrl: string; model: string }> = {
-  // Same model the Lovable gateway proxied to, called on Google's own
-  // OpenAI-compatible endpoint.
-  gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.5-flash" },
+  // Google's own OpenAI-compatible endpoint. gemini-2.5-flash (what the Lovable
+  // gateway used) is closed to new API accounts; 3.8 Flash is the current
+  // stable Flash model.
+  gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-3.8-flash" },
   lovable: { baseUrl: "https://ai.gateway.lovable.dev/v1", model: "google/gemini-2.5-flash" },
   openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
   "openai-compatible": { baseUrl: "", model: "" },
@@ -83,7 +84,9 @@ function resolveProviderId(): ReparaAiProviderId {
 /** Resolves provider + credentials at call time (env is injected per request). */
 function resolveConfig(): ProviderConfig {
   const id = resolveProviderId();
-  const model = env("AI_MODEL") || env("REPARA_AI_MODEL") || DEFAULTS[id].model;
+  // REPARA_AI_MODEL is a legacy Lovable-gateway setting; it is not applied to
+  // Gemini so an old gateway model id can't silently override the default.
+  const model = env("AI_MODEL") || (id === "gemini" ? "" : env("REPARA_AI_MODEL")) || DEFAULTS[id].model;
 
   if (id === "lovable") {
     const key = env("LOVABLE_API_KEY") || env("AI_API_KEY");
