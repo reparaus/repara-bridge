@@ -760,6 +760,30 @@ backend (Supabase + Cloudflare). Every change should keep that move cheap:
 
 ---
 
+# 22c. PLANNED: INSURANCE COVERAGE + EMERGENCY HELP (idea, not started)
+
+Goal: owners link their auto insurance so Repara knows what's covered and,
+when they ask for help (rock chip, jump start, tow, lockout), points them to
+the coverage they already have — or to a Repara provider when they don't.
+
+First version (no paid integrations):
+1. Owner uploads insurance card / declarations page in Garage.
+2. AI (provider.server.ts) extracts insurer, policy dates, comprehensive /
+   glass, roadside, towing, rental; owner confirms before saving; stored as
+   owner-provided, never "verified".
+3. Ask Repara uses it: "Your policy appears to include roadside — call
+   <insurer roadside number>", or offer Repara providers (glass shops that
+   bill insurers directly).
+Later: one-tap linking via an insurance data service (evaluate Canopy Connect,
+Axle, Trellis — not partners; verify pricing and insurer coverage).
+
+Rules: coverage is "appears to include", never a guarantee (Known/Estimated,
+§6); insurance data is owner-only, never shown to providers (like VINs);
+show coverage, never recommend or sell insurance (licensing); consent first.
+Build after the walkaround test and current security priorities.
+
+---
+
 # 23. DESIGN DIRECTION
 
 Repara should feel:
